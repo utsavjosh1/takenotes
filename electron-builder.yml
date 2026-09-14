@@ -1,0 +1,30 @@
+appId: com.desktopnotes.app
+productName: Desktop Notes
+artifactName: DesktopNotes-${version}-windows-x64-setup.${ext}
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist-electron/**/*
+  - dist/renderer/**/*
+  - package.json
+extraResources:
+  - from: resources/wsl/linux-x64
+    to: wsl/linux-x64
+    filter:
+      - node
+      - helper.cjs
+      - manifest.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+publish: null

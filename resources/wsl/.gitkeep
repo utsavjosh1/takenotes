@@ -1,0 +1,3 @@
+This directory stages the WSL runtime during release builds
+(`node` + `helper.cjs` + `manifest.json`). Generated files are git-ignored;
+only this placeholder is committed.

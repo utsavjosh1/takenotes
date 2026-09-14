@@ -1,0 +1,14 @@
+{
+  "wslRuntime": {
+    "nodeVersion": "24.19.0",
+    "architecture": "linux-x64",
+    "downloadBase": "https://nodejs.org/dist"
+  },
+  "protocolVersion": 1,
+  "limits": {
+    "maxFrameBytes": 16777216,
+    "maxFileBytes": 10485760,
+    "maxSearchResults": 1000,
+    "maxSearchFileBytes": 1048576
+  }
+}

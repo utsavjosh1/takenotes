@@ -1,0 +1,95 @@
+name: Release
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  wsl-runtime:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:helper
+      - run: node scripts/fetch-wsl-runtime.mjs
+      - run: node scripts/stage-wsl-runtime.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wsl-runtime
+          path: resources/wsl/linux-x64/
+
+  windows:
+    runs-on: windows-latest
+    needs: wsl-runtime
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: wsl-runtime
+          path: resources/wsl/linux-x64/
+      - run: npm run version:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run release:verify
+        env:
+          REQUIRE_INSTALLER: "0"
+      - run: npm run package:win
+      - name: Generate SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          Get-ChildItem release/*.exe | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$h  $($_.Name)"
+          } | Out-File release/SHA256SUMS.txt -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            release/*.exe
+            release/SHA256SUMS.txt
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: windows
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: release/
+      - run: npm run version:check
+      - run: npm run release:verify
+      - name: Build release notes
+        run: node scripts/release-notes.mjs > release/NOTES.md
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.exe
+            release/SHA256SUMS.txt
+          body_path: release/NOTES.md
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}

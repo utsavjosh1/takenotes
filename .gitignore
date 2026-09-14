@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dist-electron/
+dist-helper/
+release/
+coverage/
+*.log
+.env
+.env.*
+resources/wsl/linux-x64/generated/
+resources/wsl/linux-x64/node
+resources/wsl/linux-x64/helper.cjs
+resources/wsl/linux-x64/manifest.json
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
