@@ -56,7 +56,7 @@ None (reference only).
 
 ## Stage 2 — Scaffold
 
-Status: partial
+Status: complete (Linux-verified; Windows packaging gate remains)
 
 ### Implemented
 
@@ -67,9 +67,25 @@ version scripts, CI + release workflows, docs, ADRs.
 ### Verification performed
 
 `npm install`, `typecheck`, `lint`, `vitest`, `build` — all executed
-successfully in this Linux container on 2026-09-14. Electron window launch
-NOT possible here (no Windows, no display; Electron binary also lacks
-container system libs) — remains for the Windows gate.
+successfully in this Linux container on 2026-09-14. PLUS, after the user
+pointed out we are inside WSL: the REAL app was launched under Linux
+Electron (WSLg display, NSS libs fetched rootless via `apt download` +
+`dpkg -x` into git-ignored `.dev-libs/`) and verified via
+`scripts/smoke-linux.mjs` (CDP, no product-code changes):
+
+- Window opens with title "Desktop Notes", React mounts header/tree/tabs
+- `window.desktopNotes` exposes exactly
+  `app,directory,events,file,search,workspace`
+- `window.ipcRenderer`/`require`/`process` are all undefined in the renderer
+- Zero renderer console errors; screenshot in `smoke-artifacts/window.png`
+- The smoke caught and fixed TWO real bugs: CJS bundle emitted as `.js`
+  under `"type": "module"` (now `.cjs`), and renderer path resolving to
+  `/renderer` instead of `/dist/renderer`.
+
+Environment finding: this container has NO Windows interop (`wsl.exe`
+absent, `/mnt/c` contains only `Users`) — likely a Docker-Desktop-style WSL
+distro. So the `wsl.exe` spawn path genuinely cannot run here; that plus
+NTFS behavior plus the Windows installer remain for a Windows 11 host.
 
 ### Commands executed
 

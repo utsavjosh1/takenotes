@@ -19,16 +19,17 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.mjs"],
-    rules: {
-      "no-console": "off",
-    },
-  },
-  {
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
       "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
+  // Last block wins: CLI scripts may log to stdout.
+  {
+    files: ["scripts/**/*.mjs"],
+    rules: {
+      "no-console": "off",
     },
   },
 );

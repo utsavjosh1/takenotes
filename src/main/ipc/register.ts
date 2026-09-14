@@ -159,9 +159,9 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
 
 export function createWindowIpc(): void {
   const win = createMainWindow(
-    path.join(__dirname, "..", "preload", "index.js"),
+    path.join(__dirname, "..", "preload", "index.cjs"),
     process.env["VITE_DEV_SERVER_URL"] ?? null,
-    path.join(__dirname, "..", "..", "renderer"),
+    path.join(__dirname, "..", "..", "dist", "renderer"),
   );
   registerIpc((kind, payload) => {
     if (!win.isDestroyed()) win.webContents.send(`desktop-notes:${kind}`, payload);

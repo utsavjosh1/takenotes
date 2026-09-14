@@ -15,7 +15,7 @@ if (!changelog.includes(`## [${pkg.version}]`)) {
   console.error(`CHANGELOG.md has no section for [${pkg.version}]`);
   process.exit(1);
 }
-for (const f of ["dist-electron/main/index.js", "dist-electron/preload/index.js", "dist/renderer/index.html", "dist-helper/helper.cjs"]) {
+for (const f of ["dist-electron/main/index.cjs", "dist-electron/preload/index.cjs", "dist/renderer/index.html", "dist-helper/helper.cjs"]) {
   if (!existsSync(f)) {
     console.error(`Missing build artifact: ${f}`);
     process.exit(1);

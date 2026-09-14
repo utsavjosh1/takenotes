@@ -12,6 +12,29 @@ npm run build      # renderer + electron + helper bundles
 npm run package:win  # Windows NSIS installer (run on Windows)
 ```
 
+## Verifying the real app on Linux (WSLg)
+
+This container has no Windows interop (`wsl.exe` absent, `/mnt/c` has no
+Windows dir) but WSLg provides a display (`DISPLAY=:0`). Electron only lacks
+four system libs (NSS/NSPR) — fetch them WITHOUT sudo and run the CDP smoke:
+
+```bash
+apt download libnss3 libnspr4
+mkdir -p .dev-libs && dpkg -x libnspr4_*.deb .dev-libs/ && dpkg -x libnss3_*.deb .dev-libs/
+npm run build
+LD_LIBRARY_PATH=$PWD/.dev-libs/usr/lib/x86_64-linux-gnu node scripts/smoke-linux.mjs
+```
+
+The smoke spawns the built app, attaches via CDP (Node built-in WebSocket),
+asserts React mount + narrow bridge + no Node leaks, and writes
+`smoke-artifacts/window.png`. `.dev-libs/` and `smoke-artifacts/` are
+git-ignored. `ELECTRON_DISABLE_SANDBOX=1` is set ONLY inside the smoke script
+for containers without userns — never in production.
+
+What this proves: window launch, React render, preload bridge shape, security
+baseline. What it does NOT prove: `wsl.exe` spawn path, NTFS behavior,
+Windows installer — those still need a Windows 11 host.
+
 ## Notes for WSL-based agents
 
 - The checkout may live at `/mnt/c/Dev/desktop-notes`.
