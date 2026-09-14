@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Desktop Notes (TEMPORARY PRODUCT NAME).
+All notable changes to takenotes.
 
 ## [Unreleased]
 

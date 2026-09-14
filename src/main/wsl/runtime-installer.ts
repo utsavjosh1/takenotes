@@ -9,9 +9,9 @@ export function buildBootstrapArgv(kind: "node" | "helper", version: string): st
   // fixed shell side writes stdin to the destination file.
   // Destination roots are fixed under the user's HOME (resolved inside WSL).
   if (kind === "node") {
-    return ["-d", "__DISTRO__", "--exec", "sh", "-c", "mkdir -p \"$HOME/.local/share/desktop-notes/runtime\" && cat > \"$HOME/.local/share/desktop-notes/runtime/node\""];
+    return ["-d", "__DISTRO__", "--exec", "sh", "-c", "mkdir -p \"$HOME/.local/share/takenotes/runtime\" && cat > \"$HOME/.local/share/takenotes/runtime/node\""];
   }
-  return ["-d", "__DISTRO__", "--exec", "sh", "-c", `mkdir -p "$HOME/.local/share/desktop-notes/helpers/${version}" && cat > "$HOME/.local/share/desktop-notes/helpers/${version}/helper.cjs"`];
+  return ["-d", "__DISTRO__", "--exec", "sh", "-c", `mkdir -p "$HOME/.local/share/takenotes/helpers/${version}" && cat > "$HOME/.local/share/takenotes/helpers/${version}/helper.cjs"`];
 }
 
 export function withDistro(argv: string[], distro: string): string[] {

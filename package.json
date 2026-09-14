@@ -1,8 +1,8 @@
 {
-  "name": "desktop-notes",
+  "name": "takenotes",
   "version": "0.1.0",
   "private": true,
-  "description": "Desktop Notes (TEMPORARY PRODUCT NAME) — filesystem-first local Markdown notebook for Windows with WSL awareness.",
+  "description": "takenotes — filesystem-first local Markdown notebook for Windows with WSL awareness.",
   "author": "",
   "license": "MIT",
   "type": "module",

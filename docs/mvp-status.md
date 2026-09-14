@@ -73,8 +73,8 @@ Electron (WSLg display, NSS libs fetched rootless via `apt download` +
 `dpkg -x` into git-ignored `.dev-libs/`) and verified via
 `scripts/smoke-linux.mjs` (CDP, no product-code changes):
 
-- Window opens with title "Desktop Notes", React mounts header/tree/tabs
-- `window.desktopNotes` exposes exactly
+- Window opens with title "takenotes", React mounts header/tree/tabs
+- `window.takenotes` exposes exactly
   `app,directory,events,file,search,workspace`
 - `window.ipcRenderer`/`require`/`process` are all undefined in the renderer
 - Zero renderer console errors; screenshot in `smoke-artifacts/window.png`
@@ -170,7 +170,7 @@ None yet (requires network download + Linux binary execution).
 npm run build:helper
 node scripts/fetch-wsl-runtime.mjs
 node scripts/stage-wsl-runtime.mjs
-~/.local/share/desktop-notes-test-check  # verify staged node runs helper
+~/.local/share/takenotes-test-check  # verify staged node runs helper
 ```
 
 ### Next concrete action

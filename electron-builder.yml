@@ -1,6 +1,6 @@
-appId: com.desktopnotes.app
-productName: Desktop Notes
-artifactName: DesktopNotes-${version}-windows-x64-setup.${ext}
+appId: com.takenotes.app
+productName: takenotes
+artifactName: takenotes-${version}-windows-x64-setup.${ext}
 directories:
   output: release
   buildResources: build

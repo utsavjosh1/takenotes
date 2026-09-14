@@ -24,14 +24,14 @@ export default function App(): JSX.Element {
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshTree = useCallback(async (ws: WorkspaceInfo) => {
-    const res = await window.desktopNotes.directory.list(ws.workspaceId, "");
+    const res = await window.takenotes.directory.list(ws.workspaceId, "");
     if (res.ok) setEntries(res.result);
     else setError(res.error.message);
   }, []);
 
   const openLocal = useCallback(async () => {
     setError(null);
-    const res = await window.desktopNotes.workspace.openLocal();
+    const res = await window.takenotes.workspace.openLocal();
     if (!res.ok) {
       setError(res.error.message);
       return;
@@ -52,7 +52,7 @@ export default function App(): JSX.Element {
         setActiveKey(key);
         return;
       }
-      const res = await window.desktopNotes.file.read(workspace.workspaceId, relativePath);
+      const res = await window.takenotes.file.read(workspace.workspaceId, relativePath);
       if (!res.ok) {
         setError(res.error.message);
         return;
@@ -92,7 +92,7 @@ export default function App(): JSX.Element {
   const save = useCallback(async () => {
     if (!workspace || !activeTab) return;
     setStatus("Saving…");
-    const res = await window.desktopNotes.file.write({
+    const res = await window.takenotes.file.write({
       workspaceId: workspace.workspaceId,
       relativePath: activeTab.relativePath,
       content: activeTab.content,
@@ -127,8 +127,7 @@ export default function App(): JSX.Element {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "system-ui, sans-serif" }}>
       <header style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 12px", borderBottom: "1px solid #ddd" }}>
-        <strong>Desktop Notes</strong>
-        <span style={{ fontSize: 12, color: "#666" }}>TEMPORARY PRODUCT NAME</span>
+        <strong>takenotes</strong>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 12 }}>{workspace ? `${workspace.displayName} (${workspace.type})` : "no workspace"}</span>
         <button onClick={() => void openLocal()}>Open local folder</button>

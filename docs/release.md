@@ -9,7 +9,7 @@ npm run version:check
 git add package.json package-lock.json CHANGELOG.md
 git commit -m "chore(release): prepare v0.2.0"
 # CI green, then:
-git tag -a v0.2.0 -m "Desktop Notes v0.2.0"
+git tag -a v0.2.0 -m "takenotes v0.2.0"
 git push origin main
 git push origin v0.2.0
 ```
@@ -25,7 +25,7 @@ Tag push triggers `.github/workflows/release.yml`:
    --publish never`, generate `SHA256SUMS.txt`.
 3. **Publish**: validate tag/version, verify checksums, extract CHANGELOG
    section via `scripts/release-notes.mjs`, create GitHub Release, upload
-   `DesktopNotes-<v>-windows-x64-setup.exe` + `SHA256SUMS.txt`.
+   `takenotes-<v>-windows-x64-setup.exe` + `SHA256SUMS.txt`.
 
 Never let electron-builder auto-publish. No auto-update in MVP (manual
 installer updates from GitHub Releases). Early builds are unsigned; SmartScreen

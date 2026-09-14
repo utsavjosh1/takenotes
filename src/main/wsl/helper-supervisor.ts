@@ -62,7 +62,7 @@ export class HelperSupervisor {
       this.setState("incompatible");
       child.kill();
       throw new Error(
-        `Helper protocol ${handshake.protocolVersion} is incompatible with app protocol ${PROTOCOL_VERSION}. Update Desktop Notes.`,
+        `Helper protocol ${handshake.protocolVersion} is incompatible with app protocol ${PROTOCOL_VERSION}. Update takenotes.`,
       );
     }
     const session: WslSession = { sessionId, generation: 1, distro, client, child, handshake };

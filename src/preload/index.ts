@@ -10,7 +10,7 @@ import type {
 } from "../shared/contracts/ipc.js";
 
 /** Narrow typed preload bridge. No generic channel invocation is exposed. */
-export type DesktopNotesApi = {
+export type TakeNotesApi = {
   workspace: {
     openLocal(): Promise<IpcResult<WorkspaceInfo | null>>;
     close(workspaceId: string): Promise<IpcResult<null>>;
@@ -44,7 +44,7 @@ export type DesktopNotesApi = {
   };
 };
 
-const api: DesktopNotesApi = {
+const api: TakeNotesApi = {
   workspace: {
     openLocal: () => ipcRenderer.invoke("workspace:openLocal"),
     close: (workspaceId) => ipcRenderer.invoke("workspace:close", workspaceId),
@@ -69,16 +69,16 @@ const api: DesktopNotesApi = {
   events: {
     onWslState: (callback) => {
       const listener = (_event: unknown, state: string) => callback(state);
-      ipcRenderer.on("desktop-notes:wsl-state", listener as (...args: unknown[]) => void);
-      return () => ipcRenderer.removeListener("desktop-notes:wsl-state", listener as (...args: unknown[]) => void);
+      ipcRenderer.on("takenotes:wsl-state", listener as (...args: unknown[]) => void);
+      return () => ipcRenderer.removeListener("takenotes:wsl-state", listener as (...args: unknown[]) => void);
     },
   },
 };
 
-contextBridge.exposeInMainWorld("desktopNotes", api);
+contextBridge.exposeInMainWorld("takenotes", api);
 
 declare global {
   interface Window {
-    desktopNotes: DesktopNotesApi;
+    takenotes: TakeNotesApi;
   }
 }

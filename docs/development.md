@@ -37,7 +37,7 @@ Windows installer — those still need a Windows 11 host.
 
 ## Notes for WSL-based agents
 
-- The checkout may live at `/mnt/c/Dev/desktop-notes`.
+- The checkout may live at `/mnt/c/Dev/takenotes`.
 - Do NOT create a Linux `node_modules` and run Windows Electron with it.
 - Windows owns `node_modules/`, `dist/`, `dist-electron/`, `release/`, packaging.
 - Invoke Windows builds via `powershell.exe` / `cmd.exe` from WSL when needed.

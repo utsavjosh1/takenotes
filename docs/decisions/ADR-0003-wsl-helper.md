@@ -8,7 +8,7 @@ Date: 2026-09-14 · Status: accepted
   official Linux Node binary shipped in the release (`node` + `helper.cjs` +
   `manifest.json` under `resources/wsl/linux-x64/`).
 - No Rust/Go/Cargo, no single-executable Node experiments, no system-Node or
-  sudo requirement. Install target: `~/.local/share/desktop-notes/`
+  sudo requirement. Install target: `~/.local/share/takenotes/`
   (versioned runtime + helper dirs).
 - Byte transfer through owned `wsl.exe` stdin with a FIXED bootstrap shell
   fragment; destinations passed as app-controlled argv. Never

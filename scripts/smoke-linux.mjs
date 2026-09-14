@@ -3,7 +3,7 @@
  * using Node's built-in WebSocket, and asserts:
  *   1. a renderer page loads,
  *   2. React mounted content into #root,
- *   3. window.desktopNotes exposes the narrow bridge (no ipcRenderer/fs leak).
+ *   3. window.takenotes exposes the narrow bridge (no ipcRenderer/fs leak).
  * Usage: LD_LIBRARY_PATH=.dev-libs/usr/lib/x86_64-linux-gnu node scripts/smoke-linux.mjs
  */
 import { spawn } from "node:child_process";
@@ -77,8 +77,8 @@ const checks = {
     page.webSocketDebuggerUrl,
     "document.getElementById('root').textContent.slice(0, 120)",
   ),
-  bridgePresent: await cdpEvaluate(page.webSocketDebuggerUrl, "typeof window.desktopNotes === 'object'"),
-  bridgeKeys: await cdpEvaluate(page.webSocketDebuggerUrl, "Object.keys(window.desktopNotes).sort().join(',')"),
+  bridgePresent: await cdpEvaluate(page.webSocketDebuggerUrl, "typeof window.takenotes === 'object'"),
+  bridgeKeys: await cdpEvaluate(page.webSocketDebuggerUrl, "Object.keys(window.takenotes).sort().join(',')"),
   noIpcLeak: await cdpEvaluate(page.webSocketDebuggerUrl, "typeof window.ipcRenderer === 'undefined'"),
   noRequireLeak: await cdpEvaluate(page.webSocketDebuggerUrl, "typeof window.require === 'undefined'"),
   noNodeProcessLeak: await cdpEvaluate(page.webSocketDebuggerUrl, "typeof window.process === 'undefined'"),

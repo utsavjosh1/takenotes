@@ -21,7 +21,7 @@ const body = `${section}
 
 ## Installation
 
-Download \`DesktopNotes-${pkg.version}-windows-x64-setup.exe\` and run it.
+Download \`takenotes-${pkg.version}-windows-x64-setup.exe\` and run it.
 Unsigned early builds may trigger Windows SmartScreen warnings.
 
 ## Checksums

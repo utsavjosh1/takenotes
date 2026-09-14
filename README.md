@@ -1,4 +1,4 @@
-# Desktop Notes (TEMPORARY PRODUCT NAME)
+# takenotes
 
 Filesystem-first, Markdown-first, local-first Windows notebook with WSL
 awareness. Your Markdown files stay ordinary files — the app adds an interface

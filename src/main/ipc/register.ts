@@ -164,6 +164,6 @@ export function createWindowIpc(): void {
     path.join(__dirname, "..", "..", "dist", "renderer"),
   );
   registerIpc((kind, payload) => {
-    if (!win.isDestroyed()) win.webContents.send(`desktop-notes:${kind}`, payload);
+    if (!win.isDestroyed()) win.webContents.send(`takenotes:${kind}`, payload);
   });
 }
