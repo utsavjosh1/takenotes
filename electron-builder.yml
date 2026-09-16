@@ -54,9 +54,10 @@ mac:
         - arm64
         - x64
   category: public.app-category.productivity
-  # Developer ID signing + hardened runtime + notarization for stable public
-  # releases (§129–§131). Placeholders resolve from CI secrets; dev builds
-  # skip signing (CSC_IDENTITY_AUTO_DISCOVERY=false).
+  # Unsigned baseline (v0.0.1): identity=null disables Developer ID signing
+  # so CI produces usable DMGs without secrets. TODO: remove null + set
+  # CSC_LINK/APPLE_ID secrets for signed + notarized stable releases.
+  identity: null
   hardenedRuntime: true
   notarize: false
 dmg:
