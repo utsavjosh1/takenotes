@@ -16,7 +16,11 @@ async function ensureHelperBuilt(): Promise<string> {
   return helperJs;
 }
 
-describe("wsl helper direct round-trip (ubuntu node, no wsl.exe)", () => {
+// POSIX-only: the helper speaks absolute POSIX roots ("/...") and runs under
+// the bundled Linux Node inside WSL. On win32 tmpdir() is `C:\...` so
+// `workspace.open` correctly rejects it with INVALID_REQUEST — that is the
+// Windows path working as designed, not a helper regression.
+describe.runIf(process.platform !== "win32")("wsl helper direct round-trip (ubuntu node, no wsl.exe)", () => {
   let root: string;
   let child: ChildProcess | null = null;
 

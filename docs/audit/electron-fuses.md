@@ -1,7 +1,7 @@
 # Electron fuses — takenotes
 
 Hook: `scripts/after-pack-fuses.mjs` (wired via `afterPack` in `electron-builder.yml`).
-Package: `@electron/fuses` 1.8.0 (direct devDependency). Target: Electron 44.
+Package: `@electron/fuses` 2.1.3 (direct devDependency). Target: Electron 44.
 Semantics verified against the Electron fuses tutorial + the installed
 `@electron/fuses` README before setting each fuse (§8: confirm → verify use →
 document → packaged-app verification).
@@ -18,6 +18,7 @@ document → packaged-app verification).
 | OnlyLoadAppFromAsar | true | App loads only from `app.asar`. Build emits a bundled asar; dev (`--dev`/Vite URL) is unaffected — fuses apply to packaged binaries only. |
 | LoadBrowserProcessSpecificV8Snapshot | true | Default; set explicitly so upgrades notice it. |
 | GrantFileProtocolExtraPrivileges | false | Renderer loads via `file://` (`loadFile` in production) with no need for extra file-protocol privileges. Revisit with a documented reason if a custom protocol ever needs them. |
+| WasmTrapHandlers | true | Electron 44 9th fuse; default trap-based WASM handling. `@electron/fuses` 1.8.0 knew only 8 — release v0.0.1 packaging failed loudly until bump to 2.1.3. |
 
 `strictlyRequireAllFuses: true` — future Electron upgrades fail loudly if a
 new fuse appears that has not been evaluated. No fuse was disabled blindly.

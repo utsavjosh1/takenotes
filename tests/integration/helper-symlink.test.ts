@@ -12,7 +12,9 @@ async function ensureHelperBuilt(): Promise<string> {
   return path.resolve("dist-helper/helper.cjs");
 }
 
-describe("helper symlink confinement (posix side; NTFS side NOT VERIFIED here)", () => {
+// POSIX-only (same reason as helper-roundtrip.test.ts): symlink semantics under
+// test are POSIX `lstat`/`realpath`; NTFS behavior is NOT VERIFIED here.
+describe.runIf(process.platform !== "win32")("helper symlink confinement (posix side; NTFS side NOT VERIFIED here)", () => {
   let root: string;
   let child: ChildProcess | null = null;
 
