@@ -184,6 +184,7 @@ jobs:
           rm SHA256SUMS-*.txt
           cat SHA256SUMS.txt
       - run: npm run version:check
+      - run: npm run build
       - run: npm run release:verify
         env:
           REQUIRE_INSTALLER: "1"
