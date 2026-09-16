@@ -19,7 +19,7 @@ describe("handshake trust (nonce + runtime path)", () => {
     expect(session.handshake.protocolVersion).toBe(PROTOCOL_VERSION);
     expect(session.handshake.nonce).toMatch(/^[0-9a-f]{32}$/);
     expect(session.handshake.execPath).toBe(process.execPath);
-    expect(session.handshake.platform).toBe("linux");
+    expect(session.handshake.platform).toBe(process.platform);
     supervisor.disconnect();
     expect(supervisor.state).toBe("disconnected");
   });

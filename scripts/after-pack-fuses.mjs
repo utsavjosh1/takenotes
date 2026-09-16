@@ -1,6 +1,6 @@
 /** electron-builder `afterPack` hook: flip Electron fuses on the packaged binary.
  *
- * Fuse choices (Electron 44, `@electron/fuses` 1.8.0; semantics verified
+ * Fuse choices (Electron 44, `@electron/fuses` 2.1.3; semantics verified
  * against the Electron fuses tutorial and the installed `@electron/fuses`
  * README before setting each fuse — see `docs/audit/electron-fuses.md`):
  *
@@ -19,6 +19,9 @@
  * - GrantFileProtocolExtraPrivileges=false — the renderer loads via file://
  *   (loadFile in production) with no need for extra file-protocol privileges.
  * - EnableCookieEncryption=true — no cookies exist (no network); strictest option, zero cost.
+ * - WasmTrapHandlers=true — default trap-based WASM handling. Electron 44
+ *   added this 9th fuse; `@electron/fuses` 1.8.0 only knew 8, so
+ *   `strictlyRequireAllFuses` failed packaging loudly (release v0.0.1).
  *
  * `strictlyRequireAllFuses: true` fails future Electron upgrades loudly if a
  * new fuse appears that has not been evaluated.
@@ -37,6 +40,7 @@ const FUSE_CONFIG = {
   [FuseV1Options.OnlyLoadAppFromAsar]: true,
   [FuseV1Options.LoadBrowserProcessSpecificV8Snapshot]: true,
   [FuseV1Options.GrantFileProtocolExtraPrivileges]: false,
+  [FuseV1Options.WasmTrapHandlers]: true,
 };
 
 /** Resolve the packaged Electron executable inside `appOutDir` per platform. */

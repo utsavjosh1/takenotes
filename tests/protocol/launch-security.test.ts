@@ -3,7 +3,12 @@ import { helperEnv, resolveWslExe } from "../../src/main/wsl/launch-security";
 
 describe("helper launch security", () => {
   it("resolves wsl.exe without PATH trust on Windows; bare name elsewhere", () => {
-    expect(resolveWslExe()).toBe("wsl.exe");
+    if (process.platform === "win32") {
+      // Pinned System32 path when present, otherwise PATH fallback.
+      expect(["C:\\Windows\\System32\\wsl.exe", "wsl.exe"]).toContain(resolveWslExe());
+    } else {
+      expect(resolveWslExe()).toBe("wsl.exe");
+    }
   });
 
   it("strips Node/proxy steering variables from the helper environment", () => {
