@@ -23,7 +23,21 @@ export class HelperClient extends EventEmitter {
     super();
     child.stdout?.on("data", (chunk: Buffer) => this.onData(chunk));
     child.stderr?.on("data", (chunk: Buffer) => this.emit("diagnostic", chunk.toString("utf8")));
+    // Spawn failures (missing binary, EACCES) surface as 'error', not 'exit'.
+    // Without this listener the process throws an unhandled exception.
+    child.on("error", (err: Error) => {
+      if (this.closed) return;
+      this.closed = true;
+      const appErr = appError("DISCONNECTED", `Helper process failed to start: ${err.message}`);
+      for (const [, p] of this.pending) {
+        clearTimeout(p.timer);
+        p.reject(appErr);
+      }
+      this.pending.clear();
+      this.emit("exit", err);
+    });
     child.on("exit", (code) => {
+      if (this.closed) return;
       this.closed = true;
       const err = appError("DISCONNECTED", `Helper exited with code ${code ?? "unknown"}.`);
       for (const [, p] of this.pending) {

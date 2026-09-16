@@ -15,6 +15,6 @@ All notable changes to takenotes.
 - Version scripts, CI (Ubuntu + Windows), tag-driven release pipeline with
   checksums, ADRs, architecture/security/protocol documentation.
 
-## [0.1.0] - 2026-09-14
+## [0.0.1] - 2026-09-16
 
-Initial foundation. Pre-release: real-WSL round-trip not yet verified.
+First baseline release. Foundation scaffold as below; real-WSL round-trip not yet verified.

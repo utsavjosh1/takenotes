@@ -1,0 +1,107 @@
+/* Design tokens — single source of truth (docs/design/tokens.md). */
+
+:root {
+  color-scheme: light dark;
+
+  /* layout */
+  --titlebar-height: 40px;
+  --rail-width: 44px;
+  --sidebar-width: 240px;
+  --tabstrip-height: 35px;
+  --statusbar-height: 24px;
+  --tree-row-height: 28px;
+  --tree-indent: 14px;
+  --readable-width: 760px;
+
+  /* type — system stacks so each OS renders its native voice (§83–§84).
+   * San Francisco on macOS, Segoe UI on Windows, desktop font on Linux. */
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-editor: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
+  --text-ui: 14px;
+  --text-secondary: 12px;
+  --editor-font-size: 16px;
+  --editor-line-height: 1.625;
+  --editor-max-width: 760px;
+
+  /* spacing (4px base) */
+  --sp-2: 2px; --sp-4: 4px; --sp-6: 6px; --sp-8: 8px; --sp-12: 12px;
+  --sp-16: 16px; --sp-20: 20px; --sp-24: 24px; --sp-32: 32px; --sp-40: 40px;
+
+  /* radius */
+  --radius-tiny: 2px; --radius-control: 4px; --radius-input: 6px;
+  --radius-dialog: 8px; --radius-overlay: 10px;
+
+  /* motion */
+  --motion-fast: 100ms; --motion-base: 150ms; --motion-slow: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* z-index */
+  --z-base: 0; --z-sticky: 10; --z-dropdown: 100; --z-popover: 200;
+  --z-command: 300; --z-dialog: 400; --z-toast: 500; --z-tooltip: 600;
+
+  /* shadows (floating surfaces only) */
+  --shadow-menu: 0 4px 16px rgb(0 0 0 / 0.18), 0 1px 4px rgb(0 0 0 / 0.12);
+  --shadow-overlay: 0 12px 40px rgb(0 0 0 / 0.28), 0 2px 8px rgb(0 0 0 / 0.16);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-app: #18191c;
+  --surface-sidebar: #1b1c20;
+  --surface-editor: #1e1f23;
+  --surface-hover: #25262b;
+  --surface-active: #2a2c32;
+  --surface-overlay: #232429;
+  --surface-input: #141518;
+  --border-subtle: #303238;
+  --border-strong: #3d4048;
+  --text-primary: #e7e8ea;
+  --text-secondary: #a3a6ad;
+  --text-muted: #737780;
+  --accent: #8b7cf6;
+  --accent-hover: #9d8ff8;
+  --accent-soft: rgb(139 124 246 / 0.14);
+  --danger: #e06c75;
+  --warning: #d8a657;
+  --success: #70b88b;
+  --selection: rgb(139 124 246 / 0.28);
+  --code-bg: rgb(255 255 255 / 0.05);
+  --scrollbar: #3a3d44;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --surface-app: #f7f7f8;
+  --surface-sidebar: #f1f2f4;
+  --surface-editor: #fcfcfd;
+  --surface-hover: #ecedef;
+  --surface-active: #e5e7eb;
+  --surface-overlay: #ffffff;
+  --surface-input: #ffffff;
+  --border-subtle: #d9dbdf;
+  --border-strong: #c3c6cd;
+  --text-primary: #202124;
+  --text-secondary: #5f636b;
+  --text-muted: #858a93;
+  --accent: #5b4fd6;
+  --accent-hover: #4c41bd;
+  --accent-soft: rgb(91 79 214 / 0.1);
+  --danger: #b64a55;
+  --warning: #9a6f1f;
+  --success: #2f7d4f;
+  --selection: rgb(91 79 214 / 0.18);
+  --code-bg: rgb(32 33 36 / 0.05);
+  --scrollbar: #c3c6cd;
+}
+
+/* Reduced motion: navigation must never depend on animation (§86). */
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; }
+  *, *::before, *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

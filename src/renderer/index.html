@@ -1,9 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>takenotes</title>
+    <!-- Theme pre-paint lives in ./theme-init.js (external) so `script-src 'self'`
+         holds with no inline scripts. style-src 'unsafe-inline' remains a
+         documented exception: CodeMirror and React set inline styles at runtime. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none';" />
+    <title>Desktop Notes</title>
+    <script src="./theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

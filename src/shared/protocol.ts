@@ -20,8 +20,17 @@ export type HandshakeResult = {
   architecture: string;
   capabilities: string[];
   processId: number;
+  /** Echo of the main-generated challenge (anti-substitution). */
+  nonce: string;
+  /** Actual runtime binary path — main verifies it is the app-owned Node. */
+  execPath: string;
+  uid: number;
+  home: string;
 };
 
+/** Operations the helper actually implements today.
+ * Planned (not yet implemented, must NOT be sent): file.rename, file.trash,
+ * file.restore, search.start, search.cancel, watch.subscribe, watch.unsubscribe. */
 export const HELPER_OPERATIONS = [
   "hello",
   "workspace.open",
@@ -30,13 +39,6 @@ export const HELPER_OPERATIONS = [
   "file.read",
   "file.write",
   "file.create",
-  "file.rename",
-  "file.trash",
-  "file.restore",
-  "search.start",
-  "search.cancel",
-  "watch.subscribe",
-  "watch.unsubscribe",
 ] as const;
 
 export type HelperOperation = (typeof HELPER_OPERATIONS)[number];

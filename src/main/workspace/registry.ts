@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
+import type { WorkspaceKind } from "../../shared/platform/types.js";
+import { isWslKind } from "../../shared/platform/filesystem.js";
 
-export type WorkspaceType = "windows" | "wsl";
+export type WorkspaceType = WorkspaceKind;
 
 export type WorkspaceRegistration = {
   id: string;
   type: WorkspaceType;
   generation: number;
   displayName: string;
-  /** Trusted main-process-only root (Windows path or Linux path). */
+  /** Trusted main-process-only root (native path or WSL Linux path). */
   root: string;
   distro?: string;
 };
@@ -19,6 +21,11 @@ export function toWorkspaceInfo(reg: WorkspaceRegistration): {
   type: WorkspaceType;
 } {
   return { workspaceId: reg.id, displayName: reg.displayName, type: reg.type };
+}
+
+/** Native (direct-Node-filesystem) workspaces vs the WSL helper path. */
+export function isNativeWorkspace(reg: WorkspaceRegistration): boolean {
+  return !isWslKind(reg.type);
 }
 
 export class WorkspaceRegistry {

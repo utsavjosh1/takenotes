@@ -13,7 +13,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"],
+    files: ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/renderer/**/*.js"],
     languageOptions: {
       globals: { ...globals.browser },
     },
@@ -23,6 +23,25 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
       "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
+  // Defense in depth: shipped main/helper code must never gain network imports
+  // by accident. Release-time scripts/ are intentionally excluded.
+  {
+    files: ["src/main/**/*.ts", "src/preload/**/*.ts", "wsl-helper/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            { name: "node:http", message: "No network in shipped main/helper code." },
+            { name: "node:https", message: "No network in shipped main/helper code." },
+            { name: "node:net", message: "No network in shipped main/helper code." },
+            { name: "node:tls", message: "No network in shipped main/helper code." },
+            { name: "node:dgram", message: "No network in shipped main/helper code." },
+          ],
+        },
+      ],
     },
   },
   // Last block wins: CLI scripts may log to stdout.

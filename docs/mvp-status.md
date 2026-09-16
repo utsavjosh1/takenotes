@@ -95,7 +95,7 @@ npm run typecheck      # ok, clean
 npm run lint           # ok, 0 errors (11 no-console warnings in scripts — allowed)
 npm test               # ok: 5 files passed, 1 win32-only skipped; 24 passed, 9 skipped
 npm run build          # ok: dist/renderer, dist-electron/main+preload, dist-helper/helper.cjs
-npm run version:check  # ok: 0.1.0
+npm run version:check  # ok: 0.0.1
 npm run release:verify # ok (installer not required in this environment)
 ```
 

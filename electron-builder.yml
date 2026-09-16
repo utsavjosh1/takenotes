@@ -1,6 +1,12 @@
 appId: com.takenotes.app
 productName: takenotes
-artifactName: takenotes-${version}-windows-x64-setup.${ext}
+# Electron fuses (§8): flipped on every packaged binary via afterPack.
+# Expected state is recorded in docs/audit/electron-fuses.md; CI verifies
+# with `npx @electron/fuses read` after packaging.
+afterPack: ./scripts/after-pack-fuses.mjs
+# Per-OS artifact names (§124). ${os}/${arch}/${ext} are electron-builder
+# template variables — one app version across platforms (§187).
+artifactName: takenotes-${version}-${os}-${arch}.${ext}
 directories:
   output: release
   buildResources: build
@@ -8,23 +14,75 @@ files:
   - dist-electron/**/*
   - dist/renderer/**/*
   - package.json
-extraResources:
-  - from: resources/wsl/linux-x64
-    to: wsl/linux-x64
-    filter:
-      - node
-      - helper.cjs
-      - manifest.json
+  # Package content audit (§198): never ship tests, secrets, history, or
+  # prototype code inside any installer/dmg/package.
+  - "!**/tests/**"
+  - "!**/.git/**"
+  - "!**/.env*"
+  - "!**/SilverBullet/**"
+  - "!**/*.test.*"
+# WSL runtime + helper are Windows-only (§16). They MUST NOT be bundled into
+# macOS/Linux packages. electron-builder has no per-target extraResources
+# scoping, so the default file set ships zero WSL content; release tooling
+# stages `resources/wsl/linux-x64` ONLY for the Windows NSIS target
+# (see .github/workflows/release.yml `stage-wsl` step + scripts/stage-wsl-runtime.mjs).
+extraResources: []
 win:
   target:
     - target: nsis
       arch:
         - x64
+  # Authenticode signing gate (§125, §192). Unsigned dev builds are fine;
+  # stable public builds must set WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD in CI
+  # and flip `signAndEditExecutable` on via release workflow env.
+  signAndEditExecutable: false
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  # Uninstall must NEVER delete user Markdown workspaces (§140, §142).
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
+mac:
+  # Separate arm64 + x64 DMGs initially — easier to troubleshoot than a
+  # universal binary (§127–§128). Windows ARM64 is NOT released merely
+  # because Electron supports it (§126); same rule applies per-arch here.
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.productivity
+  # Developer ID signing + hardened runtime + notarization for stable public
+  # releases (§129–§131). Placeholders resolve from CI secrets; dev builds
+  # skip signing (CSC_IDENTITY_AUTO_DISCOVERY=false).
+  hardenedRuntime: true
+  notarize: false
+dmg:
+  window:
+    width: 540
+    height: 380
+linux:
+  target:
+    # AppImage + DEB + RPM are the initial set (§134). No Snap/Flatpak until
+    # sandbox/portal/filesystem access is separately designed (§134).
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+    - target: rpm
+      arch:
+        - x64
+  category: Office
+  # .desktop entry + icons (§138–§139). electron-builder generates the
+  # .desktop file from these fields; icons come from buildResources.
+  desktop:
+    entry:
+      Name: takenotes
+      Comment: Filesystem-first local Markdown notebook
+      Categories: Office;TextEditor;
+      StartupWMClass: takenotes
 publish: null

@@ -1,8 +1,18 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-/** Windows workspace: always use win32 semantics, even when unit-tested on Linux. */
-const win = path.win32;
+/** Native workspace adapters (Windows/macOS/Linux local).
+ * Path semantics follow the WORKSPACE kind (§21), never the host OS: `win32`
+ * for `windows-local`, POSIX for `macos-local` / `linux-local`. Using win32
+ * on Linux turns `join(root, rel)` into backslash paths that miss every
+ * file — the classic "exists in the tree, NOT_FOUND on open" failure. */
+import type { WorkspaceKind } from "../../shared/platform/types.js";
+
+type PathModule = Pick<typeof path.win32, "join" | "normalize" | "dirname" | "relative" | "isAbsolute" | "sep">;
+
+function pathModuleFor(kind: WorkspaceKind): PathModule {
+  return kind === "windows-local" ? path.win32 : path.posix;
+}
 import { appError, mapFsError, type AppError } from "../../shared/errors.js";
 import {
   decodeUtf8,
@@ -11,7 +21,15 @@ import {
   revisionOfBytes,
   type FileRevision,
 } from "./revisions.js";
-import { validateWindowsRelativePath } from "./path-security.js";
+import { validatePosixRelativePath, validateWindowsRelativePath } from "./path-security.js";
+
+/** Kind-appropriate validation (§25): Windows reserved-name/character rules
+ * apply to `windows-local` only and must never leak into macOS/Linux. */
+function validateNativeRel(kind: WorkspaceKind, relativePath: string): { relativePath: string } | { error: AppError } {
+  return kind === "windows-local"
+    ? validateWindowsRelativePath(relativePath)
+    : validatePosixRelativePath(relativePath);
+}
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -34,19 +52,35 @@ function realpathSubtle(p: string): Promise<string | null> {
   return fs.realpath(p).catch(() => null);
 }
 
-/** Resolve a validated relative path beneath root; rejects symlink escapes. */
+/** Resolve a validated relative path beneath root; rejects symlink escapes.
+ *
+ * Junction/reparse-point note (Windows): `lstat` reports junctions as plain
+ * directories, so an `isSymbolicLink` check alone misses them. Every existing
+ * component is therefore ALSO verified through `realpath` containment against
+ * the real root: junctions, symlinks, and mount points that resolve outside
+ * the workspace are refused with OUTSIDE_ROOT using only Node-supported APIs.
+ * Residual risk (documented, not hidden): a malicious local OS process racing
+ * filesystem state between check and open (TOCTOU) cannot be fully defeated
+ * from userland Node without `O_NOFOLLOW` dirfd discipline — see
+ * `docs/audit/filesystem-audit.md`. Malicious renderer/path INPUT is fully
+ * defended; a malicious local process racing the filesystem is not (MVP).
+ */
 export async function resolveInsideRoot(
   root: string,
+  kind: WorkspaceKind,
   relativePath: string,
 ): Promise<{ absolutePath: string } | { error: AppError }> {
-  const abs = path.win32.isAbsolute(relativePath)
+  const pm = pathModuleFor(kind);
+  const abs = pm.isAbsolute(relativePath)
     ? relativePath
-    : win.join(root, relativePath);
-  // Walk each existing component with lstat: refuse symlinked directories.
-  const relParts = path.win32.normalize(relativePath).split(path.win32.sep);
+    : pm.join(root, relativePath);
+  const realRoot = await realpathSubtle(root);
+  // Walk each existing component: refuse symlinked directories AND any
+  // component whose realpath escapes the real root (junction/reparse catch).
+  const relParts = pm.normalize(relativePath).split(pm.sep);
   let cursor = root;
   for (const part of relParts.slice(0, -1)) {
-    cursor = win.join(cursor, part);
+    cursor = pm.join(cursor, part);
     let st: import("node:fs").Stats | undefined;
     try {
       st = await fs.lstat(cursor);
@@ -58,12 +92,36 @@ export async function resolveInsideRoot(
     if (st && st.isSymbolicLink()) {
       return { error: appError("OUTSIDE_ROOT", "Symlinked directories are not traversed.") };
     }
+    if (realRoot) {
+      const realCursor = await realpathSubtle(cursor);
+      if (realCursor) {
+        const rel = pm.relative(realRoot, realCursor);
+        // `..` or absolute (different drive/mount) means the component —
+        // possibly a junction or reparse point `lstat` could not see —
+        // resolves outside the workspace.
+        if (rel.startsWith("..") || pm.isAbsolute(rel)) {
+          return { error: appError("OUTSIDE_ROOT", "Path escapes the workspace.") };
+        }
+      }
+    }
   }
-  const realRoot = await realpathSubtle(root);
-  const realTarget = await realpathSubtle(win.dirname(abs));
+  // Refuse a symlinked final component: the target itself must not be a link
+  // (parent directories are checked above; realpath containment below covers
+  // links that resolve inside — a direct link is never followed).
+  try {
+    const st = await fs.lstat(abs);
+    if (st.isSymbolicLink()) {
+      return { error: appError("OUTSIDE_ROOT", "Symlinked paths are not traversed.") };
+    }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      return { error: mapFsError(err as NodeJS.ErrnoException, "path") };
+    }
+  }
+  const realTarget = await realpathSubtle(pm.dirname(abs));
   if (realRoot && realTarget) {
-    const rel = win.relative(realRoot, realTarget);
-    if (rel.startsWith("..") || win.isAbsolute(rel)) {
+    const rel = pm.relative(realRoot, realTarget);
+    if (rel.startsWith("..") || pm.isAbsolute(rel)) {
       return { error: appError("OUTSIDE_ROOT", "Path escapes the workspace.") };
     }
   }
@@ -72,12 +130,17 @@ export async function resolveInsideRoot(
 
 export async function listDirectory(
   root: string,
+  kind: WorkspaceKind,
   relativePath: string,
 ): Promise<{ entries: import("../../shared/contracts/ipc.js").DirectoryEntry[] } | { error: AppError }> {
-  const v = validateWindowsRelativePath(relativePath === "" ? "." : relativePath);
-  void v;
-  const rel = relativePath === "" ? "" : relativePath;
-  const abs = rel === "" ? root : win.join(root, rel);
+  const pm = pathModuleFor(kind);
+  let rel = "";
+  if (relativePath !== "") {
+    const v = validateNativeRel(kind, relativePath);
+    if ("error" in v) return v;
+    rel = v.relativePath;
+  }
+  const abs = rel === "" ? root : pm.join(root, rel);
   let dirents;
   try {
     dirents = await fs.readdir(abs, { withFileTypes: true });
@@ -86,11 +149,11 @@ export async function listDirectory(
   }
   const entries = await Promise.all(
     dirents.map(async (d) => {
-      const childRel = rel === "" ? d.name : `${rel}\\${d.name}`;
+      const childRel = rel === "" ? d.name : pm.join(rel, d.name);
       let statSize = 0;
       let mtimeMs = 0;
       try {
-        const st = await fs.lstat(win.join(abs, d.name));
+        const st = await fs.lstat(pm.join(abs, d.name));
         statSize = st.size;
         mtimeMs = st.mtimeMs;
       } catch {
@@ -114,11 +177,12 @@ export async function listDirectory(
 
 export async function readTextFile(
   root: string,
+  kind: WorkspaceKind,
   relativePath: string,
 ): Promise<{ result: ReadResult } | { error: AppError }> {
-  const v = validateWindowsRelativePath(relativePath);
+  const v = validateNativeRel(kind, relativePath);
   if ("error" in v) return v;
-  const r = await resolveInsideRoot(root, v.relativePath);
+  const r = await resolveInsideRoot(root, kind, v.relativePath);
   if ("error" in r) return r;
   let bytes: Buffer;
   let stat;
@@ -148,15 +212,16 @@ export async function readTextFile(
 
 export async function writeTextFile(
   root: string,
+  kind: WorkspaceKind,
   relativePath: string,
   content: string,
   expectedHash: string,
   newlineStyle: "lf" | "crlf",
   hadBom: boolean,
 ): Promise<{ revision: FileRevision } | { error: AppError }> {
-  const v = validateWindowsRelativePath(relativePath);
+  const v = validateNativeRel(kind, relativePath);
   if ("error" in v) return v;
-  const r = await resolveInsideRoot(root, v.relativePath);
+  const r = await resolveInsideRoot(root, kind, v.relativePath);
   if ("error" in r) return r;
   let current: Buffer;
   try {
@@ -191,18 +256,48 @@ export async function writeTextFile(
   return { revision: revisionOfBytes(written, stat.mtimeMs) };
 }
 
+export async function renamePath(
+  root: string,
+  kind: WorkspaceKind,
+  oldRelativePath: string,
+  newRelativePath: string,
+): Promise<{ ok: true } | { error: AppError }> {
+  const vOld = validateNativeRel(kind, oldRelativePath);
+  if ("error" in vOld) return vOld;
+  const vNew = validateNativeRel(kind, newRelativePath);
+  if ("error" in vNew) return vNew;
+  const rOld = await resolveInsideRoot(root, kind, vOld.relativePath);
+  if ("error" in rOld) return rOld;
+  const rNew = await resolveInsideRoot(root, kind, vNew.relativePath);
+  if ("error" in rNew) return rNew;
+  try {
+    await fs.access(rNew.absolutePath);
+    return { error: appError("ALREADY_EXISTS", "A file with that name already exists.") };
+  } catch {
+    /* target free — proceed */
+  }
+  try {
+    await fs.rename(rOld.absolutePath, rNew.absolutePath);
+  } catch (err) {
+    return { error: mapFsError(err as NodeJS.ErrnoException, "file") };
+  }
+  return { ok: true };
+}
+
 export async function createTextFile(
   root: string,
+  kind: WorkspaceKind,
   relativePath: string,
   content = "",
 ): Promise<{ revision: FileRevision } | { error: AppError }> {
-  const v = validateWindowsRelativePath(relativePath);
+  const pm = pathModuleFor(kind);
+  const v = validateNativeRel(kind, relativePath);
   if ("error" in v) return v;
-  const r = await resolveInsideRoot(root, v.relativePath);
+  const r = await resolveInsideRoot(root, kind, v.relativePath);
   if ("error" in r) return r;
   const bytes = encodeUtf8(content, "lf", false, true);
   try {
-    await fs.mkdir(win.dirname(r.absolutePath), { recursive: true });
+    await fs.mkdir(pm.dirname(r.absolutePath), { recursive: true });
     await fs.writeFile(r.absolutePath, bytes, { flag: "wx" });
   } catch (err) {
     return { error: mapFsError(err as NodeJS.ErrnoException, "file") };

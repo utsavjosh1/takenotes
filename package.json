@@ -1,9 +1,9 @@
 {
   "name": "takenotes",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "description": "takenotes — filesystem-first local Markdown notebook for Windows with WSL awareness.",
-  "author": "",
+  "author": "Utsav Josh",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -22,9 +22,20 @@
     "version:set": "node scripts/set-version.mjs",
     "version:check": "node scripts/check-version.mjs",
     "package:win": "electron-builder --win nsis --publish never",
+    "package:mac": "electron-builder --mac dmg --publish never",
+    "package:mac:arm64": "electron-builder --mac dmg --arm64 --publish never",
+    "package:mac:x64": "electron-builder --mac dmg --x64 --publish never",
+    "package:linux": "electron-builder --linux AppImage deb rpm --publish never",
+    "package:all": "npm run package:win && npm run package:mac && npm run package:linux",
+    "keymap:check": "vitest run tests/platform/keymap.test.ts",
+    "test:platform": "node scripts/test-platform.mjs",
     "release:verify": "node scripts/verify-release.mjs",
     "release:notes": "node scripts/release-notes.mjs",
-    "fixture:generate": "node scripts/generate-fixture.mjs"
+    "fixture:generate": "node scripts/generate-fixture.mjs",
+    "audit:security": "node scripts/audit-security.mjs",
+    "audit:deadcode": "node scripts/audit-deadcode.mjs",
+    "audit:deps": "npm audit --omit=dev && npm audit",
+    "audit:all": "npm run audit:security && npm run audit:deadcode"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",
@@ -35,9 +46,11 @@
     "@codemirror/state": "6.7.4",
     "@codemirror/view": "6.43.11",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "@lezer/highlight": "1.2.3"
   },
   "devDependencies": {
+    "@electron/fuses": "1.8.0",
     "@eslint/js": "10.0.1",
     "@types/node": "26.5.1",
     "@types/react": "19.3.0",

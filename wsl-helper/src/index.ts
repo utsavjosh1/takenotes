@@ -56,6 +56,13 @@ async function resolveInside(root: string, rel: string): Promise<string | null> 
       return null;
     }
   }
+  // Refuse a symlinked final component outright — never follow it.
+  try {
+    const targetStat = await fs.lstat(abs);
+    if (targetStat.isSymbolicLink()) return null;
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") return null;
+  }
   // eslint-disable-next-line no-useless-assignment
   let realRoot: string | null = null;
   // eslint-disable-next-line no-useless-assignment
@@ -84,26 +91,45 @@ function classify(name: string): string {
 async function handle(operation: string, payload: unknown, sessionId: string): Promise<unknown> {
   const p = (payload ?? {}) as Record<string, unknown>;
   if (operation === "hello") {
+    const nonce = p["nonce"];
     return {
       protocolVersion: PROTOCOL_VERSION,
-      helperVersion: process.env["HELPER_VERSION"] ?? "0.1.0",
+      helperVersion: process.env["HELPER_VERSION"] ?? "0.0.1",
       runtimeVersion: process.version,
       platform: process.platform,
       architecture: process.arch,
-      capabilities: ["workspace.open", "directory.list", "file.read", "file.write", "file.create", "file.rename"],
+      capabilities: ["workspace.open", "directory.list", "file.read", "file.write", "file.create"],
       processId: process.pid,
+      nonce: typeof nonce === "string" ? nonce : "",
+      execPath: process.execPath,
+      uid: typeof process.getuid === "function" ? process.getuid() : -1,
+      home: process.env["HOME"] ?? "",
     };
   }
   if (operation === "workspace.open") {
     const root = p["root"];
-    if (typeof root !== "string" || !root.startsWith("/")) throw err("INVALID_REQUEST", "Invalid workspace root.");
-    const st = await fs.stat(root).catch(() => null);
-    if (!st || !st.isDirectory()) throw err("NOT_FOUND", "Workspace directory not found.");
+    log("info", "workspace", "open request", { sessionId, root });
+    if (typeof root !== "string" || !root.startsWith("/")) {
+      log("error", "workspace", "open rejected: root must be absolute POSIX", { sessionId, root });
+      throw err("INVALID_REQUEST", "Invalid workspace root.");
+    }
+    const st = await fs.stat(root).catch((e: NodeJS.ErrnoException) => {
+      log("error", "workspace", "open stat failed", { sessionId, root, errno: e?.code });
+      return null;
+    });
+    if (!st || !st.isDirectory()) {
+      log("error", "workspace", "open rejected: not a directory", { sessionId, root });
+      throw err("NOT_FOUND", "Workspace directory not found.");
+    }
     sessions.set(sessionId, { sessionId, root, generation: 1 });
+    log("info", "workspace", "open ok", { sessionId, root });
     return { root };
   }
   const session = sessions.get(sessionId);
-  if (!session?.root) throw err("INVALID_REQUEST", "No workspace open for this session.");
+  if (!session?.root) {
+    log("error", "workspace", "no root for session", { sessionId, operation, knownSessions: [...sessions.keys()] });
+    throw err("INVALID_REQUEST", "No workspace open for this session.");
+  }
   const root = session.root;
 
   if (operation === "workspace.close") {
@@ -138,12 +164,23 @@ async function handle(operation: string, payload: unknown, sessionId: string): P
     entries.sort((a, b) => (a.kind !== b.kind ? (a.kind === "directory" ? -1 : 1) : a.name.localeCompare(b.name)));
     return entries;
   }
-  if (operation === "file.read") {
-    const rel = validatePosixRel(p["relativePath"]);
-    if (rel === null) throw err("INVALID_PATH", "Invalid file path.");
+    if (operation === "file.read") {
+    const rawRel = p["relativePath"];
+    const rel = validatePosixRel(rawRel);
+    if (rel === null) {
+      log("error", "file.read", "invalid relativePath", { sessionId, root, rawRel });
+      throw err("INVALID_PATH", "Invalid file path.");
+    }
     const abs = await resolveInside(root, rel);
-    if (!abs) throw err("OUTSIDE_ROOT", "Path escapes the workspace.");
-    const stat = await fs.stat(abs).catch(() => null);
+    if (!abs) {
+      log("error", "file.read", "resolveInside refused (symlink/escape)", { sessionId, root, rel });
+      throw err("OUTSIDE_ROOT", "Path escapes the workspace.");
+    }
+    log("info", "file.read", "request", { sessionId, root, rel, abs });
+    const stat = await fs.stat(abs).catch((e: NodeJS.ErrnoException) => {
+      log("error", "file.read", "stat failed → NOT_FOUND", { sessionId, root, rel, abs, errno: e?.code });
+      return null;
+    });
     if (!stat) throw err("NOT_FOUND", "File not found.");
     if (stat.size > 10 * 1024 * 1024) throw err("TOO_LARGE", "This file is too large to edit safely.");
     const bytes = await fs.readFile(abs);
@@ -185,8 +222,20 @@ async function handle(operation: string, payload: unknown, sessionId: string): P
     }
     const bytes = Buffer.from((content as string).replace(/\r\n|\n/g, p["newlineStyle"] === "crlf" ? "\r\n" : "\n"), "utf8");
     const tmp = `${abs}.tmp-${process.pid}-${Date.now()}`;
-    await fs.writeFile(tmp, bytes, { flag: "wx" });
-    await fs.rename(tmp, abs);
+    try {
+      await fs.writeFile(tmp, bytes, { flag: "wx" });
+      // Durability parity with the Windows path: flush before the atomic replace.
+      const fh = await fs.open(tmp, "r+");
+      try {
+        await fh.sync();
+      } finally {
+        await fh.close();
+      }
+      await fs.rename(tmp, abs);
+    } catch (e) {
+      await fs.rm(tmp, { force: true });
+      throw e;
+    }
     const stat = await fs.stat(abs);
     const written = await fs.readFile(abs);
     return { hash: createHash("sha256").update(written).digest("hex"), size: written.length, mtimeMs: stat.mtimeMs };

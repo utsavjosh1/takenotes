@@ -4,7 +4,7 @@ Date: 2026-09-14 · Status: accepted
 
 ## Decision
 
-- `package.json` is the single version source (start `0.1.0`, SemVer).
+- `package.json` is the single version source (start `0.0.1`, SemVer).
 - `scripts/set-version.mjs` updates `package.json` + `package-lock.json`
   together (no tag/commit/publish); `scripts/check-version.mjs` gates CI and
   release (tag `vX.Y.Z` must equal `package.json`).

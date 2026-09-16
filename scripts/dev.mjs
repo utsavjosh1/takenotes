@@ -17,7 +17,7 @@ let electron = null;
 
 function launchElectron() {
   if (electron) electron.kill();
-  electron = run("npx", ["electron", ".", "--dev"], { env: { ...process.env, VITE_DEV_SERVER_URL: "http://127.0.0.1:5173/src/renderer/" } });
+  electron = run("npx", ["electron", ".", "--dev", "--disable-gpu"], { env: { ...process.env, VITE_DEV_SERVER_URL: "http://127.0.0.1:5173/src/renderer/" } });
 }
 
 launchElectron();

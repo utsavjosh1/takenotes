@@ -1,6 +1,9 @@
 import type { AppError } from "../errors.js";
+import type { WorkspaceKind } from "../platform/types.js";
 
-export type WorkspaceType = "windows" | "wsl";
+/** Workspace kinds (§11). Legacy `"windows"` means `"windows-local"` and
+ *  legacy `"wsl"` means `"windows-wsl"` at the IPC boundary. */
+export type WorkspaceType = WorkspaceKind;
 
 export type WorkspaceInfo = {
   workspaceId: string;
@@ -44,4 +47,17 @@ export type SearchMatch = {
   line: number;
   column: number;
   preview: string;
+};
+
+export type PlatformReport = {
+  platform: "windows" | "macos" | "linux";
+  arch: string;
+  capabilities: {
+    wsl: boolean;
+    macTrafficLights: boolean;
+    supportsWayland: boolean;
+  };
+  workspaceKind: WorkspaceType;
+  wayland: boolean;
+  shortcuts: Record<string, string>;
 };

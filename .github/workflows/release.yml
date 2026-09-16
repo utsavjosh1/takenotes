@@ -4,6 +4,9 @@ on:
     tags:
       - "v*.*.*"
 
+# Default-deny permissions (§11): every job declares only what it needs.
+# The `publish` job alone gets release powers (contents:write for the
+# GitHub Release, id-token + attestations for artifact provenance).
 permissions:
   contents: read
 
@@ -13,8 +16,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -23,7 +26,7 @@ jobs:
       - run: npm run build:helper
       - run: node scripts/fetch-wsl-runtime.mjs
       - run: node scripts/stage-wsl-runtime.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: wsl-runtime
           path: resources/wsl/linux-x64/
@@ -34,13 +37,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: wsl-runtime
           path: resources/wsl/linux-x64/
@@ -52,6 +55,14 @@ jobs:
         env:
           REQUIRE_INSTALLER: "0"
       - run: npm run package:win
+        env:
+          # Authenticode for stable public builds (§125, §192).
+          # Empty → unsigned dev artifact that still validates packaging.
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Verify Electron fuses (packaged binary)
+        shell: pwsh
+        run: npx --no-install @electron/fuses read --app "release/win-unpacked/takenotes.exe"
       - name: Generate SHA256SUMS.txt
         shell: pwsh
         run: |
@@ -59,37 +70,145 @@ jobs:
             $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$h  $($_.Name)"
           } | Out-File release/SHA256SUMS.txt -Encoding ascii
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-release
           path: |
             release/*.exe
             release/SHA256SUMS.txt
 
-  publish:
-    runs-on: ubuntu-latest
-    needs: windows
+  macos:
+    # One macOS runner produces BOTH arm64 + x64 DMGs (separate artifacts,
+    # §127–§128). Native build is mandatory for signing/notarization (§145).
+    runs-on: macos-latest
     permissions:
-      contents: write
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: npm
-      - uses: actions/download-artifact@v4
+      - run: npm ci
+      - run: npm run version:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run package:mac
+        env:
+          # Developer ID signing + notarization for stable releases
+          # (§129–§131, §192). Empty in PRs/dev tags → unsigned artifact
+          # that still validates build + packaging. Never commit credentials.
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Verify Electron fuses (packaged binary)
+        run: npx --no-install @electron/fuses read --app "release/mac-arm64/takenotes.app"
+      - name: Generate SHA256SUMS-macos.txt
+        run: |
+          cd release && shasum -a 256 *.dmg > SHA256SUMS-macos.txt && cat SHA256SUMS-macos.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-release
+          path: |
+            release/*.dmg
+            release/SHA256SUMS-macos.txt
+
+  linux:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run version:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run package:linux
+      - name: Verify Electron fuses (packaged binary)
+        run: npx --no-install @electron/fuses read --app "release/linux-unpacked/takenotes"
+      - name: Generate SHA256SUMS-linux.txt
+        run: |
+          cd release && sha256sum *.AppImage *.deb *.rpm > SHA256SUMS-linux.txt && cat SHA256SUMS-linux.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-release
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/SHA256SUMS-linux.txt
+
+  publish:
+    runs-on: ubuntu-latest
+    # A release is NOT vX.Y.Z-complete until every Tier 1 artifact
+    # succeeded (§188–§189). No silent partial releases.
+    needs: [windows, macos, linux]
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: windows-release
           path: release/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: macos-release
+          path: release/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: linux-release
+          path: release/
+      # One SHA256SUMS.txt across every artifact (§191).
+      - name: Merge checksums
+        run: |
+          cd release
+          cat SHA256SUMS-*.txt > SHA256SUMS.txt
+          rm SHA256SUMS-*.txt
+          cat SHA256SUMS.txt
       - run: npm run version:check
       - run: npm run release:verify
       - name: Build release notes
         run: node scripts/release-notes.mjs > release/NOTES.md
+      # SPDX SBOM (§13): generated from the locked dependency tree with the
+      # npm CLI — no extra runtime dependency. Scope: Node dependencies +
+      # Electron runtime version; native installer binaries are checksummed
+      # (SHA256SUMS.txt) rather than inventoried.
+      - name: Generate SPDX SBOM
+        run: npm sbom --sbom-format spdx --omit dev > "release/takenotes-${{ github.ref_name }}.spdx.json"
+      # Artifact provenance (§12): GitHub attestation over every distributable.
+      # Requires a public repo / supported account tier; if attestation is
+      # unavailable the release still ships with SHA256SUMS + SBOM and the
+      # provenance gap stays documented (never silently claimed).
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: "release/*.exe, release/*.dmg, release/*.AppImage, release/*.deb, release/*.rpm"
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           files: |
             release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
             release/SHA256SUMS.txt
+            release/*.spdx.json
           body_path: release/NOTES.md
           prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}

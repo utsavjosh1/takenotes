@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { helperEnv, resolveWslExe } from "./launch-security.js";
 
 /** Fixed bootstrap: transfer helper/runtime bytes through an owned wsl.exe
  * process stdin. The shell fragment is fixed application code; only the
@@ -29,7 +30,7 @@ export async function verifyLocalFileSha256(filePath: string, expectedHex: strin
 
 export function spawnWsl(argv: string[], stdinBytes?: Buffer): Promise<{ stdout: Buffer; code: number }> {
   return new Promise((resolve, reject) => {
-    const child = spawn("wsl.exe", argv, { shell: false });
+    const child = spawn(resolveWslExe(), argv, { shell: false, env: helperEnv() });
     const out: Buffer[] = [];
     child.stdout.on("data", (c: Buffer) => out.push(c));
     child.on("error", reject);

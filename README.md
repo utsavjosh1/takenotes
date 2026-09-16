@@ -4,7 +4,7 @@ Filesystem-first, Markdown-first, local-first Windows notebook with WSL
 awareness. Your Markdown files stay ordinary files — the app adds an interface
 around them and never makes itself necessary for accessing them.
 
-> Status: **foundation / pre-release (v0.1.0)**. The Windows → WSL round-trip
+> Status: **foundation / pre-release (v0.0.1)**. The Windows → WSL round-trip
 > has **NOT been verified on real WSL** yet — see `docs/mvp-status.md`.
 
 ## Supported platforms (target)

@@ -4,13 +4,21 @@ import type {
   FileReadResult,
   FileRevision,
   IpcResult,
+  PlatformReport,
   SearchMatch,
   WorkspaceInfo,
   WslDistribution,
 } from "../shared/contracts/ipc.js";
+import type { CommandId } from "../shared/platform/keymap.js";
 
 /** Narrow typed preload bridge. No generic channel invocation is exposed. */
 export type TakeNotesApi = {
+  draft: {
+    /** Persist a crash-recovery draft (debounced by the caller; recovery only, never `Saved`). */
+    put(args: { workspaceId: string; relativePath: string; baseRevisionHash: string; content: string }): Promise<IpcResult<null>>;
+    get(workspaceId: string, relativePath: string): Promise<IpcResult<DraftSummary | null>>;
+    clear(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
+  };
   workspace: {
     openLocal(): Promise<IpcResult<WorkspaceInfo | null>>;
     close(workspaceId: string): Promise<IpcResult<null>>;
@@ -22,6 +30,8 @@ export type TakeNotesApi = {
   };
   file: {
     read(workspaceId: string, relativePath: string): Promise<IpcResult<FileReadResult>>;
+    rename(workspaceId: string, oldPath: string, newPath: string): Promise<IpcResult<null>>;
+    trash(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
     write(args: {
       workspaceId: string;
       relativePath: string;
@@ -36,15 +46,32 @@ export type TakeNotesApi = {
     files(workspaceId: string, query: string): Promise<IpcResult<SearchMatch[]>>;
     content(workspaceId: string, query: string): Promise<IpcResult<SearchMatch[]>>;
   };
+  shell: {
+    reveal(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
+  };
   app: {
     version(): Promise<IpcResult<string>>;
+    platform(): Promise<IpcResult<PlatformReport>>;
   };
   events: {
     onWslState(callback: (state: string) => void): () => void;
+    onCommand(callback: (id: CommandId) => void): () => void;
   };
 };
 
+export type DraftSummary = {
+  content: string;
+  baseRevisionHash: string;
+  updatedAt: number;
+  stale: boolean;
+};
+
 const api: TakeNotesApi = {
+  draft: {
+    put: (args) => ipcRenderer.invoke("draft:put", args),
+    get: (workspaceId, relativePath) => ipcRenderer.invoke("draft:get", workspaceId, relativePath),
+    clear: (workspaceId, relativePath) => ipcRenderer.invoke("draft:clear", workspaceId, relativePath),
+  },
   workspace: {
     openLocal: () => ipcRenderer.invoke("workspace:openLocal"),
     close: (workspaceId) => ipcRenderer.invoke("workspace:close", workspaceId),
@@ -56,6 +83,8 @@ const api: TakeNotesApi = {
   },
   file: {
     read: (workspaceId, relativePath) => ipcRenderer.invoke("file:read", workspaceId, relativePath),
+    rename: (workspaceId, oldPath, newPath) => ipcRenderer.invoke("file:rename", workspaceId, oldPath, newPath),
+    trash: (workspaceId, relativePath) => ipcRenderer.invoke("file:trash", workspaceId, relativePath),
     write: (args) => ipcRenderer.invoke("file:write", args),
     create: (workspaceId, relativePath) => ipcRenderer.invoke("file:create", workspaceId, relativePath),
   },
@@ -63,14 +92,23 @@ const api: TakeNotesApi = {
     files: (workspaceId, query) => ipcRenderer.invoke("search:files", workspaceId, query),
     content: (workspaceId, query) => ipcRenderer.invoke("search:content", workspaceId, query),
   },
+  shell: {
+    reveal: (workspaceId, relativePath) => ipcRenderer.invoke("shell:reveal", workspaceId, relativePath),
+  },
   app: {
     version: () => ipcRenderer.invoke("app:version"),
+    platform: () => ipcRenderer.invoke("app:platform"),
   },
   events: {
     onWslState: (callback) => {
       const listener = (_event: unknown, state: string) => callback(state);
       ipcRenderer.on("takenotes:wsl-state", listener as (...args: unknown[]) => void);
       return () => ipcRenderer.removeListener("takenotes:wsl-state", listener as (...args: unknown[]) => void);
+    },
+    onCommand: (callback) => {
+      const listener = (_event: unknown, id: CommandId) => callback(id);
+      ipcRenderer.on("takenotes:command", listener as (...args: unknown[]) => void);
+      return () => ipcRenderer.removeListener("takenotes:command", listener as (...args: unknown[]) => void);
     },
   },
 };
