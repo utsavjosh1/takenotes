@@ -22,11 +22,32 @@ Tag push triggers `.github/workflows/release.yml`:
    upload artifact.
 2. **Windows (windows-latest)**: download runtime artifact, `version:check`,
    typecheck, tests, build, `release:verify`, `electron-builder --win nsis
-   --publish never`, generate `SHA256SUMS.txt`.
-3. **Publish**: validate tag/version, verify checksums, extract CHANGELOG
-   section via `scripts/release-notes.mjs`, create GitHub Release, upload
-   `takenotes-<v>-windows-x64-setup.exe` + `SHA256SUMS.txt`.
+   --publish never` → `takenotes-<v>-win-x64.exe` + `SHA256SUMS.txt`.
+3. **macOS (macos-latest)**: `version:check`, typecheck, tests, build,
+   `electron-builder --mac dmg --publish never` → `takenotes-<v>-mac-arm64.dmg`
+   + `takenotes-<v>-mac-x64.dmg` + checksums (native build, unsigned unless
+   `MAC_CSC_LINK` / `APPLE_ID` secrets are set).
+4. **Linux (ubuntu-latest)**: `version:check`, typecheck, tests, build,
+   `electron-builder --linux AppImage deb rpm --publish never` →
+   `takenotes-<v>-linux-x86_64.AppImage` + `*.deb` + `*.rpm` + checksums.
+5. **Publish**: validate tag/version, merge checksums into one
+   `SHA256SUMS.txt`, extract CHANGELOG section via
+   `scripts/release-notes.mjs`, generate SPDX SBOM, attest artifacts, create
+   GitHub Release with `*.exe` + `*.dmg` + `*.AppImage` + `*.deb` + `*.rpm` +
+   `SHA256SUMS.txt` + `*.spdx.json`.
+
+Why a tag can show only "Source code (zip/tar.gz)": GitHub always attaches
+source archives to a tag. Real installers appear only after the Release
+workflow's `publish` job succeeds. If `windows` / `macos` / `linux` fail,
+`publish` is skipped and no installers are uploaded — check the failed job
+log, fix, move the tag, and push again.
 
 Never let electron-builder auto-publish. No auto-update in MVP (manual
 installer updates from GitHub Releases). Early builds are unsigned; SmartScreen
-warnings are expected and documented.
+/ Gatekeeper warnings are expected and documented in the release notes.
+
+Packaging notes:
+- Linux `.deb` requires `maintainer` (set in `electron-builder.yml` +
+  `package.json` author email) or the build fails.
+- `build/` icons are not yet branded — installers currently use the default
+  Electron icon (TODO: add `build/icon.ico`, `icon.icns`, `icon.png`).

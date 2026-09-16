@@ -64,6 +64,9 @@ dmg:
     width: 540
     height: 380
 linux:
+  maintainer: "Utsav Josh <utsav304joshi@gmail.com>"
+  description: "Filesystem-first local Markdown notebook"
+  executableName: takenotes
   target:
     # AppImage + DEB + RPM are the initial set (§134). No Snap/Flatpak until
     # sandbox/portal/filesystem access is separately designed (§134).

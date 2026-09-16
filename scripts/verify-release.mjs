@@ -21,10 +21,27 @@ for (const f of ["dist-electron/main/index.cjs", "dist-electron/preload/index.cj
     process.exit(1);
   }
 }
+// Installer names come from electron-builder `artifactName`
+// (takenotes-${version}-${os}-${arch}.${ext}):
+//   win   -> takenotes-0.0.1-win-x64.exe
+//   mac   -> takenotes-0.0.1-mac-arm64.dmg / takenotes-0.0.1-mac-x64.dmg
+//   linux -> takenotes-0.0.1-linux-x86_64.AppImage, -linux-amd64.deb, -linux-x86_64.rpm
 const releaseFiles = existsSync("release") ? readdirSync("release") : [];
-const installer = releaseFiles.find((f) => f.endsWith("-setup.exe"));
-if (process.env.REQUIRE_INSTALLER === "1" && !installer) {
-  console.error("Missing Windows installer in release/ (REQUIRE_INSTALLER=1).");
-  process.exit(1);
+const has = (re) => releaseFiles.find((f) => re.test(f));
+const winInstaller = has(/\.exe$/);
+const macInstaller = has(/\.dmg$/);
+const linuxInstaller = has(/\.(AppImage|deb|rpm)$/);
+if (process.env.REQUIRE_INSTALLER === "1") {
+  const missing = [];
+  if (!winInstaller) missing.push("*.exe (Windows NSIS)");
+  if (!macInstaller) missing.push("*.dmg (macOS)");
+  if (!linuxInstaller) missing.push("*.AppImage/*.deb/*.rpm (Linux)");
+  if (missing.length > 0) {
+    console.error(`Missing installers in release/: ${missing.join(", ")}. Found: ${releaseFiles.join(", ") || "(empty)"}`);
+    process.exit(1);
+  }
 }
-console.log(`Release verification OK for ${pkg.version}. Installer: ${installer ?? "(not required in this environment)"}`);
+console.log(
+  `Release verification OK for ${pkg.version}. ` +
+    `win=${winInstaller ?? "(not required)"} mac=${macInstaller ?? "(not required)"} linux=${linuxInstaller ?? "(not required)"}`,
+);

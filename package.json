@@ -3,7 +3,11 @@
   "version": "0.0.1",
   "private": true,
   "description": "takenotes — filesystem-first local Markdown notebook for Windows with WSL awareness.",
-  "author": "Utsav Josh",
+  "author": {
+    "name": "Utsav Josh",
+    "email": "utsav304joshi@gmail.com"
+  },
+  "desktopName": "takenotes",
   "license": "MIT",
   "type": "module",
   "engines": {
