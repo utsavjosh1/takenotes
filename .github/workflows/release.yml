@@ -94,7 +94,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: npm run package:mac
+      - run: npm run package:mac:arm64
         env:
           # Developer ID signing + notarization for stable releases
           # (§129–§131, §192). Empty in PRs/dev tags → unsigned artifact
@@ -105,8 +105,22 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Verify Electron fuses (packaged binary)
-        run: npx --no-install @electron/fuses read --app "release/mac-arm64/takenotes.app"
+      - run: npm run package:mac:x64
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Verify Electron fuses (packaged binaries, both archs)
+        run: |
+          for app in release/mac-arm64/takenotes.app release/mac/takenotes.app release/mac-x64/takenotes.app; do
+            if [ -d "$app" ]; then
+              echo "Checking $app"
+              npx --no-install @electron/fuses read --app "$app"
+            fi
+          done
       - name: Generate SHA256SUMS-macos.txt
         run: |
           cd release && shasum -a 256 *.dmg > SHA256SUMS-macos.txt && cat SHA256SUMS-macos.txt
