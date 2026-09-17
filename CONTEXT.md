@@ -4,6 +4,13 @@ Glossary only. No implementation details.
 
 ## Terms
 
+- **update-check**: fetch the latest stable release tag and compare SemVer
+  with the running version. Pure logic, unit-tested, silent when offline.
+- **update-download / update-install**: fetch the `.exe` + `SHA256SUMS.txt`,
+  verify SHA-256 (mandatory gate), launch the installer, quit the app.
+- **release channel**: `stable` (`vX.Y.Z`, offered by the updater) vs
+  `prerelease` (`-beta`/`-rc`, never auto-offered).
+
 - **windows-local workspace**: Markdown folder on NTFS/ReFS opened via the
   native Explorer picker. Works with no WSL installed. The default.
 - **wsl-remote workspace**: Linux folder inside a WSL2 distro, accessed as

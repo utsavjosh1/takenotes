@@ -19,6 +19,7 @@ macOS/Linux files stay in the repo (parked) but never block Windows work.
 | Helper direct round-trip (handshake/open/list/read/write/conflict) | `tests/integration/helper-roundtrip.test.ts` | Linux/CI Ubuntu + Windows (direct spawn, no `wsl.exe`) |
 | Search (filenames/content/exclusions/maxResults/cancel) | `tests/integration/search.test.ts` | any OS |
 | Drafts (save/load/stale/clear) | `tests/workspace/drafts.test.ts` | any OS |
+| Update versions (parse/compare/stable-gate/asset-name/checksums) | `tests/update/version.test.ts` | any OS |
 
 Removed (not logic, parked): `keymap`, `platform`, `wsl-output` decoder,
 `launch-security`, win32-only NTFS `files`, `helper-symlink`, `audit:*`,

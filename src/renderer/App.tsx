@@ -93,6 +93,13 @@ export default function App(): JSX.Element {
   // reached the note file. A persisted draft never flips the save indicator.
   const [recovery, setRecovery] = useState<Record<string, { content: string; updatedAt: number; stale: boolean; diskChanged: boolean }>>({});
   const [wslDialog, setWslDialog] = useState<{ distros: WslDistribution[]; distro: string; path: string; error: string | null; connecting: boolean } | null>(null);
+  // In-app software update dialog (ADR-0006). Null = hidden. Auto-checks
+  // stay silent unless an update is actually available.
+  type UpdatePhase = "checking" | "available" | "uptodate" | "downloading" | "verifying" | "launching" | "error";
+  const [updateDlg, setUpdateDlg] = useState<{
+    phase: UpdatePhase; latest: string | null; notes: string | null; error: string | null;
+    received: number; total: number | null;
+  } | null>(null);
   const [wslError, setWslError] = useState<string | null>(null);
   const [creating, setCreating] = useState<{ dir: string; folder: boolean } | null>(null);
   const [createName, setCreateName] = useState("");
@@ -130,6 +137,13 @@ export default function App(): JSX.Element {
     };
     mq.addEventListener("change", onChange);
     void window.takenotes.app.version().then((r) => { if (r.ok) setVersion(r.result); });
+    // Silent startup update check (ADR-0006): main enforces the 24h cadence
+    // and offline silence; an available update opens the dialog.
+    void window.takenotes.update.check(false).then((r) => {
+      if (r.ok && r.result.updateAvailable && r.result.latestVersion) {
+        setUpdateDlg({ phase: "available", latest: r.result.latestVersion, notes: r.result.releaseNotes, error: null, received: 0, total: null });
+      }
+    }).catch(() => undefined);
     return () => mq.removeEventListener("change", onChange);
   }, [settings.theme]);
 
@@ -202,6 +216,46 @@ export default function App(): JSX.Element {
       await openWorkspace(res.result);
     }
   }, [wslDialog, openWorkspace, toast]);
+
+  /* ---------- software updates (ADR-0006, Windows-only) ---------- */
+  const checkForUpdates = useCallback(async (manual: boolean) => {
+    if (!platform.capabilities.updates) {
+      if (manual) toast("Software updates are available on Windows in this version.", "error");
+      return;
+    }
+    if (manual) setSettingsOpen(false);
+    setUpdateDlg({ phase: "checking", latest: null, notes: null, error: null, received: 0, total: null });
+    const res = await window.takenotes.update.check(manual);
+    if (!res.ok) {
+      // Silent startup path + offline = stay silent (main already hides it
+      // too; this is the belt-and-suspenders for any OFFLINE leak-through).
+      if (!manual && res.error.code === "OFFLINE") { setUpdateDlg(null); return; }
+      setUpdateDlg({ phase: "error", latest: null, notes: null, error: res.error.message, received: 0, total: null });
+      return;
+    }
+    const r = res.result;
+    if (r.updateAvailable && r.latestVersion) {
+      setUpdateDlg({ phase: "available", latest: r.latestVersion, notes: r.releaseNotes, error: null, received: 0, total: null });
+    } else if (manual) {
+      setUpdateDlg({ phase: "uptodate", latest: null, notes: null, error: null, received: 0, total: null });
+    } else {
+      setUpdateDlg(null);
+    }
+  }, [platform.capabilities.updates, toast]);
+
+  const downloadUpdate = useCallback(async () => {
+    setUpdateDlg((d) => (d ? { ...d, phase: "downloading", received: 0, total: null } : d));
+    const off = window.takenotes.events.onUpdateProgress((p) => {
+      setUpdateDlg((d) => (d ? { ...d, phase: p.phase, received: p.receivedBytes, total: p.totalBytes } : d));
+    });
+    try {
+      const res = await window.takenotes.update.download();
+      // ok → main launches the installer and quits; nothing left to render.
+      if (!res.ok) setUpdateDlg((d) => (d ? { ...d, phase: "error", error: res.error.message } : d));
+    } finally {
+      off();
+    }
+  }, []);
 
   const openFile = useCallback(async (relativePath: string) => {
     if (!workspace) return;
@@ -558,11 +612,14 @@ export default function App(): JSX.Element {
       { id: "workspace.refresh", title: "Refresh file tree", run: () => { if (workspace) { void refreshTree(workspace); void rebuildAllFiles(workspace); } } },
       { id: "settings.open", title: "Open settings", shortcut: sc("settings.open"), run: () => setSettingsOpen(true) },
     ];
+    if (platform.capabilities.updates) {
+      items.push({ id: "app.checkForUpdates", title: "Check for updates…", run: () => void checkForUpdates(true) });
+    }
     if (platform.capabilities.wsl) {
       items.splice(4, 0, { id: "workspace.openWsl", title: "Open WSL folder…", run: () => void openWslDialog() });
     }
     return items;
-  }, [newNote, save, openLocal, openWslDialog, activeKey, closeTab, workspace, refreshTree, rebuildAllFiles, sc, platform.capabilities.wsl]);
+  }, [newNote, save, openLocal, openWslDialog, checkForUpdates, activeKey, closeTab, workspace, refreshTree, rebuildAllFiles, sc, platform.capabilities.wsl, platform.capabilities.updates]);
 
   /* Native menu → same command dispatch (§59). Menu accelerators and the
    * palette forward CommandIds here; mouse and keyboard share one path. */
@@ -577,6 +634,7 @@ export default function App(): JSX.Element {
         case "workspace.search": setView("search"); setSidebarOpen(true); break;
         case "editor.find": break; // CodeMirror search keymap owns editor find (§58)
         case "settings.open": setSettingsOpen(true); break;
+        case "app.checkForUpdates": void checkForUpdates(true); break;
         case "view.toggleSidebar": setSidebarOpen((v) => !v); break;
         case "view.toggleFocus": setFocusMode((v) => !v); break;
         case "file.closeWindow": window.close(); break;
@@ -584,7 +642,7 @@ export default function App(): JSX.Element {
       }
     });
     return off;
-  }, [newNote, save, activeKey, closeTab]);
+  }, [newNote, save, activeKey, closeTab, checkForUpdates]);
 
   /* ---------- global keyboard ---------- */
   useEffect(() => {
@@ -992,9 +1050,53 @@ export default function App(): JSX.Element {
         />
       )}
       {settingsOpen && (
-        <SettingsDialog settings={settings} onChange={setSettings} version={version} platform={platform} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog settings={settings} onChange={setSettings} version={version} platform={platform} updatesEnabled={platform.capabilities.updates} onCheckUpdates={() => void checkForUpdates(true)} onClose={() => setSettingsOpen(false)} />
       )}
       {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
+      {updateDlg && (
+        <div className="dialog-wrap" onMouseDown={() => { if (updateDlg.phase !== "downloading" && updateDlg.phase !== "verifying" && updateDlg.phase !== "launching") setUpdateDlg(null); }}>
+          <div className="dialog" role="dialog" aria-label="Software update" style={{ width: 440 }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="dialog-head"><span style={{ flex: 1 }}>Software update</span>
+              <button className="icon-btn" onClick={() => setUpdateDlg(null)} aria-label="Close"><Icon name="x" /></button>
+            </div>
+            <div className="dialog-content" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {updateDlg.phase === "checking" && <p style={{ fontSize: 13 }}>Checking for updates…</p>}
+              {updateDlg.phase === "uptodate" && <p style={{ fontSize: 13 }}>You have the latest version ({version}).</p>}
+              {updateDlg.phase === "error" && updateDlg.error && <p className="inline-error" role="alert">{updateDlg.error}</p>}
+              {updateDlg.phase === "available" && (
+                <>
+                  <p style={{ fontSize: 13 }}>Version {updateDlg.latest} is available (you have {version}).</p>
+                  {updateDlg.notes && (
+                    <pre style={{ fontSize: 12, whiteSpace: "pre-wrap", maxHeight: 160, overflow: "auto", color: "var(--text-muted)" }}>{updateDlg.notes.slice(0, 800)}</pre>
+                  )}
+                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    The installer is checksum-verified before it runs. Windows will still show a
+                    SmartScreen warning — these builds are unsigned; check the version matches
+                    before continuing.
+                  </p>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <button className="btn" onClick={() => setUpdateDlg(null)}>Later</button>
+                    <button className="btn primary" onClick={() => void downloadUpdate()}>Download &amp; install</button>
+                  </div>
+                </>
+              )}
+              {(updateDlg.phase === "downloading" || updateDlg.phase === "verifying") && (
+                <p style={{ fontSize: 13 }}>
+                  {updateDlg.phase === "downloading"
+                    ? `Downloading… ${(updateDlg.received / 1048576).toFixed(1)} MB${updateDlg.total ? ` of ${(updateDlg.total / 1048576).toFixed(1)} MB` : ""}`
+                    : "Verifying installer…"}
+                </p>
+              )}
+              {updateDlg.phase === "launching" && <p style={{ fontSize: 13 }}>Verified — launching the installer…</p>}
+              {(updateDlg.phase === "uptodate" || updateDlg.phase === "error") && (
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button className="btn primary" onClick={() => setUpdateDlg(null)}>Close</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <Toasts toasts={toasts} onDismiss={(id) => setToasts((p) => p.filter((t) => t.id !== id))} />
     </div>
   );

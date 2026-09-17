@@ -6,6 +6,8 @@ import type {
   IpcResult,
   PlatformReport,
   SearchMatch,
+  UpdateCheckResult,
+  UpdateProgress,
   WorkspaceInfo,
   WslDistribution,
 } from "../shared/contracts/ipc.js";
@@ -53,8 +55,16 @@ export type TakeNotesApi = {
     version(): Promise<IpcResult<string>>;
     platform(): Promise<IpcResult<PlatformReport>>;
   };
+  update: {
+    /** Check for a newer stable release. `manual=true` always runs (shows
+     *  errors); `false` is the silent startup path (cadence-gated). */
+    check(manual: boolean): Promise<IpcResult<UpdateCheckResult>>;
+    /** Download, checksum-verify, launch installer, quit. */
+    download(): Promise<IpcResult<null>>;
+  };
   events: {
     onWslState(callback: (state: string) => void): () => void;
+    onUpdateProgress(callback: (progress: UpdateProgress) => void): () => void;
     onCommand(callback: (id: CommandId) => void): () => void;
   };
 };
@@ -99,11 +109,20 @@ const api: TakeNotesApi = {
     version: () => ipcRenderer.invoke("app:version"),
     platform: () => ipcRenderer.invoke("app:platform"),
   },
+  update: {
+    check: (manual) => ipcRenderer.invoke("update:check", manual),
+    download: () => ipcRenderer.invoke("update:download"),
+  },
   events: {
     onWslState: (callback) => {
       const listener = (_event: unknown, state: string) => callback(state);
       ipcRenderer.on("takenotes:wsl-state", listener as (...args: unknown[]) => void);
       return () => ipcRenderer.removeListener("takenotes:wsl-state", listener as (...args: unknown[]) => void);
+    },
+    onUpdateProgress: (callback) => {
+      const listener = (_event: unknown, progress: UpdateProgress) => callback(progress);
+      ipcRenderer.on("takenotes:update-progress", listener as (...args: unknown[]) => void);
+      return () => ipcRenderer.removeListener("takenotes:update-progress", listener as (...args: unknown[]) => void);
     },
     onCommand: (callback) => {
       const listener = (_event: unknown, id: CommandId) => callback(id);

@@ -28,8 +28,16 @@ All notable changes to takenotes.
 - Release `publish` is gated on the Windows installer only; macOS/Linux are
   parked (kept in repo, best-effort, never block a Windows release).
 - Tests are logic-only: framing, handshake, path validation, helper direct
-  round-trip, search, drafts. Removed keymap/platform/decoder/NTFS/symlink
-  suites and `audit:*` / `test:platform` scripts.
+  round-trip, search, drafts, update-version compare. Removed
+  keymap/platform/decoder/NTFS/symlink suites and `audit:*` /
+  `test:platform` scripts.
+
+### Added
+
+- In-app software updates (Windows-only, ADR-0006): silent startup check
+  (24h cadence, offline-silent) + Help → Check for Updates + palette +
+  Settings → About. Download is SHA-256-verified against the release's
+  `SHA256SUMS.txt` before the installer launches. Stable channel only.
 
 ## [0.0.1] - 2026-09-16
 

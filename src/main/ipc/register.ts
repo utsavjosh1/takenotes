@@ -17,6 +17,7 @@ import { searchWorkspace } from "../search/search.js";
 import { clearDraft, isDraftStale, loadDraft, MAX_DRAFT_BYTES, saveDraft } from "../workspace/drafts.js";
 import { listDistributions } from "../wsl/distributions.js";
 import { HelperSupervisor } from "../wsl/helper-supervisor.js";
+import { checkForUpdates, downloadAndInstall } from "../update/updater.js";
 import { currentDesktopPlatform } from "../../shared/platform/platform.js";
 import { getCapabilities } from "../../shared/platform/capabilities.js";
 import { localWorkspaceKind, toCanonicalRel } from "../../shared/platform/filesystem.js";
@@ -208,6 +209,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       arch: process.arch,
       capabilities: {
         wsl: getCapabilities(platform).wsl,
+        updates: getCapabilities(platform).updates,
         macTrafficLights: getCapabilities(platform).macTrafficLights,
         supportsWayland: getCapabilities(platform).supportsWayland,
       },
@@ -552,6 +554,18 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
   });
 
   ipcMain.handle("app:version", () => ({ ok: true, result: app.getVersion() }));
+
+  // In-app software updates, Windows-only (ADR-0006). Parked platforms get
+  // a precise NOT SUPPORTED-style error, never a generic failure.
+  ipcMain.handle("update:check", async (event, manual: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    return checkForUpdates(manual === true);
+  });
+
+  ipcMain.handle("update:download", async (event) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    return downloadAndInstall((progress) => broadcast("update-progress", progress));
+  });
 
   // Crash-recovery drafts (never a substitute for `Saved`: the renderer keeps
   // `Saved` strictly for bytes that reached the note file). Drafts live under

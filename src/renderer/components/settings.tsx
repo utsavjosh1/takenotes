@@ -11,12 +11,16 @@ export function SettingsDialog({
   onChange,
   version,
   platform,
+  updatesEnabled,
+  onCheckUpdates,
   onClose,
 }: {
   settings: Settings;
   onChange: (s: Settings) => void;
   version: string;
   platform: PlatformState;
+  updatesEnabled: boolean;
+  onCheckUpdates: () => void;
   onClose: () => void;
 }): JSX.Element {
   const [tab, setTab] = useState<(typeof TABS)[number]>("General");
@@ -85,6 +89,12 @@ export function SettingsDialog({
             {tab === "About" && (
               <>
                 <Row title="Desktop Notes" desc={`Version ${version}. Filesystem-native Markdown notebook.`}><span /></Row>
+                <Row
+                  title="Software update"
+                  desc={updatesEnabled ? "Stable releases only. Installer is checksum-verified." : "Available on Windows in this version."}
+                >
+                  <button className="btn" disabled={!updatesEnabled} onClick={onCheckUpdates}>Check for updates</button>
+                </Row>
                 <Row title="Source" desc="Local-first. Your files stay where they are."><span /></Row>
               </>
             )}

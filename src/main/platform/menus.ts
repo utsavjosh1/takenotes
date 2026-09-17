@@ -81,6 +81,8 @@ export function buildMenuTemplate(
   ];
 
   const helpSubmenu: MenuItemConstructorOptions[] = [
+    cmd("app.checkForUpdates", mnemonic("Check for &Updates…")),
+    { type: "separator" },
     {
       label: mnemonic("&About Desktop Notes"),
       click: () => dispatch("settings.open"),
@@ -137,6 +139,8 @@ function commandTitle(id: CommandId): string {
       return "Find in Note…";
     case "settings.open":
       return "Settings…";
+    case "app.checkForUpdates":
+      return "Check for Updates…";
     case "view.toggleSidebar":
       return "Toggle Sidebar";
     case "view.toggleFocus":

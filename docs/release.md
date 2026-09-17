@@ -42,8 +42,10 @@ workflow's `publish` job succeeds. If `windows` / `macos` / `linux` fail,
 `publish` is skipped and no installers are uploaded — check the failed job
 log, fix, move the tag, and push again.
 
-Never let electron-builder auto-publish. No auto-update in MVP (manual
-installer updates from GitHub Releases). Early builds are unsigned; SmartScreen
+Never let electron-builder auto-publish. In-app updates are served by the
+lightweight updater (ADR-0006: check GitHub Releases, verified download,
+launch installer) — no `latest.yml` metadata needed, so `publish: null`
+stays. Early builds are unsigned; SmartScreen
 / Gatekeeper warnings are expected and documented in the release notes.
 
 Packaging notes:

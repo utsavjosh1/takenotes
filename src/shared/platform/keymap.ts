@@ -23,6 +23,7 @@ export type CommandId =
   | "commandPalette.open"
   | "editor.find"
   | "settings.open"
+  | "app.checkForUpdates"
   | "view.toggleSidebar"
   | "view.toggleFocus"
   | "view.nextTab"
@@ -77,6 +78,9 @@ export const COMMANDS: readonly CommandDefinition[] = [
   { id: "commandPalette.open", title: "Open command palette", scope: "application", accelerators: ctrl("Shift+Command+P", "CommandOrControl+Shift+P") },
   { id: "editor.find", title: "Find in note", scope: "editor", accelerators: ctrl("Command+F", "CommandOrControl+F") },
   { id: "settings.open", title: "Open settings", scope: "application", accelerators: ctrl("Command+,", "CommandOrControl+,") },
+  // Update check: menu / palette / settings only, never a shortcut — it is
+  // rare, deliberate, and must not collide with editing keys (ADR-0006).
+  { id: "app.checkForUpdates", title: "Check for updates", scope: "application", accelerators: {} },
   { id: "view.toggleSidebar", title: "Toggle sidebar", scope: "application", accelerators: ctrl("Command+\\", "CommandOrControl+\\") },
   { id: "view.toggleFocus", title: "Toggle focus mode", scope: "application", accelerators: ctrl("Command+.", "CommandOrControl+.") },
   { id: "view.nextTab", title: "Next tab", scope: "workspace", accelerators: same("CommandOrControl+Tab") },

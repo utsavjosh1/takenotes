@@ -7,6 +7,8 @@ import type { DesktopPlatform } from "./types.js";
 export type PlatformCapabilities = {
   /** WSL workspace support. Windows-only capability (§2, §184). */
   wsl: boolean;
+  /** In-app software updates (check/download/verified install). Windows-only for now (ADR-0006); parked elsewhere. */
+  updates: boolean;
   /** OS draws its own minimize/maximize/close; app must not fake them. */
   nativeWindowControls: boolean;
   /** macOS red/yellow/green traffic lights with inset safe area. */
@@ -33,6 +35,7 @@ export type PlatformCapabilities = {
 
 const WINDOWS: PlatformCapabilities = {
   wsl: true,
+  updates: true,
   nativeWindowControls: true,
   macTrafficLights: false,
   windowControlsOverlay: true,
@@ -48,6 +51,7 @@ const WINDOWS: PlatformCapabilities = {
 
 const MACOS: PlatformCapabilities = {
   wsl: false,
+  updates: false,
   nativeWindowControls: true,
   macTrafficLights: true,
   windowControlsOverlay: false,
@@ -63,6 +67,7 @@ const MACOS: PlatformCapabilities = {
 
 const LINUX: PlatformCapabilities = {
   wsl: false,
+  updates: false,
   nativeWindowControls: true,
   macTrafficLights: false,
   windowControlsOverlay: false,

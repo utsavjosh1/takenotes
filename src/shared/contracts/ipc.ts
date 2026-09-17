@@ -42,6 +42,19 @@ export type WslDistribution = {
   state?: string;
 };
 
+export type UpdateCheckResult = {
+  updateAvailable: boolean;
+  currentVersion: string;
+  latestVersion: string | null;
+  releaseNotes: string | null;
+};
+
+export type UpdateProgress = {
+  phase: "downloading" | "verifying" | "launching";
+  receivedBytes: number;
+  totalBytes: number | null;
+};
+
 export type SearchMatch = {
   relativePath: string;
   line: number;
@@ -54,6 +67,7 @@ export type PlatformReport = {
   arch: string;
   capabilities: {
     wsl: boolean;
+    updates: boolean;
     macTrafficLights: boolean;
     supportsWayland: boolean;
   };
