@@ -11,6 +11,8 @@ import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
 import { CommandMenu, type CommandItem, type PaletteMode } from "./components/palette";
 import { SettingsDialog } from "./components/settings";
 import { Icon } from "./components/icons";
+import stackedDarkUrl from "./assets/brand/takenotes-stacked-dark.svg";
+import stackedLightUrl from "./assets/brand/takenotes-stacked-light.svg";
 import { DEFAULT_SETTINGS, displayPath, fileName, joinRel, parentDir, type CtxMenu, type Settings, type TabState, type Toast } from "./components/types";
 
 let toastId = 1;
@@ -817,7 +819,8 @@ export default function App(): JSX.Element {
       <div className="app">
         <TitleBar workspace={null} platform={platform} onQuickOpen={() => {}} onOpenWindows={() => void openLocal()} onOpenWsl={() => void openWslDialog()} />
         <div className="empty">
-          <h1>Desktop Notes</h1>
+          <img src={stackedDarkUrl} className="brand-logo only-dark" alt="takenotes" draggable={false} />
+          <img src={stackedLightUrl} className="brand-logo only-light" alt="takenotes" draggable={false} />
           <p>Open your notes</p>
           <div className="actions">
             <button className="btn primary" onClick={() => void openLocal()}>Open folder</button>
@@ -825,7 +828,7 @@ export default function App(): JSX.Element {
               <button className="btn" onClick={() => void openWslDialog()}>Open WSL folder</button>
             )}
           </div>
-          <p className="hint">Your notes stay where they are. Desktop Notes works directly with Markdown files.</p>
+          <p className="hint">Your notes stay where they are. takenotes works directly with Markdown files.</p>
           {recentWorkspaces.length > 0 && (
             <>
               <hr className="sect-sep" />

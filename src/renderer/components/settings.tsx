@@ -1,6 +1,8 @@
 import { useState, type JSX } from "react";
 import type { Settings } from "./types";
 import { Icon } from "./icons";
+import horizontalDarkUrl from "../assets/brand/takenotes-horizontal-dark.svg";
+import horizontalLightUrl from "../assets/brand/takenotes-horizontal-light.svg";
 import type { PlatformState } from "../hooks/use-platform";
 import type { CommandId } from "../../shared/platform/keymap";
 
@@ -88,7 +90,11 @@ export function SettingsDialog({
             {tab === "Shortcuts" && <ShortcutTable platform={platform} />}
             {tab === "About" && (
               <>
-                <Row title="Desktop Notes" desc={`Version ${version}. Filesystem-native Markdown notebook.`}><span /></Row>
+                <div className="about-brand">
+                  <img src={horizontalDarkUrl} className="only-dark" alt="takenotes" draggable={false} />
+                  <img src={horizontalLightUrl} className="only-light" alt="takenotes" draggable={false} />
+                </div>
+                <Row title="takenotes" desc={`Version ${version}. Filesystem-native Markdown notebook.`}><span /></Row>
                 <Row
                   title="Software update"
                   desc={updatesEnabled ? "Stable releases only. Installer is checksum-verified." : "Available on Windows in this version."}

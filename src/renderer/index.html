@@ -7,7 +7,13 @@
          holds with no inline scripts. style-src 'unsafe-inline' remains a
          documented exception: CodeMirror and React set inline styles at runtime. -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none';" />
-    <title>Desktop Notes</title>
+    <!-- Brand: absolute public paths are rebased to ./ by Vite on build (base './'). -->
+    <!-- Filled tile favicon: legible at 16px tab size. Outline mark stays in-app. -->
+    <link rel="icon" type="image/svg+xml" href="/takenotes-app-icon-filled.svg" />
+    <link rel="apple-touch-icon" href="/takenotes-app-icon-filled.svg" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fcfcfd" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e1f23" />
+    <title>takenotes</title>
     <script src="./theme-init.js"></script>
   </head>
   <body>

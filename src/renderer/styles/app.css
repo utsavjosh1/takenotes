@@ -295,6 +295,19 @@ kbd.k { font-family: var(--font-ui); font-size: 11px; background: var(--surface-
 .toast.error { border-left: 3px solid var(--danger); }
 .toast button.link { color: var(--accent); font-size: 13px; }
 
+/* brand */
+.app-mark {
+  width: 20px; height: 20px; flex: none;
+  -webkit-app-region: no-drag;
+}
+.brand-logo { width: 120px; height: auto; margin-bottom: var(--sp-8); }
+.brand-logo.horizontal { width: 180px; }
+/* In-app theme is data-theme (user can override OS), so swap via attribute, not media query. */
+[data-theme="dark"] .only-light { display: none; }
+[data-theme="light"] .only-dark { display: none; }
+.about-brand { display: flex; align-items: center; gap: var(--sp-12); margin-bottom: var(--sp-8); }
+.about-brand img { width: 160px; height: auto; }
+
 /* empty states */
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: var(--sp-40); text-align: center; gap: var(--sp-8); }
 .empty h1 { font-size: 20px; font-weight: 600; margin: 0 0 var(--sp-4); }
