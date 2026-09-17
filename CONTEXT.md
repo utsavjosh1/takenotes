@@ -23,6 +23,15 @@ Glossary only. No implementation details.
   generic failure.
 - **launch-failure**: Installer runs but no window opens after double-click
   (distinct from install-failure and connect-failure).
+- **install-failure**: Installer itself is blocked or aborts (SmartScreen
+  publisher-warning, browser block, NSIS error) — app files never land
+  on disk.
+- **publisher-warning**: Windows SmartScreen "Unknown publisher" on an
+  unsigned build. Expected until Authenticode signing lands; bypass via
+  More info → Run anyway. _Avoid_: publisher error.
+- **download-failure**: Browser/GitHub fetch blocked or hash mismatch —
+  distinct from install-failure (blocked at run) and launch-failure
+  (installed but no window).
 - **logic test**: Pure protocol/filesystem test that runs on any OS with no
   real Windows/WSL desktop: framing, handshake, path validation,
   helper direct round-trip, search, drafts.

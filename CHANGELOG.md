@@ -39,6 +39,13 @@ All notable changes to takenotes.
   Settings → About. Download is SHA-256-verified against the release's
   `SHA256SUMS.txt` before the installer launches. Stable channel only.
 
+### Changed
+
+- Release is Windows-only: NSIS installer + portable ZIP
+  (`takenotes-<v>-win-x64.exe` / `.zip`). macOS/Linux release jobs,
+  builder targets, and `package:mac*`/`package:linux` scripts removed
+  (adapters stay parked in `src/`).
+
 ## [0.0.1] - 2026-09-16
 
 First baseline release. Foundation scaffold as below; real-WSL round-trip not yet verified.
