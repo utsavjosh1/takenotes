@@ -96,7 +96,7 @@ export default function App(): JSX.Element {
   const [wslError, setWslError] = useState<string | null>(null);
   const [creating, setCreating] = useState<{ dir: string; folder: boolean } | null>(null);
   const [createName, setCreateName] = useState("");
-  const [version, setVersion] = useState("0.1.0");
+  const [version, setVersion] = useState("0.0.1");
   const [sidebarLoading, setSidebarLoading] = useState(false);
   const platform = usePlatform();
   const sc = (id: CommandId): string => platform.shortcutLabel(id);
