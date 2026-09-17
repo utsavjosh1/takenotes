@@ -21,12 +21,17 @@ files:
   - "!**/.env*"
   - "!**/SilverBullet/**"
   - "!**/*.test.*"
-# WSL runtime + helper are Windows-only (§16). They MUST NOT be bundled into
-# macOS/Linux packages. electron-builder has no per-target extraResources
-# scoping, so the default file set ships zero WSL content; release tooling
-# stages `resources/wsl/linux-x64` ONLY for the Windows NSIS target
-# (see .github/workflows/release.yml `stage-wsl` step + scripts/stage-wsl-runtime.mjs).
-extraResources: []
+# WSL runtime + helper are required on Windows (§16). Bundled via
+# extraResources below (generated/ archive excluded by filter).
+# macOS/Linux builds also carry the payload for now — parked, not a
+# priority (Windows-first); harmless ~30MB until per-target scoping lands.
+extraResources:
+  - from: resources/wsl/linux-x64
+    to: wsl/linux-x64
+    filter:
+      - "**/*"
+      - "!generated/**"
+      - "!**/*.tar.xz"
 win:
   target:
     - target: nsis
@@ -54,9 +59,10 @@ mac:
         - arm64
         - x64
   category: public.app-category.productivity
-  # Developer ID signing + hardened runtime + notarization for stable public
-  # releases (§129–§131). Placeholders resolve from CI secrets; dev builds
-  # skip signing (CSC_IDENTITY_AUTO_DISCOVERY=false).
+  # Unsigned baseline (v0.0.1): identity=null disables Developer ID signing
+  # so CI produces usable DMGs without secrets. TODO: remove null + set
+  # CSC_LINK/APPLE_ID secrets for signed + notarized stable releases.
+  identity: null
   hardenedRuntime: true
   notarize: false
 dmg:
@@ -64,6 +70,9 @@ dmg:
     width: 540
     height: 380
 linux:
+  maintainer: "Utsav Josh <utsav304joshi@gmail.com>"
+  description: "Filesystem-first local Markdown notebook"
+  executableName: takenotes
   target:
     # AppImage + DEB + RPM are the initial set (§134). No Snap/Flatpak until
     # sandbox/portal/filesystem access is separately designed (§134).

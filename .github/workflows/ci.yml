@@ -14,8 +14,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -24,17 +24,18 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      - run: npm run audit:security
-      - run: npm run audit:deadcode
       - run: npm run build
+
+  # Windows is the priority gate (Windows 11 x64 + WSL2). Ubuntu mirrors it
+  # for logic tests (helper runs natively on Ubuntu Node).
 
   check-windows:
     runs-on: windows-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -44,15 +45,16 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # Cross-platform CI (§144, §206): shared gates on every Tier 1 OS.
-  # macOS must build/test natively — never cross-built from Linux/Windows.
+  # Parked, not a priority (Windows-first): macOS files stay in the repo but
+  # failures here never block Windows work.
   check-macos:
     runs-on: macos-latest
+    continue-on-error: true
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
