@@ -15,7 +15,15 @@
  * - OnlyLoadAppFromAsar=true — app loads only from app.asar. The build emits
  *   a bundled asar; dev (`--dev`/Vite URL) is unaffected because fuses only
  *   apply to packaged binaries.
- * - LoadBrowserProcessSpecificV8Snapshot=true (default) — explicit so upgrades notice it.
+ * - LoadBrowserProcessSpecificV8Snapshot=false — stock Electron dist ships only
+ *   `snapshot_blob.bin` + `v8_context_snapshot.bin`. Setting this true makes the
+ *   browser process load from `browser_v8_context_snapshot.bin` /
+ *   `browser_snapshot_blob.bin` instead, which we do not generate or ship
+ *   (no mksnapshot step). `true` produces
+ *   `FATAL:gin/v8_initializer.cc Error loading V8 startup snapshot file`
+ *   on launch even with all stock siblings present (seen 2026-09-18 on
+ *   Windows, `D:\apps\takenotes`). Measured stock default on Electron 44
+ *   is Disabled; keep false until a custom browser snapshot pipeline exists.
  * - GrantFileProtocolExtraPrivileges=false — the renderer loads via file://
  *   (loadFile in production) with no need for extra file-protocol privileges.
  * - EnableCookieEncryption=true — no cookies exist (no network); strictest option, zero cost.
@@ -29,7 +37,7 @@
 import path from "node:path";
 import { flipFuses, FuseVersion, FuseV1Options } from "@electron/fuses";
 
-const FUSE_CONFIG = {
+export const FUSE_CONFIG = {
   version: FuseVersion.V1,
   strictlyRequireAllFuses: true,
   [FuseV1Options.RunAsNode]: false,
@@ -38,7 +46,7 @@ const FUSE_CONFIG = {
   [FuseV1Options.EnableNodeCliInspectArguments]: false,
   [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
   [FuseV1Options.OnlyLoadAppFromAsar]: true,
-  [FuseV1Options.LoadBrowserProcessSpecificV8Snapshot]: true,
+  [FuseV1Options.LoadBrowserProcessSpecificV8Snapshot]: false,
   [FuseV1Options.GrantFileProtocolExtraPrivileges]: false,
   [FuseV1Options.WasmTrapHandlers]: true,
 };
