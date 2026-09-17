@@ -16,7 +16,7 @@ document → packaged-app verification).
 | EnableNodeCliInspectArguments | false | `--inspect` family disabled in packaged app. Dev DevTools come from `--dev` + `openDevTools`, not CLI flags. |
 | EnableEmbeddedAsarIntegrityValidation | true | Validates `app.asar` on launch (enforced on Windows/macOS). Nothing modifies asar at runtime. |
 | OnlyLoadAppFromAsar | true | App loads only from `app.asar`. Build emits a bundled asar; dev (`--dev`/Vite URL) is unaffected — fuses apply to packaged binaries only. |
-| LoadBrowserProcessSpecificV8Snapshot | true | Default; set explicitly so upgrades notice it. |
+| LoadBrowserProcessSpecificV8Snapshot | false | Stock dist ships only `snapshot_blob.bin` + `v8_context_snapshot.bin`; `true` makes the browser load `browser_*` snapshots we do not ship → `FATAL:gin/v8_initializer` (2026-09-18 Windows launch-failure). Measured stock default on Electron 44 is Disabled. |
 | GrantFileProtocolExtraPrivileges | false | Renderer loads via `file://` (`loadFile` in production) with no need for extra file-protocol privileges. Revisit with a documented reason if a custom protocol ever needs them. |
 | WasmTrapHandlers | true | Electron 44 9th fuse; default trap-based WASM handling. `@electron/fuses` 1.8.0 knew only 8 — release v0.0.1 packaging failed loudly until bump to 2.1.3. |
 

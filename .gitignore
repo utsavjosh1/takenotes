@@ -13,6 +13,7 @@ resources/wsl/linux-x64/helper.cjs
 resources/wsl/linux-x64/manifest.json
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
 *.tsbuildinfo
 .dev-libs/
 smoke-artifacts/

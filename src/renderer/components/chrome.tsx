@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { Icon } from "./icons";
+import appMarkUrl from "../assets/brand/takenotes-app-icon.svg";
 import type { WorkspaceInfo } from "../../shared/contracts/ipc";
 import { isWslKind } from "../../shared/platform/filesystem";
 import type { PlatformState } from "../hooks/use-platform";
@@ -21,8 +22,9 @@ export function TitleBar({
   const quickOpen = platform.shortcutLabel("file.quickOpen");
   return (
     <header className="titlebar" role="banner">
-      <span className="ws-name" title={workspace ? workspace.displayName : "Desktop Notes"}>
-        {workspace ? workspace.displayName : "Desktop Notes"}
+      <img src={appMarkUrl} className="app-mark" alt="" aria-hidden="true" draggable={false} />
+      <span className="ws-name" title={workspace ? workspace.displayName : "takenotes"}>
+        {workspace ? workspace.displayName : "takenotes"}
       </span>
       {workspace && isWslKind(workspace.type) && (
         <span className="wsl-badge" title="WSL workspace">

@@ -1,4 +1,5 @@
 import { BrowserWindow, shell, type BrowserWindowConstructorOptions } from "electron";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { currentDesktopPlatform } from "../shared/platform/platform.js";
 import { titlebarStrategy } from "../shared/platform/window.js";
@@ -33,10 +34,25 @@ function platformWindowOptions(): BrowserWindowConstructorOptions {
   }
 }
 
+/** Runtime window icon (dev + Linux taskbar). Packaged Windows/macOS icons
+ * come from electron-builder `win/mac.icon` (needs PNG/ICO/ICNS exports —
+ * SVGs cannot be used there). In dev this resolves `build/icon.png` when
+ * present; otherwise undefined so Electron falls back to its default. */
+export function resolveWindowIcon(): string | undefined {
+  const candidates = [
+    // Dev: repo-root build/ (npm run dev, cwd = repo root).
+    path.resolve(process.cwd(), "build/icon.png"),
+    // Packaged Linux: extraResources ships build/ alongside app.asar.
+    path.join(process.resourcesPath ?? "", "build/icon.png"),
+  ];
+  return candidates.find((p) => { try { return existsSync(p); } catch { return false; } });
+}
+
 export function createMainWindow(preloadPath: string, rendererUrl: string | null, rendererFile: string): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 860,
+    icon: resolveWindowIcon(),
     ...platformWindowOptions(),
     webPreferences: {
       preload: preloadPath,

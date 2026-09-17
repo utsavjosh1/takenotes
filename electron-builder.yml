@@ -7,6 +7,12 @@ afterPack: ./scripts/after-pack-fuses.mjs
 # Per-OS artifact names (§124). ${os}/${arch}/${ext} are electron-builder
 # template variables — one app version across platforms (§187).
 artifactName: takenotes-${version}-${os}-${arch}.${ext}
+# Native icons are exported from `public/takenotes-app-icon-filled.svg`
+# (filled tile, small-size tuned; outline `takenotes-app-icon.svg` stays in-app).
+# Electron cannot use SVG for binaries - export once, then packaging is automatic:
+#   build/icon.ico (256px multi-size, Windows) - build/icon.icns (macOS) -
+#   build/icon.png (512px, Linux + BrowserWindow runtime icon).
+# Until those exports land, packaging continues with Electron defaults.
 directories:
   output: release
   buildResources: build
@@ -31,6 +37,7 @@ extraResources:
       - "!generated/**"
       - "!**/*.tar.xz"
 win:
+  icon: build/icon.ico
   target:
     # NSIS installer + portable ZIP, x64 only. The updater (ADR-0006)
     # downloads the NSIS .exe; the ZIP is the no-install fallback.
@@ -45,6 +52,8 @@ win:
   # and flip `signAndEditExecutable` on via release workflow env.
   signAndEditExecutable: false
 nsis:
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
