@@ -23,8 +23,6 @@ files:
   - "!**/*.test.*"
 # WSL runtime + helper are required on Windows (§16). Bundled via
 # extraResources below (generated/ archive excluded by filter).
-# macOS/Linux builds also carry the payload for now — parked, not a
-# priority (Windows-first); harmless ~30MB until per-target scoping lands.
 extraResources:
   - from: resources/wsl/linux-x64
     to: wsl/linux-x64
@@ -34,7 +32,12 @@ extraResources:
       - "!**/*.tar.xz"
 win:
   target:
+    # NSIS installer + portable ZIP, x64 only. The updater (ADR-0006)
+    # downloads the NSIS .exe; the ZIP is the no-install fallback.
     - target: nsis
+      arch:
+        - x64
+    - target: zip
       arch:
         - x64
   # Authenticode signing gate (§125, §192). Unsigned dev builds are fine;
@@ -49,49 +52,4 @@ nsis:
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-mac:
-  # Separate arm64 + x64 DMGs initially — easier to troubleshoot than a
-  # universal binary (§127–§128). Windows ARM64 is NOT released merely
-  # because Electron supports it (§126); same rule applies per-arch here.
-  target:
-    - target: dmg
-      arch:
-        - arm64
-        - x64
-  category: public.app-category.productivity
-  # Unsigned baseline (v0.0.1): identity=null disables Developer ID signing
-  # so CI produces usable DMGs without secrets. TODO: remove null + set
-  # CSC_LINK/APPLE_ID secrets for signed + notarized stable releases.
-  identity: null
-  hardenedRuntime: true
-  notarize: false
-dmg:
-  window:
-    width: 540
-    height: 380
-linux:
-  maintainer: "Utsav Josh <utsav304joshi@gmail.com>"
-  description: "Filesystem-first local Markdown notebook"
-  executableName: takenotes
-  target:
-    # AppImage + DEB + RPM are the initial set (§134). No Snap/Flatpak until
-    # sandbox/portal/filesystem access is separately designed (§134).
-    - target: AppImage
-      arch:
-        - x64
-    - target: deb
-      arch:
-        - x64
-    - target: rpm
-      arch:
-        - x64
-  category: Office
-  # .desktop entry + icons (§138–§139). electron-builder generates the
-  # .desktop file from these fields; icons come from buildResources.
-  desktop:
-    entry:
-      Name: takenotes
-      Comment: Filesystem-first local Markdown notebook
-      Categories: Office;TextEditor;
-      StartupWMClass: takenotes
 publish: null

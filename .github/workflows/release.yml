@@ -66,7 +66,7 @@ jobs:
       - name: Generate SHA256SUMS.txt
         shell: pwsh
         run: |
-          Get-ChildItem release/*.exe | ForEach-Object {
+          Get-ChildItem release/*.exe, release/*.zip | ForEach-Object {
             $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$h  $($_.Name)"
           } | Out-File release/SHA256SUMS.txt -Encoding ascii
@@ -75,93 +75,8 @@ jobs:
           name: windows-release
           path: |
             release/*.exe
+            release/*.zip
             release/SHA256SUMS.txt
-
-  macos:
-    # One macOS runner produces BOTH arm64 + x64 DMGs (separate artifacts,
-    # §127–§128). Native build is mandatory for signing/notarization (§145).
-    runs-on: macos-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm run version:check
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-      - run: npm run package:mac:arm64
-        env:
-          # Developer ID signing + notarization for stable releases
-          # (§129–§131, §192). Empty in PRs/dev tags → unsigned artifact
-          # that still validates build + packaging. Never commit credentials.
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - run: npm run package:mac:x64
-        env:
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Verify Electron fuses (packaged binaries, both archs)
-        run: |
-          for app in release/mac-arm64/takenotes.app release/mac/takenotes.app release/mac-x64/takenotes.app; do
-            if [ -d "$app" ]; then
-              echo "Checking $app"
-              npx --no-install @electron/fuses read --app "$app"
-            fi
-          done
-      - name: Generate SHA256SUMS-macos.txt
-        run: |
-          cd release && shasum -a 256 *.dmg > SHA256SUMS-macos.txt && cat SHA256SUMS-macos.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: macos-release
-          path: |
-            release/*.dmg
-            release/SHA256SUMS-macos.txt
-
-  linux:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - name: Install rpm tooling (for .rpm target)
-        run: sudo apt-get update && sudo apt-get install -y rpm
-      - run: npm run version:check
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-      - run: npm run package:linux
-      - name: Verify Electron fuses (packaged binary)
-        run: npx --no-install @electron/fuses read --app "release/linux-unpacked/takenotes"
-      - name: Generate SHA256SUMS-linux.txt
-        run: |
-          cd release && sha256sum *.AppImage *.deb *.rpm > SHA256SUMS-linux.txt && cat SHA256SUMS-linux.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: linux-release
-          path: |
-            release/*.AppImage
-            release/*.deb
-            release/*.rpm
-            release/SHA256SUMS-linux.txt
 
   publish:
     runs-on: ubuntu-latest
@@ -184,26 +99,11 @@ jobs:
         with:
           name: windows-release
           path: release/
-      # Parked (Windows-first): macOS/Linux artifacts are best-effort and
-      # never block the Windows release.
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        continue-on-error: true
-        with:
-          name: macos-release
-          path: release/
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        continue-on-error: true
-        with:
-          name: linux-release
-          path: release/
-      # One SHA256SUMS.txt across available artifacts (§191, Windows-first:
-      # the .exe is required; other platforms best-effort).
-      - name: Merge checksums
+      # Windows-only release: the .exe + .zip + one SHA256SUMS.txt.
+      - name: Check artifacts
         run: |
-          cd release
-          cat SHA256SUMS-*.txt > SHA256SUMS.txt 2>/dev/null || (cd .. && ls release/ && echo "No checksums found" && exit 1)
-          rm -f SHA256SUMS-*.txt
-          cat SHA256SUMS.txt
+          ls -la release/
+          test -f release/SHA256SUMS.txt && cat release/SHA256SUMS.txt
       - run: npm run version:check
       - run: npm run build
       - run: npm run release:verify
@@ -224,16 +124,13 @@ jobs:
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          subject-path: "release/*.exe, release/*.dmg, release/*.AppImage, release/*.deb, release/*.rpm"
+          subject-path: "release/*.exe, release/*.zip"
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             release/*.exe
-            release/*.dmg
-            release/*.AppImage
-            release/*.deb
-            release/*.rpm
+            release/*.zip
             release/SHA256SUMS.txt
             release/*.spdx.json
           body_path: release/NOTES.md

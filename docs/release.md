@@ -1,4 +1,4 @@
-# Release
+# Release (Windows-only)
 
 Single version source: `package.json` (+ `package-lock.json` root version).
 
@@ -14,42 +14,37 @@ git push origin main
 git push origin v0.2.0
 ```
 
-Tag push triggers `.github/workflows/release.yml`:
+Tag push triggers `.github/workflows/release.yml` (Windows-only):
 
 1. **WSL runtime (ubuntu-latest)**: build `helper.cjs`, download pinned
    official Node linux-x64, verify SHA-256 against official metadata (fail on
    mismatch), stage `node` + `helper.cjs` + `manifest.json` with real hashes,
    upload artifact.
 2. **Windows (windows-latest)**: download runtime artifact, `version:check`,
-   typecheck, tests, build, `release:verify`, `electron-builder --win nsis
-   --publish never` → `takenotes-<v>-win-x64.exe` + `SHA256SUMS.txt`.
-3. **macOS (macos-latest)**: `version:check`, typecheck, tests, build,
-   `electron-builder --mac dmg --publish never` → `takenotes-<v>-mac-arm64.dmg`
-   + `takenotes-<v>-mac-x64.dmg` + checksums (native build, unsigned unless
-   `MAC_CSC_LINK` / `APPLE_ID` secrets are set).
-4. **Linux (ubuntu-latest)**: `version:check`, typecheck, tests, build,
-   `electron-builder --linux AppImage deb rpm --publish never` →
-   `takenotes-<v>-linux-x86_64.AppImage` + `*.deb` + `*.rpm` + checksums.
-5. **Publish**: validate tag/version, merge checksums into one
-   `SHA256SUMS.txt`, extract CHANGELOG section via
+   typecheck, tests, build, `release:verify`, `electron-builder --win nsis zip
+   --publish never` → `takenotes-<v>-win-x64.exe` (NSIS installer — the
+   in-app updater target, ADR-0006) + `takenotes-<v>-win-x64.zip` (portable
+   fallback) + `SHA256SUMS.txt`.
+3. **Publish**: validate tag/version, extract CHANGELOG section via
    `scripts/release-notes.mjs`, generate SPDX SBOM, attest artifacts, create
-   GitHub Release with `*.exe` + `*.dmg` + `*.AppImage` + `*.deb` + `*.rpm` +
-   `SHA256SUMS.txt` + `*.spdx.json`.
+   GitHub Release with `*.exe` + `*.zip` + `SHA256SUMS.txt` + `*.spdx.json`.
+
+macOS/Linux releases were removed: no DMG/AppImage/deb/rpm jobs, no
+`mac:`/`linux:` builder config, no `package:mac*`/`package:linux` scripts.
+The OS adapters stay in `src/` (parked) but ship nothing.
 
 Why a tag can show only "Source code (zip/tar.gz)": GitHub always attaches
 source archives to a tag. Real installers appear only after the Release
-workflow's `publish` job succeeds. If `windows` / `macos` / `linux` fail,
-`publish` is skipped and no installers are uploaded — check the failed job
-log, fix, move the tag, and push again.
+workflow's `publish` job succeeds. If `windows` fails, `publish` is skipped
+and no installers are uploaded — check the failed job log, fix, move the
+tag, and push again.
 
 Never let electron-builder auto-publish. In-app updates are served by the
 lightweight updater (ADR-0006: check GitHub Releases, verified download,
 launch installer) — no `latest.yml` metadata needed, so `publish: null`
-stays. Early builds are unsigned; SmartScreen
-/ Gatekeeper warnings are expected and documented in the release notes.
+stays. Early builds are unsigned; SmartScreen warnings are expected and
+documented in the release notes.
 
 Packaging notes:
-- Linux `.deb` requires `maintainer` (set in `electron-builder.yml` +
-  `package.json` author email) or the build fails.
 - `build/` icons are not yet branded — installers currently use the default
-  Electron icon (TODO: add `build/icon.ico`, `icon.icns`, `icon.png`).
+  Electron icon (TODO: add `build/icon.ico`).

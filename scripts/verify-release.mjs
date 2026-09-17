@@ -21,29 +21,24 @@ for (const f of ["dist-electron/main/index.cjs", "dist-electron/preload/index.cj
     process.exit(1);
   }
 }
-// Installer names come from electron-builder `artifactName`
-// (takenotes-${version}-${os}-${arch}.${ext}):
-//   win   -> takenotes-0.0.1-win-x64.exe
-//   mac   -> takenotes-0.0.1-mac-arm64.dmg / takenotes-0.0.1-mac-x64.dmg
-//   linux -> takenotes-0.0.1-linux-x86_64.AppImage, -linux-amd64.deb, -linux-x86_64.rpm
+// Windows-only release. Installer names come from electron-builder
+// `artifactName` (takenotes-${version}-${os}-${arch}.${ext}):
+//   takenotes-0.0.1-win-x64.exe (NSIS installer — the in-app updater target)
+//   takenotes-0.0.1-win-x64.zip (portable fallback)
 const releaseFiles = existsSync("release") ? readdirSync("release") : [];
 const has = (re) => releaseFiles.find((f) => re.test(f));
 const winInstaller = has(/\.exe$/);
-const macInstaller = has(/\.dmg$/);
-const linuxInstaller = has(/\.(AppImage|deb|rpm)$/);
+const winPortable = has(/\.zip$/);
 if (process.env.REQUIRE_INSTALLER === "1") {
-  // Windows-first: only the NSIS .exe blocks a release. macOS/Linux
-  // artifacts are parked (not a priority) — warn when missing, never fail.
   const missing = [];
   if (!winInstaller) missing.push("*.exe (Windows NSIS)");
+  if (!winPortable) missing.push("*.zip (Windows portable)");
   if (missing.length > 0) {
     console.error(`Missing installers in release/: ${missing.join(", ")}. Found: ${releaseFiles.join(", ") || "(empty)"}`);
     process.exit(1);
   }
-  if (!macInstaller) console.warn("Parked: no *.dmg (macOS) — Windows-first, not blocking.");
-  if (!linuxInstaller) console.warn("Parked: no *.AppImage/*.deb/*.rpm (Linux) — Windows-first, not blocking.");
 }
 console.log(
   `Release verification OK for ${pkg.version}. ` +
-    `win=${winInstaller ?? "(not required)"} mac=${macInstaller ?? "(not required)"} linux=${linuxInstaller ?? "(not required)"}`,
+    `win-exe=${winInstaller ?? "(not required)"} win-zip=${winPortable ?? "(not required)"}`,
 );
