@@ -4,6 +4,20 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-09-18
+
+### Fixed
+
+- Windows launch crash `FATAL:gin/v8_initializer.cc Error loading V8 startup
+  snapshot file`: `LoadBrowserProcessSpecificV8Snapshot` fuse back to
+  `false` (stock Electron ships no `browser_*` snapshots). Locked by
+  `tests/packaging/fuses.test.ts`.
+
+### Added
+
+- App branding: `build/icon.{png,ico,icns}`, NSIS + window icons, titlebar
+  mark, theme-aware welcome/About artwork.
+
 ## [0.0.2] - 2026-09-17
 
 Windows-first hardening + in-app updates + Windows-only release.

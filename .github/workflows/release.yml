@@ -126,7 +126,10 @@ jobs:
         with:
           subject-path: "release/*.exe, release/*.zip"
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        # Pinned to v2.3.2: v3.0.3 fails deterministically on the 144MB exe
+        # with "Error creating asset temp dir" (issue #12). Re-upgrade only
+        # with a proven large-asset upload.
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           files: |
             release/*.exe
