@@ -2,7 +2,7 @@
  * into resources/wsl/linux-x64/ with real checksums. Fails release on mismatch. */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const config = JSON.parse(readFileSync("build-config.json", "utf8"));
@@ -24,6 +24,13 @@ const nodeBin = path.join(tmp, `node-v${nodeVersion}-linux-x64`, "bin", "node");
 if (!existsSync(nodeBin)) throw new Error(`Node binary not found in archive: ${nodeBin}`);
 copyFileSync(nodeBin, path.join(stageDir, "node"));
 copyFileSync(helperPath, path.join(stageDir, "helper.cjs"));
+// Packaged WSL runtime runs as `node helper.cjs` inside WSL: the exec bit
+// must survive copyFileSync (Windows CI checkout loses it otherwise).
+try {
+  chmodSync(path.join(stageDir, "node"), 0o755);
+} catch {
+  /* Windows FS ACLs — exec bit set at install time inside WSL instead */
+}
 
 const sha256 = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
 const manifest = {
