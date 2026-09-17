@@ -32,14 +32,16 @@ const winInstaller = has(/\.exe$/);
 const macInstaller = has(/\.dmg$/);
 const linuxInstaller = has(/\.(AppImage|deb|rpm)$/);
 if (process.env.REQUIRE_INSTALLER === "1") {
+  // Windows-first: only the NSIS .exe blocks a release. macOS/Linux
+  // artifacts are parked (not a priority) — warn when missing, never fail.
   const missing = [];
   if (!winInstaller) missing.push("*.exe (Windows NSIS)");
-  if (!macInstaller) missing.push("*.dmg (macOS)");
-  if (!linuxInstaller) missing.push("*.AppImage/*.deb/*.rpm (Linux)");
   if (missing.length > 0) {
     console.error(`Missing installers in release/: ${missing.join(", ")}. Found: ${releaseFiles.join(", ") || "(empty)"}`);
     process.exit(1);
   }
+  if (!macInstaller) console.warn("Parked: no *.dmg (macOS) — Windows-first, not blocking.");
+  if (!linuxInstaller) console.warn("Parked: no *.AppImage/*.deb/*.rpm (Linux) — Windows-first, not blocking.");
 }
 console.log(
   `Release verification OK for ${pkg.version}. ` +

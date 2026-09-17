@@ -21,12 +21,17 @@ files:
   - "!**/.env*"
   - "!**/SilverBullet/**"
   - "!**/*.test.*"
-# WSL runtime + helper are Windows-only (§16). They MUST NOT be bundled into
-# macOS/Linux packages. electron-builder has no per-target extraResources
-# scoping, so the default file set ships zero WSL content; release tooling
-# stages `resources/wsl/linux-x64` ONLY for the Windows NSIS target
-# (see .github/workflows/release.yml `stage-wsl` step + scripts/stage-wsl-runtime.mjs).
-extraResources: []
+# WSL runtime + helper are required on Windows (§16). Bundled via
+# extraResources below (generated/ archive excluded by filter).
+# macOS/Linux builds also carry the payload for now — parked, not a
+# priority (Windows-first); harmless ~30MB until per-target scoping lands.
+extraResources:
+  - from: resources/wsl/linux-x64
+    to: wsl/linux-x64
+    filter:
+      - "**/*"
+      - "!generated/**"
+      - "!**/*.tar.xz"
 win:
   target:
     - target: nsis

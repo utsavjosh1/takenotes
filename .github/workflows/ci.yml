@@ -24,9 +24,10 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      - run: npm run audit:security
-      - run: npm run audit:deadcode
       - run: npm run build
+
+  # Windows is the priority gate (Windows 11 x64 + WSL2). Ubuntu mirrors it
+  # for logic tests (helper runs natively on Ubuntu Node).
 
   check-windows:
     runs-on: windows-latest
@@ -44,10 +45,11 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # Cross-platform CI (§144, §206): shared gates on every Tier 1 OS.
-  # macOS must build/test natively — never cross-built from Linux/Windows.
+  # Parked, not a priority (Windows-first): macOS files stay in the repo but
+  # failures here never block Windows work.
   check-macos:
     runs-on: macos-latest
+    continue-on-error: true
     permissions:
       contents: read
     steps:

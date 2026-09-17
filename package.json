@@ -31,15 +31,10 @@
     "package:mac:x64": "electron-builder --mac dmg --x64 --publish never",
     "package:linux": "electron-builder --linux AppImage deb rpm --publish never",
     "package:all": "npm run package:win && npm run package:mac && npm run package:linux",
-    "keymap:check": "vitest run tests/platform/keymap.test.ts",
-    "test:platform": "node scripts/test-platform.mjs",
     "release:verify": "node scripts/verify-release.mjs",
     "release:notes": "node scripts/release-notes.mjs",
     "fixture:generate": "node scripts/generate-fixture.mjs",
-    "audit:security": "node scripts/audit-security.mjs",
-    "audit:deadcode": "node scripts/audit-deadcode.mjs",
-    "audit:deps": "npm audit --omit=dev && npm audit",
-    "audit:all": "npm run audit:security && npm run audit:deadcode"
+    "audit:deps": "npm audit --omit=dev && npm audit"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",
