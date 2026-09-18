@@ -13,7 +13,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/renderer/**/*.js"],
+    files: ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/renderer/**/*.js", "public/**/*.js"],
     languageOptions: {
       globals: { ...globals.browser },
     },

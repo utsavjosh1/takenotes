@@ -53,8 +53,12 @@ win:
         - x64
   # Authenticode signing gate (§125, §192). Unsigned dev builds are fine;
   # stable public builds must set WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD in CI
-  # and flip `signAndEditExecutable` on via release workflow env.
-  signAndEditExecutable: false
+  # AND delete `signExecutable: false` below so signing runs.
+  # `signExecutable: false` skips ONLY code signing — resedit still applies
+  # the app icon + metadata to the exe. (`signAndEditExecutable: false`
+  # would skip resource editing too and ship the stock Electron icon —
+  # the default-icon bug seen on v0.0.4.)
+  signExecutable: false
 nsis:
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
