@@ -128,6 +128,10 @@ jobs:
       # unavailable the release still ships with SHA256SUMS + SBOM and the
       # provenance gap stays documented (never silently claimed).
       - name: Attest release artifacts
+        # Private repos cannot persist attestations (GitHub 403); the
+        # release still ships with SHA256SUMS + SBOM and the gap stays
+        # documented — never fail the release over provenance alone.
+        continue-on-error: true
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: "release/*.exe, release/*.zip"
