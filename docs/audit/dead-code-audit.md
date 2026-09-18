@@ -20,7 +20,6 @@ add Knip before release — see final-audit remaining risks.)
 | `scripts/*` console usage | CLI tooling; eslint override already scoped to scripts |
 | `catch {}` blocks (7 sites) | Each justified: best-effort stat, target-free probe, ENOENT branches. No silent security-error swallow. |
 | `resources/wsl/.gitkeep` | Only tracked file under resources; keeps staged-runtime dir in git |
-| `docs/reference/silverbullet.md` | Reference notes, not shipped (builder `files` allowlist excludes docs) |
 | `dist/`, `dist-electron/`, `dist-helper/`, `smoke-artifacts/`, `.dev-libs/` | Present on disk, ALL git-ignored/untracked — not packaged |
 
 ## Dependency verdict (see dependency-audit.md)

@@ -25,7 +25,6 @@ files:
   - "!**/tests/**"
   - "!**/.git/**"
   - "!**/.env*"
-  - "!**/SilverBullet/**"
   - "!**/*.test.*"
 # WSL runtime + helper are required on Windows (§16). Bundled via
 # extraResources below (generated/ archive excluded by filter).
