@@ -16,43 +16,22 @@ Node 24.19.0, WSL runtime Node 24.19.0).
 
 ### Verification performed
 
-`node --version`, `npm --version`, `npm view` for each pinned dependency,
-SilverBullet read-only `git status`/`remote`/`rev-parse`.
+`node --version`, `npm --version`, `npm view` for each pinned dependency.
 
 ### Commands executed
 
 ```bash
 node --version && npm --version
 npm view electron version / react / vite / typescript / electron-builder
-git status --short --branch (silverbullet, read-only)
 ```
 
 ### Evidence
 
 Node v24.19.0, npm 11.17.0, Ubuntu 24.04 (WSL2 kernel) container.
-SilverBullet at `/home/utsav/Projects/silverbullet`, commit `e43ec4d…`, MIT.
 
 ### Remaining work / Next concrete action
 
 Run Windows-side verification (Stage 2 gate) on a Windows 11 machine.
-
-## Stage 1 — Inspect SilverBullet
-
-Status: complete
-
-### Implemented
-
-`docs/reference/silverbullet.md` records path, remote, commit, branch, dirty
-state, license, files inspected, concepts borrowed vs. intentionally not copied.
-No code copied; no modification to the checkout.
-
-### Verification performed
-
-Read-only git inspection + source reads of editor/search/tree areas.
-
-### Next concrete action
-
-None (reference only).
 
 ## Stage 2 — Scaffold
 

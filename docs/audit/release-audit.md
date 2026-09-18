@@ -16,7 +16,6 @@ AUDIT REVISION: ca1e54e…
 
 - Builder `files` allowlist: `dist-electron`, `dist/renderer`, `package.json` only; `extraResources`: staged `node/helper.cjs/manifest.json`. **Excluded by construction**: `.git`, `tests`, `docs`, `scripts`, `resources/wsl/generated` (source archive), `dist-helper` (dev bundle).
 - Source maps: renderer build sets `sourcemap:false`; main/helper via esbuild scripts — verified no `.map` emission flags. Decision: no production source maps (documented).
-- SilverBullet reference: `docs/reference/*.md` only, outside builder allowlist — not shipped.
 - Signing: **unsigned early build** (no cert configured) — must be disclosed at release; SmartScreen warning is expected, not malware evidence.
 - Fuses/attestations/SBOM: not configured — recorded limitations; provenance = tag + lockfile + CI logs.
 
