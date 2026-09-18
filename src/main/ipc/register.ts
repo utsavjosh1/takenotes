@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { existsSync } from "node:fs";
 import path from "node:path";
-import { createMainWindow } from "../window.js";
+import { createMainWindow, resolveRendererDir } from "../window.js";
 import { WorkspaceRegistry, isNativeWorkspace, toWorkspaceInfo } from "../workspace/registry.js";
 import {
   createTextFile,
@@ -634,10 +635,29 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
 }
 
 export function createWindowIpc(): void {
+  // Packaged anchor: app.getAppPath() is `.../resources/app.asar`, so
+  // `dist/renderer` resolves with no depth assumption. Legacy `__dirname`
+  // traversal is the fallback (dev runs VITE_DEV_SERVER_URL anyway).
   const win = createMainWindow(
     path.join(__dirname, "..", "preload", "index.cjs"),
     process.env["VITE_DEV_SERVER_URL"] ?? null,
-    path.join(__dirname, "..", "..", "dist", "renderer"),
+    resolveRendererDir({
+      appPath: (() => {
+        try {
+          return app.getAppPath();
+        } catch {
+          return "";
+        }
+      })(),
+      mainDir: __dirname,
+      exists: (p: string) => {
+        try {
+          return existsSync(p);
+        } catch {
+          return false;
+        }
+      },
+    }),
   );
   registerIpc((kind, payload) => {
     if (!win.isDestroyed()) win.webContents.send(`takenotes:${kind}`, payload);

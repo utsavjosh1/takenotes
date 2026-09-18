@@ -4,6 +4,25 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Packaged launch `ERR_FILE_NOT_FOUND` for `dist/renderer/index.html` on
+  some Windows installs despite a byte-perfect `app.asar` (12997621 bytes,
+  all boot files present): the renderer dir was resolved via fragile
+  `__dirname/../../` traversal that breaks silently if the main-bundle
+  depth ever changes. It now resolves from the stable `app.getAppPath()`
+  anchor (`.../resources/app.asar` → `dist/renderer`) with the legacy
+  traversal as fallback (`resolveRendererDir` in `src/main/window.ts`,
+  wired in `createWindowIpc`).
+- Missing-bundle dialog/log now carry asar size, renderer listing, and
+  `mainDir`, so the next screenshot alone distinguishes a truncated asar
+  from a misresolved path — no PowerShell/`asar list` needed.
+
+### Added
+
+- `tests/packaging/renderer-failure-report.test.ts`: report contents plus
+  `resolveRendererDir` anchor-preferred vs legacy-fallback behavior.
+
 ## [0.0.5] - 2026-09-18
 
 ### Fixed
