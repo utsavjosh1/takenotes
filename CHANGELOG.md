@@ -4,6 +4,8 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-09-18
+
 ### Fixed
 
 - Packaged white screen (`ERR_FILE_NOT_FOUND` for

@@ -1,6 +1,6 @@
 {
   "name": "takenotes",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "description": "takenotes — filesystem-first local Markdown notebook for Windows with WSL awareness.",
   "author": {
