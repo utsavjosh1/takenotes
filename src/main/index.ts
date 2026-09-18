@@ -1,5 +1,26 @@
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, protocol } from "electron";
+import { RENDERER_PROTOCOL_SCHEME } from "./window.js";
 import { createWindowIpc } from "./ipc/register.js";
+
+/** Custom-protocol fallback for the renderer (see window.ts
+ * `loadRendererWithFallbacks`). Primary load stays `file://`; if Chromium's
+ * built-in asar file handling fails on a machine (proven case: Node fs
+ * reads the bundle fine while `loadFile` reports ERR_FILE_NOT_FOUND), the
+ * loader falls back to `<scheme>://bundle/…` served from the asar via Node
+ * fs. Privileges must be declared before `ready`; the request handler itself
+ * is registered lazily and only on fallback, so normal launches are
+ * untouched. `standard` is load-bearing: without it the origin is opaque
+ * and the bundle's `script-src 'self'` CSP blocks its own scripts. */
+try {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: RENDERER_PROTOCOL_SCHEME,
+      privileges: { standard: true, secure: true, supportFetchAPI: true },
+    },
+  ]);
+} catch {
+  /* already registered (dev reloads) — fallback still works */
+}
 import { currentDesktopPlatform } from "../shared/platform/platform.js";
 import { shouldQuitOnAllWindowsClosed } from "../shared/platform/window.js";
 import { installAppMenu } from "./platform/menus.js";
