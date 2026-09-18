@@ -4,6 +4,27 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Packaged launch failures where Chromium's asar file handling reports
+  `ERR_FILE_NOT_FOUND` for `dist/renderer/index.html` while Node fs reads
+  the same bundle fine (observed v0.0.6: exists=true + full readdir listing
+  + on-disk asar intact): ordered renderer fallbacks in `src/main/window.ts`
+  — `loadFile` → `loadURL(file:)` → `takenotes://bundle/` served from the
+  asar via Node fs — before any error dialog, so one broken Chromium code
+  path no longer bricks the app. Normal launches still use `file://` only.
+- Missing-bundle report now uses `original-fs` for the on-disk asar size
+  (patched `fs.statSync` can report the virtual archive root, 0 bytes) and
+  records entry kind (file/directory/missing).
+
+### Added
+
+- `takenotes://` custom-protocol fallback: root-confined to `dist/renderer`,
+  GET-only, 404s everything else; scheme privileges (`standard`, `secure`,
+  `supportFetchAPI`) declared pre-ready in `src/main/index.ts`. Pure,
+  unit-tested confinement (`resolveFileForAppRequest`), MIME map, and URL
+  builder in `tests/packaging/renderer-failure-report.test.ts`.
+
 ## [0.0.6] - 2026-09-18
 
 ### Fixed
