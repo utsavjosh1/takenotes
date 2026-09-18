@@ -4,6 +4,8 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-09-18
+
 ### Fixed
 
 - Packaged launch failures where Chromium's asar file handling reports
