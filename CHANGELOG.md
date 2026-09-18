@@ -17,6 +17,10 @@ All notable changes to takenotes.
   `dist/renderer/` and covered by the new package gate.
 - Missing-bundle dialog now reports the app version, so a mixed install
   (new exe + old `app.asar`) is identifiable from the report alone.
+- Release gate `verify-packaged` compared asar paths verbatim and
+  false-positived on Windows runners (`path.join` yields `\`
+  separators there): now normalizes separators before comparing, and
+  prints sample asar entries on failure.
 
 ### Added
 

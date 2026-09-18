@@ -28,15 +28,25 @@ const REQUIRED = [
   "/package.json",
 ];
 
+/** Asar entry separators differ by platform (`/` on Linux CI probes,
+ * `\` from `@electron/asar` on Windows): compare normalized. */
+function normalizeAsarPath(p) {
+  return p.replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
 if (!existsSync(asarPath)) {
   console.error(`Missing packaged asar: ${asarPath} (run \`npm run package:win\` first)`);
   process.exit(1);
 }
 
-const present = new Set(listPackage(asarPath));
-const missing = REQUIRED.filter((f) => !present.has(f));
+const present = new Set(listPackage(asarPath).map(normalizeAsarPath));
+const missing = REQUIRED.filter((f) => !present.has(normalizeAsarPath(f)));
 if (missing.length > 0) {
-  console.error(`Packaged asar is missing boot files:\n  ${missing.join("\n  ")}\nAsar: ${asarPath}`);
+  // Self-diagnosing: a future mismatch prints what the asar actually holds.
+  const sample = [...present].slice(0, 8).join("\n  ");
+  console.error(
+    `Packaged asar is missing boot files:\n  ${missing.join("\n  ")}\nAsar: ${asarPath} (${present.size} entries; e.g.\n  ${sample})`,
+  );
   process.exit(1);
 }
 console.log(`Packaged asar OK: ${asarPath} (${present.size} entries, all ${REQUIRED.length} boot files present)`);
