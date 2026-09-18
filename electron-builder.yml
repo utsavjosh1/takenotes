@@ -30,6 +30,11 @@ files:
 # WSL runtime + helper are required on Windows (§16). Bundled via
 # extraResources below (generated/ archive excluded by filter).
 extraResources:
+  # Runtime BrowserWindow icon: resolveWindowIcon() reads
+  # <resources>/build/icon.png in the packaged app. Without this,
+  # the packaged window falls back to the Electron default icon.
+  - from: build/icon.png
+    to: build/icon.png
   - from: resources/wsl/linux-x64
     to: wsl/linux-x64
     filter:

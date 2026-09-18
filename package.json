@@ -25,7 +25,7 @@
     "test": "vitest run",
     "version:set": "node scripts/set-version.mjs",
     "version:check": "node scripts/check-version.mjs",
-    "package:win": "electron-builder --win nsis zip --publish never",
+    "package:win": "npm run build && electron-builder --win nsis zip --publish never",
     "release:verify": "node scripts/verify-release.mjs",
     "release:notes": "node scripts/release-notes.mjs",
     "fixture:generate": "node scripts/generate-fixture.mjs",
