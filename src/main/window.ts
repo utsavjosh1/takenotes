@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, shell, type BrowserWindowConstructorOptions } from "electron";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { currentDesktopPlatform } from "../shared/platform/platform.js";
 import { titlebarStrategy } from "../shared/platform/window.js";
@@ -48,6 +48,135 @@ export function resolveWindowIcon(): string | undefined {
   return candidates.find((p) => { try { return existsSync(p); } catch { return false; } });
 }
 
+export type RendererFailureFacts = {
+  version: string;
+  isPackaged: boolean;
+  resourcesPath: string;
+  appPath: string;
+  mainDir: string;
+  entry: string;
+  rendererDir: string;
+  entryExists: boolean;
+  /** Human-readable: file list or the fs error, never file contents. */
+  rendererListing: string;
+  /** Human-readable: byte size or the fs error. */
+  asarSize: string;
+};
+
+/** Pure formatter: every field above is load-bearing in the next bug report
+ * (version distinguishes stale/mixed installs, listing distinguishes
+ * truncated vs mislocated bundles). No secrets: paths/sizes only. */
+export function formatRendererFailureReport(f: RendererFailureFacts): { logLine: string; dialogBody: string } {
+  const logLine =
+    `v${f.version} failed to load renderer entry ${f.entry} ` +
+    `(exists=${f.entryExists} asar=${f.asarSize} packaged=${f.isPackaged} ` +
+    `resources=${f.resourcesPath} appPath=${f.appPath} mainDir=${f.mainDir} rendererDir=${f.rendererDir} ` +
+    `listing=[${f.rendererListing}])`;
+  const dialogBody =
+    `Missing renderer bundle (app v${f.version}):\n${f.entry}\n\n` +
+    `What the app sees:\n- app.asar: ${f.asarSize}\n- renderer folder: ${f.rendererListing}\n\n` +
+    `Fix (2 min, like any other app):\n` +
+    `1. Quit takenotes fully (Task Manager > End task if needed).\n` +
+    `2. Settings > Apps > takenotes > Uninstall (portable ZIP: delete the folder).\n` +
+    `3. Reinstall fresh — never install over a running copy.`;
+  return { logLine, dialogBody };
+}
+
+/** Probe the filesystem (asar-aware via Electron's fs patch) and format.
+ * All probes are best-effort: an probe failure becomes part of the report. */
+export function collectRendererFailureReport(rendererDir: string, entry: string): {
+  logLine: string;
+  dialogBody: string;
+} {
+  const version = (() => {
+    try {
+      return app.getVersion();
+    } catch {
+      return "unknown";
+    }
+  })();
+  const isPackaged = (() => {
+    try {
+      return app.isPackaged;
+    } catch {
+      return false;
+    }
+  })();
+  const resourcesPath = (() => {
+    try {
+      return process.resourcesPath ?? "(no resourcesPath)";
+    } catch {
+      return "(no resourcesPath)";
+    }
+  })();
+  const appPath = (() => {
+    try {
+      return app.getAppPath();
+    } catch {
+      return "(no appPath)";
+    }
+  })();
+  const mainDir = (() => {
+    try {
+      return typeof __dirname === "string" ? __dirname : "(no __dirname)";
+    } catch {
+      return "(no __dirname)";
+    }
+  })();
+  const entryExists = (() => {
+    try {
+      return existsSync(entry);
+    } catch {
+      return false;
+    }
+  })();
+  let rendererListing: string;
+  try {
+    const names = readdirSync(rendererDir);
+    rendererListing = names.length > 0 ? names.slice(0, 20).join(", ") : "(empty folder)";
+  } catch (e) {
+    rendererListing = `unreadable (${String(e).slice(0, 120)})`;
+  }
+  let asarSize: string;
+  try {
+    const asarPath = path.join(resourcesPath, "app.asar");
+    const st = statSync(asarPath);
+    asarSize = `${st.size} bytes`;
+  } catch (e) {
+    asarSize = `unreadable (${String(e).slice(0, 120)})`;
+  }
+  return formatRendererFailureReport({
+    version,
+    isPackaged,
+    resourcesPath,
+    appPath,
+    mainDir,
+    entry,
+    rendererDir,
+    entryExists,
+    rendererListing,
+    asarSize,
+  });
+}
+
+/** Resolve the packaged renderer dir without assuming main-bundle depth.
+ * `app.getAppPath()` is `.../resources/app.asar` when packaged (stable
+ * anchor); the legacy `__dirname/../../` traversal breaks silently if the
+ * esbuild outfile layout ever changes depth. Pure + unit-tested. */
+export function resolveRendererDir(opts: {
+  appPath: string;
+  mainDir: string;
+  exists: (p: string) => boolean;
+}): string {
+  const fromApp = path.join(opts.appPath, "dist", "renderer");
+  try {
+    if (opts.exists(path.join(fromApp, "index.html"))) return fromApp;
+  } catch {
+    /* fall through to legacy */
+  }
+  return path.join(opts.mainDir, "..", "..", "dist", "renderer");
+}
+
 export function createMainWindow(preloadPath: string, rendererUrl: string | null, rendererFile: string): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
@@ -87,25 +216,16 @@ export function createMainWindow(preloadPath: string, rendererUrl: string | null
     void window.loadURL(rendererUrl);
   } else {
     const entry = path.join(rendererFile, "index.html");
-    // Never white-screen silently: a missing/broken bundle (e.g. packaged
-    // without `npm run build`) used to leave an empty window with only a
-    // console ERR_FILE_NOT_FOUND. Surface it so install-failures are actionable.
+    // Never white-screen silently: a missing/broken bundle (e.g. installed
+    // over a running copy, portable ZIP re-extracted while locked, or AV
+    // truncating app.asar) used to leave an empty window with only a
+    // console ERR_FILE_NOT_FOUND. Surface it with self-diagnostics so the
+    // next screenshot alone explains WHY (no PowerShell needed).
     void window.loadFile(entry).catch((err) => {
-      // Self-identifying: the next bug report carries the app version, so a
-      // stale/mixed install (new exe + old app.asar) is distinguishable.
-      const version = (() => {
-        try {
-          return app.getVersion();
-        } catch {
-          return "unknown";
-        }
-      })();
-      console.error(`[startup] v${version} failed to load renderer entry ${entry}: ${String(err)}`);
+      const report = collectRendererFailureReport(rendererFile, entry);
+      console.error(`[startup] ${report.logLine}: ${String(err)}`);
       try {
-        dialog.showErrorBox(
-          "takenotes could not open",
-          `Missing renderer bundle (app v${version}):\n${entry}\n\nUninstall fully, then reinstall — do not install over a running copy.`,
-        );
+        dialog.showErrorBox("takenotes could not open", report.dialogBody);
       } catch {
         /* dialog unavailable — log is the fallback */
       }
