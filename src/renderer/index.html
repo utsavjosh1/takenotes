@@ -3,9 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Theme pre-paint lives in ./theme-init.js (external) so `script-src 'self'`
-         holds with no inline scripts. style-src 'unsafe-inline' remains a
-         documented exception: CodeMirror and React set inline styles at runtime. -->
+    <!-- Theme pre-paint lives in /theme-init.js (public/, external) so
+         `script-src 'self'` holds with no inline scripts. style-src
+         'unsafe-inline' remains a documented exception: CodeMirror and React
+         set inline styles at runtime. Vite rebases /theme-init.js to ./ on
+         build (base './'), same as the favicon above. -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none';" />
     <!-- Brand: absolute public paths are rebased to ./ by Vite on build (base './'). -->
     <!-- Filled tile favicon: legible at 16px tab size. Outline mark stays in-app. -->
@@ -14,7 +16,7 @@
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fcfcfd" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1e1f23" />
     <title>takenotes</title>
-    <script src="./theme-init.js"></script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

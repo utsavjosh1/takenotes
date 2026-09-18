@@ -60,6 +60,8 @@ jobs:
           # Empty → unsigned dev artifact that still validates packaging.
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Verify packaged asar boots (renderer + main in app.asar)
+        run: node scripts/verify-packaged.mjs
       - name: Verify Electron fuses (packaged binary)
         shell: pwsh
         run: npx --no-install @electron/fuses read --app "release/win-unpacked/takenotes.exe"

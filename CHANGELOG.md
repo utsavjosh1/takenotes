@@ -4,6 +4,25 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows exe still showed the stock Electron icon: `signAndEditExecutable:
+  false` skips resedit entirely (icon + metadata). Switched to
+  `signExecutable: false` so the icon/metadata are applied while code
+  signing stays off until a cert lands.
+- `theme-init.js` never shipped (vite drops a non-module `<script src>`
+  without emitting it): moved to `public/theme-init.js` so it is copied to
+  `dist/renderer/` and covered by the new package gate.
+- Missing-bundle dialog now reports the app version, so a mixed install
+  (new exe + old `app.asar`) is identifiable from the report alone.
+
+### Added
+
+- `scripts/verify-packaged.mjs` (`npm run verify:packaged`, wired into
+  `release.yml` after `package:win`): fails the release if
+  `win-unpacked/resources/app.asar` lacks any boot file
+  (`dist/renderer/index.html`, `theme-init.js`, main/preload bundles).
+
 ## [0.0.4] - 2026-09-18
 
 ### Fixed
