@@ -11,8 +11,12 @@ permissions:
   contents: read
 
 jobs:
+  # Windows-only pipeline: every job runs on windows-latest. The WSL
+  # runtime scripts are Windows-safe (pure-Node fetch; bsdtar `tar`
+  # ships with Windows; chmod is best-effort). Ubuntu/macOS runners were
+  # removed to stop doubling queue time — same logic suite, one OS.
   wsl-runtime:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     permissions:
       contents: read
     steps:
@@ -81,10 +85,9 @@ jobs:
             release/SHA256SUMS.txt
 
   publish:
-    runs-on: ubuntu-latest
-    # Windows-first: a release is complete when the Windows NSIS installer
-    # succeeds. macOS/Linux jobs stay in this file (parked) but never block
-    # a Windows release.
+    runs-on: windows-latest
+    # Windows-only release: a release is complete when the Windows NSIS
+    # installer succeeds. No macOS/Linux jobs exist in this file.
     needs: [windows]
     permissions:
       contents: write
@@ -103,6 +106,7 @@ jobs:
           path: release/
       # Windows-only release: the .exe + .zip + one SHA256SUMS.txt.
       - name: Check artifacts
+        shell: bash
         run: |
           ls -la release/
           test -f release/SHA256SUMS.txt && cat release/SHA256SUMS.txt

@@ -9,26 +9,10 @@ permissions:
   contents: read
 
 jobs:
-  check-ubuntu:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm run version:check
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
-
-  # Windows is the priority gate (Windows 11 x64 + WSL2). Ubuntu mirrors it
-  # for logic tests (helper runs natively on Ubuntu Node).
-
+  # Windows-only gate (Windows 11 x64 + WSL2 is the sole target).
+  # Ubuntu/macOS jobs were removed: they duplicated the same logic suite
+  # while doubling queue time. Re-add per-OS only with a proven
+  # Windows-uncatchable failure.
   check-windows:
     runs-on: windows-latest
     permissions:
@@ -42,24 +26,6 @@ jobs:
       - run: npm ci
       - run: npm run version:check
       - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-
-  # Parked, not a priority (Windows-first): macOS files stay in the repo but
-  # failures here never block Windows work.
-  check-macos:
-    runs-on: macos-latest
-    continue-on-error: true
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm run version:check
-      - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       - run: npm run build

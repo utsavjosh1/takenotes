@@ -16,7 +16,7 @@ git push origin v0.2.0
 
 Tag push triggers `.github/workflows/release.yml` (Windows-only):
 
-1. **WSL runtime (ubuntu-latest)**: build `helper.cjs`, download pinned
+1. **WSL runtime (windows-latest)**: build `helper.cjs`, download pinned
    official Node linux-x64, verify SHA-256 against official metadata (fail on
    mismatch), stage `node` + `helper.cjs` + `manifest.json` with real hashes,
    upload artifact.
