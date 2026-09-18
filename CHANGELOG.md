@@ -4,6 +4,17 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Packaged white screen (`ERR_FILE_NOT_FOUND` for
+  `dist/renderer/index.html`): `package:win` now runs `npm run build`
+  first so the renderer bundle can never be silently omitted from
+  `app.asar`. A missing bundle now shows an error box with the path
+  instead of an empty window (`src/main/window.ts`).
+- Packaged window/taskbar icon fell back to Electron default:
+  `build/icon.png` is now shipped via `extraResources` so
+  `resolveWindowIcon()` resolves in the installed app.
+
 ## [0.0.3] - 2026-09-18
 
 ### Fixed

@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, type BrowserWindowConstructorOptions } from "electron";
+import { BrowserWindow, dialog, shell, type BrowserWindowConstructorOptions } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { currentDesktopPlatform } from "../shared/platform/platform.js";
@@ -86,7 +86,21 @@ export function createMainWindow(preloadPath: string, rendererUrl: string | null
   if (rendererUrl) {
     void window.loadURL(rendererUrl);
   } else {
-    void window.loadFile(path.join(rendererFile, "index.html"));
+    const entry = path.join(rendererFile, "index.html");
+    // Never white-screen silently: a missing/broken bundle (e.g. packaged
+    // without `npm run build`) used to leave an empty window with only a
+    // console ERR_FILE_NOT_FOUND. Surface it so install-failures are actionable.
+    void window.loadFile(entry).catch((err) => {
+      console.error(`[startup] failed to load renderer entry ${entry}: ${String(err)}`);
+      try {
+        dialog.showErrorBox(
+          "takenotes could not open",
+          `Missing renderer bundle:\n${entry}\n\nReinstall from a build made with \`npm run build && npm run package:win\`.`,
+        );
+      } catch {
+        /* dialog unavailable — log is the fallback */
+      }
+    });
   }
   return window;
 }
