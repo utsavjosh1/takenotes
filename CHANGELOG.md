@@ -4,6 +4,8 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-09-18
+
 ### Fixed
 
 - Windows exe still showed the stock Electron icon: `signAndEditExecutable:
@@ -22,6 +24,11 @@ All notable changes to takenotes.
   `release.yml` after `package:win`): fails the release if
   `win-unpacked/resources/app.asar` lacks any boot file
   (`dist/renderer/index.html`, `theme-init.js`, main/preload bundles).
+
+### Changed
+
+- CI/release pipelines are Windows-only: dropped the Ubuntu/macOS jobs
+  (same logic suite, doubled queue time).
 
 ## [0.0.4] - 2026-09-18
 
