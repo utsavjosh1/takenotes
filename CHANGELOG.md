@@ -4,6 +4,8 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-09-18
+
 ### Fixed
 
 - Packaged launch `ERR_FILE_NOT_FOUND` for `dist/renderer/index.html` on
