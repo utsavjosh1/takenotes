@@ -29,6 +29,9 @@ export type TakeNotesApi = {
   };
   directory: {
     list(workspaceId: string, relativePath: string): Promise<IpcResult<DirectoryEntry[]>>;
+    create(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
+    rename(workspaceId: string, oldPath: string, newPath: string): Promise<IpcResult<null>>;
+    delete(workspaceId: string, relativePath: string, recursive?: boolean): Promise<IpcResult<null>>;
   };
   file: {
     read(workspaceId: string, relativePath: string): Promise<IpcResult<FileReadResult>>;
@@ -90,6 +93,10 @@ const api: TakeNotesApi = {
   },
   directory: {
     list: (workspaceId, relativePath) => ipcRenderer.invoke("directory:list", workspaceId, relativePath),
+    create: (workspaceId, relativePath) => ipcRenderer.invoke("directory:create", workspaceId, relativePath),
+    rename: (workspaceId, oldPath, newPath) => ipcRenderer.invoke("directory:rename", workspaceId, oldPath, newPath),
+    delete: (workspaceId, relativePath, recursive) =>
+      ipcRenderer.invoke("directory:delete", workspaceId, relativePath, recursive),
   },
   file: {
     read: (workspaceId, relativePath) => ipcRenderer.invoke("file:read", workspaceId, relativePath),

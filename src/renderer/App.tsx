@@ -513,8 +513,22 @@ export default function App(): JSX.Element {
   const commitCreate = useCallback(async () => {
     if (!workspace || !creating || !createName.trim()) return;
     const name = createName.trim();
+    // Folders go through directory.create; notes through file.create (parents
+    // created implicitly). Both refresh the tree when complete.
+    if (creating.folder) {
+      const rel = joinRel(creating.dir, name);
+      const res = await window.takenotes.directory.create(workspace.workspaceId, rel);
+      if (!res.ok) { toast(res.error.message, "error"); return; }
+      setCreating(null); setCreateName("");
+      if (creating.dir) {
+        const res2 = await window.takenotes.directory.list(workspace.workspaceId, creating.dir);
+        if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(creating.dir, res2.result) }));
+      } else await refreshTree(workspace);
+      await rebuildAllFiles(workspace);
+      return;
+    }
     const rel = joinRel(creating.dir, name);
-    const target = creating.folder ? joinRel(rel, "untitled.md") : (/\.md$/i.test(rel) ? rel : `${rel}.md`);
+    const target = (/\.md$/i.test(rel) ? rel : `${rel}.md`);
     const res = await window.takenotes.file.create(workspace.workspaceId, target);
     if (!res.ok) { toast(res.error.message, "error"); return; }
     setCreating(null); setCreateName("");
@@ -530,7 +544,10 @@ export default function App(): JSX.Element {
     if (!workspace) return;
     const dir = parentDir(entry.relativePath);
     const newRel = joinRel(dir, newName);
-    const res = await window.takenotes.file.rename(workspace.workspaceId, entry.relativePath, newRel);
+    // Folders rename through directory.rename; files through file.rename.
+    const res = entry.kind === "directory"
+      ? await window.takenotes.directory.rename(workspace.workspaceId, entry.relativePath, newRel)
+      : await window.takenotes.file.rename(workspace.workspaceId, entry.relativePath, newRel);
     setTree((p) => ({ ...p, renaming: null }));
     if (!res.ok) { toast(res.error.message, "error"); return; }
     setTabs((p) => p.map((t) => {
@@ -546,6 +563,31 @@ export default function App(): JSX.Element {
     await rebuildAllFiles(workspace);
   }, [workspace, toast, refreshTree, rebuildAllFiles]);
 
+  const deleteDirectory = useCallback(async (entry: DirectoryEntry) => {
+    if (!workspace) return;
+    if (settings.confirmTrash && !window.confirm(`Delete folder "${entry.name}"?`)) return;
+    const res = await window.takenotes.directory.delete(workspace.workspaceId, entry.relativePath);
+    if (!res.ok) {
+      // Non-empty folders need an explicit recursive confirm (no silent wipe).
+      if (res.error.code === "DIRECTORY_NOT_EMPTY") {
+        if (!window.confirm(`"${entry.name}" is not empty. Delete it and everything inside?`)) return;
+        const res2 = await window.takenotes.directory.delete(workspace.workspaceId, entry.relativePath, true);
+        if (!res2.ok) { toast(res2.error.message, "error"); return; }
+      } else {
+        toast(res.error.message, "error");
+        return;
+      }
+    }
+    setTabs((p) => p.filter((t) => t.relativePath !== entry.relativePath && !t.relativePath.startsWith(`${entry.relativePath}/`)));
+    const dir = parentDir(entry.relativePath);
+    if (dir) {
+      const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
+      if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
+    } else await refreshTree(workspace);
+    await rebuildAllFiles(workspace);
+    toast(`Deleted folder "${entry.name}".`);
+  }, [workspace, settings.confirmTrash, toast, refreshTree, rebuildAllFiles]);
+
   const trashEntry = useCallback(async (entry: DirectoryEntry) => {
     if (!workspace) return;
     if (settings.confirmTrash && !window.confirm(`Move "${entry.name}" to trash?`)) return;
@@ -560,6 +602,12 @@ export default function App(): JSX.Element {
     await rebuildAllFiles(workspace);
     toast(`Moved "${entry.name}" to trash. Recoverable from ${trashName(platform.platform)} — ${moveToTrashLabel(platform.platform)}.`);
   }, [workspace, settings.confirmTrash, toast, refreshTree, rebuildAllFiles]);
+
+  const removeEntry = useCallback(async (entry: DirectoryEntry) => {
+    // Folders delete through directory.delete; files move to OS trash.
+    if (entry.kind === "directory") return deleteDirectory(entry);
+    return trashEntry(entry);
+  }, [deleteDirectory, trashEntry]);
 
   /* ---------- search ---------- */
   const debouncedQuery = useDebouncedValue(searchQuery, 250);
@@ -697,18 +745,18 @@ export default function App(): JSX.Element {
       if (!isMacTree && e.key === "Delete" && tree.selected && !inField(e.target)) {
         const sel = tree.selected;
         const found = entries.concat(...tree.children.values()).find((x) => x.relativePath === sel);
-        if (found) { e.preventDefault(); void trashEntry(found); }
+        if (found) { e.preventDefault(); void removeEntry(found); }
         return;
       }
       if (isMacTree && e.metaKey && e.key === "Backspace" && tree.selected && !inField(e.target)) {
         const sel = tree.selected;
         const found = entries.concat(...tree.children.values()).find((x) => x.relativePath === sel);
-        if (found) { e.preventDefault(); void trashEntry(found); }
+        if (found) { e.preventDefault(); void removeEntry(found); }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [save, newNote, activeKey, closeTab, tree.selected, tree.children, entries, trashEntry, palette, platform.platform]);
+  }, [save, newNote, activeKey, closeTab, tree.selected, tree.children, entries, removeEntry, palette, platform.platform]);
 
   /* tree arrow navigation */
   const visibleRows = useMemo(() => {
@@ -768,7 +816,7 @@ export default function App(): JSX.Element {
         { label: "Copy relative path", run: () => void navigator.clipboard.writeText(displayPath(entry.relativePath)) },
         { label: revealLabel(platform.platform), run: () => void window.takenotes.shell.reveal(workspace!.workspaceId, entry.relativePath) },
         { label: "---", run: () => undefined },
-        { label: moveToTrashLabel(platform.platform), danger: true, run: () => void trashEntry(entry) },
+        { label: "Delete folder", danger: true, run: () => void removeEntry(entry) },
       ] : [
         { label: "Open", run: () => void openFile(entry.relativePath), disabled: !openable },
         { label: "Rename", shortcut: sc("tree.rename"), run: () => setTree((p) => ({ ...p, renaming: entry.relativePath })) },
