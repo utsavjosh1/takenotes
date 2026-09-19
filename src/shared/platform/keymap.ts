@@ -1,40 +1,15 @@
 /**
- * Central semantic command registry (§33–§35, §53, §57).
+ * Fixed Phase-1 accelerator source.
  *
- * Command identity is NEVER a keystroke: the command is `file.save`,
- * `Ctrl+S` / `⌘S` are merely platform bindings. All keyboard listeners,
- * Electron accelerators, CodeMirror bindings and menu shortcuts derive from
- * this table via `acceleratorFor(command, platform)` — nothing else in the
- * codebase may invent a shortcut.
- *
- * Accelerator syntax is Electron's (`CommandOrControl`, `Command`, `Ctrl`,
- * `Alt`, `Option`, `Shift`, `F2`, …). Display strings are produced by
- * `shortcut-labels.ts` — never show `CommandOrControl+P` to a user (§37).
+ * Command metadata lives in the Command Registry (`shared/commands` and the
+ * main-owned `CommandService`). This module owns only default platform
+ * accelerators and native-role flags. Command identity is NEVER a keystroke:
+ * `editor.save` is the command; `Ctrl+S` / `⌘S` are bindings.
  */
+import { commandDefinition, type CommandId } from "../commands/registry.js";
 import type { CommandScope, DesktopPlatform } from "./types.js";
 
-export type CommandId =
-  | "file.new"
-  | "file.save"
-  | "file.closeTab"
-  | "file.quickOpen"
-  | "file.closeWindow"
-  | "workspace.search"
-  | "commandPalette.open"
-  | "editor.find"
-  | "settings.open"
-  | "app.checkForUpdates"
-  | "view.toggleSidebar"
-  | "view.toggleFocus"
-  | "view.nextTab"
-  | "view.prevTab"
-  | "tree.rename"
-  | "tree.trash"
-  | "app.quit"
-  | "app.toggleFullscreen"
-  | "app.zoomIn"
-  | "app.zoomOut"
-  | "app.zoomReset";
+export type { CommandId } from "../commands/registry.js";
 
 export type PlatformAccelerators = {
   mac?: string;
@@ -42,12 +17,8 @@ export type PlatformAccelerators = {
   linux?: string;
 };
 
-export type CommandDefinition = {
+export type KeymapCommandDefinition = {
   id: CommandId;
-  title: string;
-  scope: CommandScope;
-  /** Electron accelerator per platform. Absent = no default binding on that
-   *  platform (reachable via menu / palette / context menu instead, §155). */
   accelerators: PlatformAccelerators;
   /** True when the binding shadows an OS-reserved shortcut and must use the
    *  native role instead of a custom handler (§57). */
@@ -62,60 +33,51 @@ function ctrl(mac: string, others: string): PlatformAccelerators {
   return { mac, windows: others, linux: others };
 }
 
-/**
- * Initial cross-platform keymap (§40). Deliberately conservative:
- * - No `Ctrl+Alt+letter` bindings anywhere (AltGr, §47–§48).
- * - No `Option+letter` bindings on macOS (alternate-character typing, §47).
- * - Redo/fullscreen/quit/zoom are native roles, not custom bindings (§41–§46).
- */
-export const COMMANDS: readonly CommandDefinition[] = [
-  { id: "file.new", title: "Create new note", scope: "workspace", accelerators: ctrl("Command+N", "CommandOrControl+N") },
-  { id: "file.save", title: "Save current file", scope: "editor", accelerators: ctrl("Command+S", "CommandOrControl+S") },
-  { id: "file.closeTab", title: "Close current tab", scope: "workspace", accelerators: ctrl("Command+W", "CommandOrControl+W") },
-  { id: "file.quickOpen", title: "Quick open…", scope: "application", accelerators: ctrl("Command+P", "CommandOrControl+P") },
-  { id: "file.closeWindow", title: "Close window", scope: "application", accelerators: ctrl("Shift+Command+W", "CommandOrControl+Shift+W") },
-  { id: "workspace.search", title: "Search in workspace", scope: "workspace", accelerators: ctrl("Shift+Command+F", "CommandOrControl+Shift+F") },
-  { id: "commandPalette.open", title: "Open command palette", scope: "application", accelerators: ctrl("Shift+Command+P", "CommandOrControl+Shift+P") },
-  { id: "editor.find", title: "Find in note", scope: "editor", accelerators: ctrl("Command+F", "CommandOrControl+F") },
-  { id: "settings.open", title: "Open settings", scope: "application", accelerators: ctrl("Command+,", "CommandOrControl+,") },
-  // Update check: menu / palette / settings only, never a shortcut — it is
-  // rare, deliberate, and must not collide with editing keys (ADR-0006).
-  { id: "app.checkForUpdates", title: "Check for updates", scope: "application", accelerators: {} },
-  { id: "view.toggleSidebar", title: "Toggle sidebar", scope: "application", accelerators: ctrl("Command+\\", "CommandOrControl+\\") },
-  { id: "view.toggleFocus", title: "Toggle focus mode", scope: "application", accelerators: ctrl("Command+.", "CommandOrControl+.") },
-  { id: "view.nextTab", title: "Next tab", scope: "workspace", accelerators: same("CommandOrControl+Tab") },
-  { id: "view.prevTab", title: "Previous tab", scope: "workspace", accelerators: same("CommandOrControl+Shift+Tab") },
-  // Rename: F2 is a Windows/Linux convention (§44). macOS reaches rename via
-  // context menu / palette / menu; F2 stays bound where it feels native.
-  { id: "tree.rename", title: "Rename selected", scope: "fileTree", accelerators: { windows: "F2", linux: "F2" } },
-  // Trash: Delete on Windows/Linux; macOS uses Command+Backspace per Finder
-  // convention (§43). Context menu + palette remain universal fallbacks.
-  { id: "tree.trash", title: "Move to trash", scope: "fileTree", accelerators: { mac: "Command+Backspace", windows: "Delete", linux: "Delete" } },
-  { id: "app.quit", title: "Quit Desktop Notes", scope: "application", accelerators: {}, nativeRole: true },
-  { id: "app.toggleFullscreen", title: "Toggle full screen", scope: "application", accelerators: {}, nativeRole: true },
-  { id: "app.zoomIn", title: "Zoom in", scope: "application", accelerators: {}, nativeRole: true },
-  { id: "app.zoomOut", title: "Zoom out", scope: "application", accelerators: {}, nativeRole: true },
-  { id: "app.zoomReset", title: "Actual size", scope: "application", accelerators: {}, nativeRole: true },
+/** Fixed P1 defaults only — no customization UI/storage in this phase. */
+export const COMMANDS: readonly KeymapCommandDefinition[] = [
+  { id: "note.new", accelerators: ctrl("Command+N", "CommandOrControl+N") },
+  { id: "editor.save", accelerators: ctrl("Command+S", "CommandOrControl+S") },
+  { id: "note.close", accelerators: ctrl("Command+W", "CommandOrControl+W") },
+  { id: "quickOpen.open", accelerators: ctrl("Command+P", "CommandOrControl+P") },
+  { id: "app.closeWindow", accelerators: ctrl("Shift+Command+W", "CommandOrControl+Shift+W") },
+  { id: "search.open", accelerators: ctrl("Shift+Command+F", "CommandOrControl+Shift+F") },
+  { id: "palette.open", accelerators: ctrl("Shift+Command+P", "CommandOrControl+Shift+P") },
+  { id: "editor.find", accelerators: ctrl("Command+F", "CommandOrControl+F") },
+  { id: "settings.open", accelerators: ctrl("Command+,", "CommandOrControl+,") },
+  { id: "app.checkForUpdates", accelerators: {} },
+  { id: "view.toggleSidebar", accelerators: ctrl("Command+\\", "CommandOrControl+\\") },
+  { id: "view.toggleFocus", accelerators: ctrl("Command+.", "CommandOrControl+.") },
+  { id: "view.nextTab", accelerators: same("CommandOrControl+Tab") },
+  { id: "view.prevTab", accelerators: same("CommandOrControl+Shift+Tab") },
+  { id: "tree.rename", accelerators: { windows: "F2", linux: "F2" } },
+  { id: "tree.trash", accelerators: { mac: "Command+Backspace", windows: "Delete", linux: "Delete" } },
+  { id: "app.quit", accelerators: {}, nativeRole: true },
+  { id: "app.toggleFullscreen", accelerators: {}, nativeRole: true },
+  { id: "app.zoomIn", accelerators: {}, nativeRole: true },
+  { id: "app.zoomOut", accelerators: {}, nativeRole: true },
+  { id: "app.zoomReset", accelerators: {}, nativeRole: true },
 ];
 
-const BY_ID = new Map<CommandId, CommandDefinition>(COMMANDS.map((c) => [c.id, c]));
+const BY_ID = new Map<CommandId, KeymapCommandDefinition>(COMMANDS.map((c) => [c.id, c]));
 
-export function commandById(id: CommandId): CommandDefinition {
+export function commandById(id: CommandId): KeymapCommandDefinition & { title: string; scope: CommandScope; category: string } {
   const def = BY_ID.get(id);
   if (!def) throw new Error(`Unknown command: ${id}`);
-  return def;
+  const meta = commandDefinition(id);
+  return { ...def, title: meta.title, scope: meta.scope, category: meta.category };
 }
 
-/** Electron accelerator for menus / global key handling. */
+/** Electron accelerator for menus / fixed key handling. */
 export function acceleratorFor(id: CommandId, platform: DesktopPlatform): string | undefined {
-  const def = commandById(id);
+  const def = BY_ID.get(id);
+  if (!def) return undefined;
   if (platform === "macos") return def.accelerators.mac;
   if (platform === "windows") return def.accelerators.windows;
   return def.accelerators.linux;
 }
 
-/** Machine-readable per-platform shortcut map (§208). Used by the collision
- *  test and by `npm run test:platform`. */
+/** Machine-readable per-platform shortcut map (§208). Used by tests and by
+ * the renderer platform report. */
 export function shortcutMapFor(platform: DesktopPlatform): Record<string, string> {
   const out: Record<string, string> = {};
   for (const def of COMMANDS) {
@@ -132,12 +94,7 @@ export type ShortcutCollision = {
   scope: string;
 };
 
-/**
- * Keymap collision test core (§56). Fails when two conflicting commands share
- * the same shortcut in the same scope on the same platform. `view.nextTab`
- * and `view.prevTab` intentionally share the Tab family with different
- * modifiers, so only exact-duplicate accelerators within one scope collide.
- */
+/** Keymap collision test core (§56). */
 export function findShortcutCollisions(): ShortcutCollision[] {
   const collisions: ShortcutCollision[] = [];
   const platforms: DesktopPlatform[] = ["windows", "macos", "linux"];
@@ -146,9 +103,10 @@ export function findShortcutCollisions(): ShortcutCollision[] {
     for (const def of COMMANDS) {
       const acc = acceleratorFor(def.id, platform);
       if (!acc) continue;
-      const key = `${def.scope}::${normalizeAccelerator(acc)}`;
+      const scope = commandDefinition(def.id).scope;
+      const key = `${scope}::${normalizeAccelerator(acc)}`;
       const list = seen.get(key) ?? [];
-      list.push({ scope: def.scope, id: def.id });
+      list.push({ scope, id: def.id });
       seen.set(key, list);
     }
     for (const [key, list] of seen) {
@@ -180,12 +138,11 @@ export function normalizeAccelerator(acc: string): string {
     .join("+");
 }
 
-/** OS-reserved / highly conventional shortcuts we must not override (§57). */
 export const RESERVED_SHORTCUTS: readonly string[] = [
-  "Command+Q", // macOS quit (native role)
-  "Command+H", // macOS hide (native role)
-  "Command+M", // macOS minimize (native role)
-  "Alt+F4", // Windows/Linux close window
-  "Command+Space", // macOS Spotlight
-  "Ctrl+Space", // IME / input-source switching on several platforms
+  "Command+Q",
+  "Command+H",
+  "Command+M",
+  "Alt+F4",
+  "Command+Space",
+  "Ctrl+Space",
 ];

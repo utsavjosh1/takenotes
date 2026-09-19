@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -86,5 +86,59 @@ describe.runIf(process.platform !== "win32")("wsl helper direct round-trip (ubun
       code: "INVALID_PATH",
     });
     await expect(client.request("nope.unknown", {}, session)).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+  });
+
+  it("users.list returns filtered humans with the current user marked", async () => {
+    const helper = await ensureHelperBuilt();
+    child = spawn(process.execPath, [helper, "--stdio"], { shell: false, stdio: ["pipe", "pipe", "pipe"] });
+    const client = new HelperClient(child, 15000);
+    const session = { sessionId: "test-users", generation: 1 };
+    const hello = (await client.request("hello", { protocolVersion: PROTOCOL_VERSION }, session)) as {
+      uid: number;
+      home: string;
+      capabilities: string[];
+    };
+    expect(hello.capabilities).toContain("users.list");
+    const res = (await client.request("users.list", {}, session)) as {
+      users: { name: string; uid: number; gid: number; home: string; shell: string; isCurrent: boolean }[];
+    };
+    expect(res.users.length).toBeGreaterThan(0);
+    for (const u of res.users) {
+      expect(typeof u.name).toBe("string");
+      expect(typeof u.uid).toBe("number");
+      expect(typeof u.home).toBe("string");
+    }
+    // No service accounts leak through (nobody/root unless self).
+    expect(res.users.find((u) => u.name === "nobody" && !u.isCurrent)).toBeUndefined();
+    // The user the helper runs as is always present and marked.
+    const me = res.users.find((u) => u.isCurrent);
+    expect(me).toBeDefined();
+    expect(me!.uid).toBe(hello.uid);
+  });
+
+  it("hello reports process uid/home and ~/Notes resolves under that home", async () => {
+    const helper = await ensureHelperBuilt();
+    const fakeHome = mkdtempSync(path.join(tmpdir(), "dn-home-"));
+    mkdirSync(path.join(fakeHome, "Notes"));
+    try {
+      child = spawn(process.execPath, [helper, "--stdio"], {
+        shell: false,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, HOME: fakeHome },
+      });
+      const client = new HelperClient(child, 15000);
+      const session = { sessionId: "test-tilde", generation: 1 };
+      const hello = (await client.request("hello", { protocolVersion: PROTOCOL_VERSION }, session)) as {
+        uid: number;
+        home: string;
+      };
+      expect(hello.uid).toBe(typeof process.getuid === "function" ? process.getuid() : -1);
+      expect(hello.home).toBe(fakeHome);
+      const opened = (await client.request("workspace.open", { root: "~/Notes" }, session)) as { root: string };
+      expect(opened.root).toBe(path.join(fakeHome, "Notes"));
+      await client.request("workspace.close", {}, session);
+    } finally {
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
   });
 });

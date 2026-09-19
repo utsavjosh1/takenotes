@@ -45,6 +45,8 @@ export type DraftInput = {
   workspaceRoot: string;
   /** WSL distro; required when workspaceType is `windows-wsl`. */
   distro?: string;
+  /** WSL Linux user; part of the identity (P1-03). Native workspaces omit it. */
+  linuxUser?: string;
   workspaceDisplayName: string;
   relativePath: string;
   baseRevisionHash: string;
@@ -52,10 +54,11 @@ export type DraftInput = {
 };
 
 /** Stable, filesystem-safe identity for a workspace (survives restarts; registry ids do not). */
-export function workspaceKeyFor(input: Pick<DraftInput, "workspaceType" | "workspaceRoot" | "distro">): string {
+export function workspaceKeyFor(input: Pick<DraftInput, "workspaceType" | "workspaceRoot" | "distro" | "linuxUser">): string {
   const distro = input.workspaceType === "windows-wsl" ? (input.distro ?? "") : "";
+  const linuxUser = input.workspaceType === "windows-wsl" ? (input.linuxUser ?? "") : "";
   return createHash("sha256")
-    .update(`${input.workspaceType}\0${input.workspaceRoot}\0${distro}`, "utf8")
+    .update(`${input.workspaceType}\0${input.workspaceRoot}\0${distro}\0${linuxUser}`, "utf8")
     .digest("hex")
     .slice(0, 32);
 }
@@ -159,7 +162,7 @@ async function enforceBounds(dir: string): Promise<void> {
 /** Load the draft for one note. `null` = none. Malformed files are ignored (callers may sweep them). */
 export async function loadDraft(
   baseDir: string,
-  key: Pick<DraftInput, "workspaceType" | "workspaceRoot" | "distro"> & { relativePath: string },
+  key: Pick<DraftInput, "workspaceType" | "workspaceRoot" | "distro" | "linuxUser"> & { relativePath: string },
 ): Promise<DraftRecord | null> {
   const workspaceKey = workspaceKeyFor(key);
   const file = path.join(draftsDir(baseDir), draftFileNameFor(workspaceKey, key.relativePath));
@@ -182,7 +185,7 @@ export async function loadDraft(
 /** Remove the draft for one note (e.g. after a successful save). Never throws. */
 export async function clearDraft(
   baseDir: string,
-  key: Pick<DraftInput, "workspaceType" | "workspaceRoot" | "distro"> & { relativePath: string },
+  key: Pick<DraftInput, "workspaceType" | "workspaceRoot" | "distro" | "linuxUser"> & { relativePath: string },
 ): Promise<void> {
   const workspaceKey = workspaceKeyFor(key);
   await fs.rm(path.join(draftsDir(baseDir), draftFileNameFor(workspaceKey, key.relativePath)), { force: true });

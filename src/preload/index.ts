@@ -1,17 +1,21 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  CommandListResult,
   DirectoryEntry,
   FileReadResult,
   FileRevision,
   IpcResult,
   PlatformReport,
-  SearchMatch,
+  RecoveryRestoreResult,
+  RecoverySnapshotMeta,
+  RecoverySnapshotRead,
   UpdateCheckResult,
   UpdateProgress,
   WorkspaceInfo,
   WslDistribution,
+  WslLinuxUser,
 } from "../shared/contracts/ipc.js";
-import type { CommandId } from "../shared/platform/keymap.js";
+import type { CommandId } from "../shared/commands/registry.js";
 
 /** Narrow typed preload bridge. No generic channel invocation is exposed. */
 export type TakeNotesApi = {
@@ -21,14 +25,39 @@ export type TakeNotesApi = {
     get(workspaceId: string, relativePath: string): Promise<IpcResult<DraftSummary | null>>;
     clear(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
   };
+  recovery: {
+    captureChanged(args: {
+      workspaceId: string;
+      relativePath: string;
+      content: string;
+      reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
+    }): Promise<IpcResult<RecoverySnapshotMeta | null>>;
+    list(workspaceId: string, relativePath: string): Promise<IpcResult<RecoverySnapshotMeta[]>>;
+    read(snapshotId: string): Promise<IpcResult<RecoverySnapshotRead>>;
+    restore(args: {
+      workspaceId: string;
+      relativePath: string;
+      snapshotId: string;
+      currentContent: string;
+      expectedHash: string;
+      newlineStyle: "lf" | "crlf";
+      hadBom: boolean;
+    }): Promise<IpcResult<RecoveryRestoreResult>>;
+  };
   workspace: {
     openLocal(): Promise<IpcResult<WorkspaceInfo | null>>;
     close(workspaceId: string): Promise<IpcResult<null>>;
     listWslDistributions(): Promise<IpcResult<WslDistribution[]>>;
-    connectWsl(distro: string, linuxPath: string): Promise<IpcResult<WorkspaceInfo>>;
+    /** Interactive Linux users for one selected distro (`/etc/passwd`-backed).
+     * Structured records only — no shell execution reaches the renderer. */
+    listWslUsers(distro: string): Promise<IpcResult<WslLinuxUser[]>>;
+    connectWsl(distro: string, linuxUser: string, linuxPath: string): Promise<IpcResult<WorkspaceInfo>>;
   };
   directory: {
     list(workspaceId: string, relativePath: string): Promise<IpcResult<DirectoryEntry[]>>;
+    create(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
+    rename(workspaceId: string, oldPath: string, newPath: string): Promise<IpcResult<null>>;
+    delete(workspaceId: string, relativePath: string, recursive?: boolean): Promise<IpcResult<null>>;
   };
   file: {
     read(workspaceId: string, relativePath: string): Promise<IpcResult<FileReadResult>>;
@@ -44,12 +73,11 @@ export type TakeNotesApi = {
     }): Promise<IpcResult<FileRevision>>;
     create(workspaceId: string, relativePath: string): Promise<IpcResult<FileRevision>>;
   };
-  search: {
-    files(workspaceId: string, query: string): Promise<IpcResult<SearchMatch[]>>;
-    content(workspaceId: string, query: string): Promise<IpcResult<SearchMatch[]>>;
-  };
   shell: {
     reveal(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
+  };
+  commands: {
+    list(): Promise<IpcResult<CommandListResult>>;
   };
   app: {
     version(): Promise<IpcResult<string>>;
@@ -82,14 +110,25 @@ const api: TakeNotesApi = {
     get: (workspaceId, relativePath) => ipcRenderer.invoke("draft:get", workspaceId, relativePath),
     clear: (workspaceId, relativePath) => ipcRenderer.invoke("draft:clear", workspaceId, relativePath),
   },
+  recovery: {
+    captureChanged: (args) => ipcRenderer.invoke("recovery:captureChanged", args),
+    list: (workspaceId, relativePath) => ipcRenderer.invoke("recovery:list", workspaceId, relativePath),
+    read: (snapshotId) => ipcRenderer.invoke("recovery:read", snapshotId),
+    restore: (args) => ipcRenderer.invoke("recovery:restore", args),
+  },
   workspace: {
     openLocal: () => ipcRenderer.invoke("workspace:openLocal"),
     close: (workspaceId) => ipcRenderer.invoke("workspace:close", workspaceId),
     listWslDistributions: () => ipcRenderer.invoke("workspace:listWsl"),
-    connectWsl: (distro, linuxPath) => ipcRenderer.invoke("wsl:connect", distro, linuxPath),
+    listWslUsers: (distro) => ipcRenderer.invoke("workspace:listWslUsers", distro),
+    connectWsl: (distro, linuxUser, linuxPath) => ipcRenderer.invoke("wsl:connect", distro, linuxUser, linuxPath),
   },
   directory: {
     list: (workspaceId, relativePath) => ipcRenderer.invoke("directory:list", workspaceId, relativePath),
+    create: (workspaceId, relativePath) => ipcRenderer.invoke("directory:create", workspaceId, relativePath),
+    rename: (workspaceId, oldPath, newPath) => ipcRenderer.invoke("directory:rename", workspaceId, oldPath, newPath),
+    delete: (workspaceId, relativePath, recursive) =>
+      ipcRenderer.invoke("directory:delete", workspaceId, relativePath, recursive),
   },
   file: {
     read: (workspaceId, relativePath) => ipcRenderer.invoke("file:read", workspaceId, relativePath),
@@ -98,12 +137,11 @@ const api: TakeNotesApi = {
     write: (args) => ipcRenderer.invoke("file:write", args),
     create: (workspaceId, relativePath) => ipcRenderer.invoke("file:create", workspaceId, relativePath),
   },
-  search: {
-    files: (workspaceId, query) => ipcRenderer.invoke("search:files", workspaceId, query),
-    content: (workspaceId, query) => ipcRenderer.invoke("search:content", workspaceId, query),
-  },
   shell: {
     reveal: (workspaceId, relativePath) => ipcRenderer.invoke("shell:reveal", workspaceId, relativePath),
+  },
+  commands: {
+    list: () => ipcRenderer.invoke("commands:list"),
   },
   app: {
     version: () => ipcRenderer.invoke("app:version"),

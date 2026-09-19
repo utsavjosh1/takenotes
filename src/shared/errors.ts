@@ -6,6 +6,7 @@ export type ErrorCode =
   | "INVALID_PATH"
   | "INVALID_REQUEST"
   | "CONFLICT"
+  | "DIRECTORY_NOT_EMPTY"
   | "TOO_LARGE"
   | "UNSUPPORTED_ENCODING"
   | "UNSUPPORTED_ARCHITECTURE"
@@ -40,6 +41,8 @@ export function mapFsError(err: NodeJS.ErrnoException, what: string): AppError {
       return appError("PERMISSION_DENIED", `Permission denied: ${what}.`);
     case "ENAMETOOLONG":
       return appError("INVALID_PATH", `Path is too long: ${what}.`);
+    case "ENOTEMPTY":
+      return appError("DIRECTORY_NOT_EMPTY", `Directory is not empty: ${what}.`);
     default:
       return appError("INTERNAL_ERROR", `Could not complete operation on ${what}.`, err.code);
   }

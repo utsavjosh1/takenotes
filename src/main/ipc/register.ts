@@ -2,33 +2,88 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { createMainWindow, resolveRendererDir } from "../window.js";
-import { WorkspaceRegistry, isNativeWorkspace, toWorkspaceInfo } from "../workspace/registry.js";
-import {
-  createTextFile,
-  listDirectory,
-  readTextFile,
-  renamePath,
-  resolveInsideRoot,
-  writeTextFile,
-} from "../workspace/local-workspace.js";
+import { WorkspaceRegistry, isNativeWorkspace, toWorkspaceInfo, type WorkspaceRegistration } from "../workspace/registry.js";
+import { resolveInsideRoot } from "../workspace/local-workspace.js";
+import { NativeFileAdapter } from "../workspace/file-adapter.js";
+import { WorkspaceService } from "../services/workspace-service.js";
+import { NoteService } from "../services/note-service.js";
 import { validatePosixRelativePath, validateWindowsRelativePath } from "../workspace/path-security.js";
 import { validateWorkspaceId } from "../workspace/path-security.js";
 import type { WorkspaceKind } from "../../shared/platform/types.js";
-import { searchWorkspace } from "../search/search.js";
 import { clearDraft, isDraftStale, loadDraft, MAX_DRAFT_BYTES, saveDraft } from "../workspace/drafts.js";
-import { listDistributions } from "../wsl/distributions.js";
+import { RecoveryStore } from "../workspace/recovery.js";
 import { HelperSupervisor } from "../wsl/helper-supervisor.js";
+import { isValidDistroId, isValidLinuxUser } from "../wsl/launch-security.js";
+import { listWslUsers } from "../wsl/user-discovery.js";
 import { checkForUpdates, downloadAndInstall } from "../update/updater.js";
 import { currentDesktopPlatform } from "../../shared/platform/platform.js";
 import { getCapabilities } from "../../shared/platform/capabilities.js";
 import { localWorkspaceKind, toCanonicalRel } from "../../shared/platform/filesystem.js";
 import { shortcutLabelsFor } from "../../shared/platform/shortcut-labels.js";
+import { commandService } from "../services/command-service.js";
 import { detectWayland } from "../platform/linux.js";
-import type { DirectoryEntry, PlatformReport, SearchMatch } from "../../shared/contracts/ipc.js";
+import type { PlatformReport, WslLinuxUser } from "../../shared/contracts/ipc.js";
 import type { AppError } from "../../shared/errors.js";
+import { toHelperError } from "./helper-errors.js";
 
-const registry = new WorkspaceRegistry();
+const workspaces = new WorkspaceService(
+  new WorkspaceRegistry(),
+  undefined,
+  // Ephemeral discovery session (default user, no workspace opened) for
+  // exactly one explicitly selected distro. Never disturbs the singleton
+  // connect session owned below. The supervisor is created lazily once the
+  // IPC broadcast channel exists (see registerIpc).
+  async (distro: string): Promise<WslLinuxUser[]> => {
+    const sup = getSupervisor(broadcastEvent ?? (() => undefined));
+    const base = sup.resourceBase();
+    const ephemeral = await sup.spawnEphemeral(distro, path.join(base, "node"), path.join(base, "helper.cjs"));
+    return listWslUsers(distro, {
+      spawnSession: async () => ({
+        request: (operation, payload) => ephemeral.request(operation, payload),
+        dispose: () => ephemeral.dispose(),
+      }),
+    });
+  },
+);
+// Single native adapter for Windows/macOS/Linux local workspaces.
+const nativeAdapter = new NativeFileAdapter((absolutePath) => shell.trashItem(absolutePath));
 let supervisor: HelperSupervisor | null = null;
+/** Broadcast channel for WSL state events, captured per registerIpc call. */
+let broadcastEvent: ((kind: string, payload: unknown) => void) | null = null;
+// NoteService dispatches by workspace kind: native → FileAdapter, WSL → helper.
+let notes: NoteService | null = null;
+let recoveryStore: RecoveryStore | null = null;
+
+function getNotes(): NoteService {
+  if (!notes) {
+    notes = new NoteService(workspaces, {
+      native: nativeAdapter,
+      wslRequest: (operation, params, identity) => {
+        const sup = supervisor;
+        if (!sup) throw { code: "DISCONNECTED", message: "WSL helper is not connected." };
+        const active = sup.getSession();
+        if (!active) throw { code: "DISCONNECTED", message: "WSL helper is not connected." };
+        // Session identity guard (P1-04, ADR-0007): the helper is keyed by
+        // distro + linuxUser, never distro alone. A mutation for
+        // Ubuntu/work must never execute on an Ubuntu/utsav session — fail
+        // closed with DISCONNECTED (reconnect as the right user) instead of
+        // running as the wrong Linux user. No sudo, no retry-as-other-user.
+        if (
+          (identity.distro !== undefined && active.distro !== identity.distro) ||
+          (identity.linuxUser !== undefined && active.linuxUser !== identity.linuxUser)
+        ) {
+          throw {
+            code: "DISCONNECTED",
+            message: `WSL session is connected as ${active.distro}/${active.linuxUser}, not as ${identity.distro ?? "?"}/${identity.linuxUser ?? "?"}. Reconnect the workspace.`,
+          };
+        }
+        return sup.request(operation, params) as Promise<unknown>;
+      },
+      hasWslSession: () => supervisor?.getSession() != null,
+    });
+  }
+  return notes;
+}
 
 function getSupervisor(onEvent: (kind: string, payload: unknown) => void): HelperSupervisor {
   if (!supervisor) {
@@ -66,23 +121,14 @@ function senderIsOurs(event: Electron.IpcMainInvokeEvent): boolean {
   return win !== null && !win.isDestroyed();
 }
 
-/** Preserve structured helper errors (NOT_FOUND, CONFLICT, INVALID_PATH, …)
- * across the IPC boundary; unexpected failures become INTERNAL_ERROR. */
-function toHelperError(err: unknown): AppError {
-  if (err && typeof err === "object" && typeof (err as { code?: unknown }).code === "string") {
-    const e = err as AppError;
-    return e.detail === undefined ? { code: e.code, message: e.message } : { code: e.code, message: e.message, detail: e.detail };
-  }
-  return { code: "INTERNAL_ERROR", message: "WSL operation failed.", detail: String(err) };
-}
-
-function helperDisconnected(): { ok: false; error: AppError } {
-  return { ok: false, error: { code: "DISCONNECTED", message: "WSL helper is not connected." } };
-}
-
 /** Draft storage root: outside every note workspace, under the Electron profile. */
 function draftsBaseDir(): string {
   return app.getPath("userData");
+}
+
+function recovery(): RecoveryStore {
+  recoveryStore ??= new RecoveryStore(app.getPath("userData"));
+  return recoveryStore;
 }
 
 /** Runtime validation for draft payloads (privileged IPC: sender + shape checked). */
@@ -124,83 +170,20 @@ function normalizeWslRel(input: unknown, allowEmpty: boolean): { rel: string } |
   return { rel };
 }
 
-const WSL_SEARCH_EXCLUDED = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".cache"]);
-const WSL_SEARCH_TEXT_EXTS = new Set([".md", ".markdown", ".txt"]);
-
-/** WSL content/filename search composed from helper primitives.
- * The helper implements directory.list + file.read (no search.* op), so main
- * traverses via HelperClient: connect → hello → workspace.open → these calls. */
-async function searchWslWorkspace(
-  sup: HelperSupervisor,
-  options: { query: string; includeFilenames: boolean; includeContent: boolean; maxResults: number },
-): Promise<SearchMatch[]> {
-  const { query, includeFilenames, includeContent, maxResults } = options;
-  const needle = query.toLowerCase();
-  const matches: SearchMatch[] = [];
-  const dirs: string[] = [""];
-  const textFiles: string[] = [];
-  const seen = new Set<string>([""]);
-  while (dirs.length > 0 && matches.length < maxResults) {
-    const dir = dirs.pop()!;
-    let entries: DirectoryEntry[];
-    try {
-      entries = (await sup.request("directory.list", { relativePath: dir })) as DirectoryEntry[];
-    } catch {
-      continue;
-    }
-    for (const e of entries) {
-      if (matches.length >= maxResults) break;
-      if (e.kind === "directory") {
-        if (!WSL_SEARCH_EXCLUDED.has(e.name) && !seen.has(e.relativePath)) {
-          seen.add(e.relativePath);
-          dirs.push(e.relativePath);
-        }
-      } else {
-        if (includeFilenames && e.relativePath.toLowerCase().includes(needle)) {
-          matches.push({ relativePath: e.relativePath, line: 0, column: 0, preview: e.relativePath });
-          if (matches.length >= maxResults) break;
-        }
-        if (includeContent) {
-          const lower = e.relativePath.toLowerCase();
-          const dot = lower.lastIndexOf(".");
-          const ext = dot >= 0 ? lower.slice(dot) : "";
-          if (WSL_SEARCH_TEXT_EXTS.has(ext)) textFiles.push(e.relativePath);
-        }
-      }
-    }
-  }
-  if (includeContent && matches.length < maxResults) {
-    // Bounded concurrency: 16 parallel reads keeps large trees responsive.
-    const CONCURRENCY = 16;
-    for (let i = 0; i < textFiles.length && matches.length < maxResults; i += CONCURRENCY) {
-      const batch = textFiles.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(
-        batch.map(async (rel) => {
-          try {
-            const file = (await sup.request("file.read", { relativePath: rel })) as { content: string };
-            return { rel, content: file.content };
-          } catch {
-            return null;
-          }
-        }),
-      );
-      for (const r of results) {
-        if (!r || matches.length >= maxResults) continue;
-        const lines = r.content.split("\n");
-        for (let n = 0; n < lines.length; n++) {
-          const col = lines[n]!.toLowerCase().indexOf(needle);
-          if (col >= 0) {
-            matches.push({ relativePath: r.rel, line: n + 1, column: col + 1, preview: lines[n]!.slice(0, 200) });
-            break; // one match per file keeps results bounded
-          }
-        }
-      }
-    }
-  }
-  return matches.slice(0, maxResults);
+/** Canonicalize a renderer-supplied path for a resolved workspace (native
+ * kinds via `toCanonicalRel`, WSL via wire validation). Deep validation
+ * lives in the service/adapter layers; this only normalizes the wire shape. */
+function handlerRel(
+  reg: WorkspaceRegistration,
+  input: string,
+  allowEmpty: boolean,
+): { rel: string } | { error: AppError } {
+  if (isNativeWorkspace(reg)) return { rel: toCanonicalRel(input) };
+  return normalizeWslRel(input, allowEmpty);
 }
 
 export function registerIpc(broadcast: (kind: string, payload: unknown) => void): void {
+  broadcastEvent = broadcast;
   // Platform report for the renderer hook + `npm run test:platform` (§210).
   // Uses app.getPath — never hardcoded platform paths (§19–§20, §100–§102).
   ipcMain.handle("app:platform", () => {
@@ -221,6 +204,11 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     return { ok: true, result: report };
   });
 
+  ipcMain.handle("commands:list", (event) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    return { ok: true, result: commandService.list() };
+  });
+
   ipcMain.handle("workspace:openLocal", async (event) => {
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const win = BrowserWindow.fromWebContents(event.sender)!;
@@ -228,7 +216,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     const result = await dialog.showOpenDialog(win, { properties: ["openDirectory"] });
     if (result.canceled || result.filePaths.length === 0) return { ok: true, result: null };
     const root = result.filePaths[0]!;
-    const reg = registry.register(localWorkspaceKind(currentDesktopPlatform()), path.basename(root), root);
+    const reg = workspaces.registerLocal(path.basename(root), root, localWorkspaceKind(currentDesktopPlatform()));
     return { ok: true, result: { ...toWorkspaceInfo(reg), connection: "connected" as const } };
   });
 
@@ -236,7 +224,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const v = validateWorkspaceId(workspaceId);
     if ("error" in v) return { ok: false, error: v.error };
-    const reg = registry.get(v.workspaceId);
+    const reg = workspaces.get(v.workspaceId);
     if (reg && !isNativeWorkspace(reg) && supervisor?.getSession()) {
       // Best-effort: release the helper-side root; registry close always runs.
       try {
@@ -245,7 +233,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
         /* helper already gone — registry is the source of truth */
       }
     }
-    registry.close(v.workspaceId);
+    workspaces.close(v.workspaceId);
     return { ok: true, result: null };
   });
 
@@ -253,57 +241,88 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const gate = requireWslCapable();
     if (!gate.ok) return gate;
+    // Validate sender + platform, then delegate to the WorkspaceService seam.
     try {
-      const distros = await listDistributions();
+      const distros = await workspaces.listDistributions();
       return { ok: true, result: distros };
     } catch (err) {
       return { ok: false, error: { code: "INTERNAL_ERROR", message: "WSL is not available.", detail: String(err) } };
     }
   });
 
-  ipcMain.handle("wsl:connect", async (event, distro: unknown, linuxPath: unknown) => {
+  ipcMain.handle("wsl:connect", async (event, distro: unknown, linuxUser: unknown, linuxPath: unknown) => {
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const gate = requireWslCapable();
     if (!gate.ok) return gate;
-    // Distro names travel as spawn argv (shell:false) and into UI text: constrain
-    // them to plausible distribution identifiers before any use.
-    const distroOk =
-      typeof distro === "string" &&
-      distro.length >= 1 &&
-      distro.length <= 128 &&
-      !distro.includes("\0") &&
-      !distro.includes("/") &&
-      !distro.includes("\\") &&
-      distro.trim() === distro;
-    // The helper requires an absolute POSIX root; validate before connect so a
-    // bad root never leaves behind a connected-but-useless session.
+    // Distro/user names travel as spawn argv (shell:false) and into UI text:
+    // constrain them to plausible identifiers before any use. The Linux user
+    // comes from the picker's `users.list` discovery — never guessed, never
+    // the Windows username. No sudo/escalation: `-u` runs with that user's
+    // own permissions (ADR-0007).
+    if (!isValidDistroId(distro) || !isValidLinuxUser(linuxUser)) {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid WSL connection request." } };
+    }
+    // Absolute POSIX root, or `~`-anchored (expanded in the helper under the
+    // selected user — never on Windows). Validate before connect so a bad
+    // root never leaves behind a connected-but-useless session.
     const pathOk =
       typeof linuxPath === "string" &&
       linuxPath.length >= 1 &&
       linuxPath.length <= 1024 &&
       !linuxPath.includes("\0") &&
-      linuxPath.startsWith("/");
-    if (!distroOk || !pathOk) {
+      (linuxPath.startsWith("/") || linuxPath === "~" || linuxPath.startsWith("~/"));
+    if (!pathOk) {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid WSL connection request." } };
     }
     try {
       const sup = getSupervisor(broadcast);
       const base = sup.resourceBase();
-      // connect → hello (inside supervisor) → workspace.open(root).
-      await sup.connect(distro, path.join(base, "node"), path.join(base, "helper.cjs"));
-      console.error("[wsl-connect] hello ok, opening workspace", { distro, linuxPath });
+      // connect (-u linuxUser) → hello (inside supervisor) → workspace.open(root).
+      await sup.connect(distro, linuxUser, path.join(base, "node"), path.join(base, "helper.cjs"));
+      console.error("[wsl-connect] hello ok, opening workspace", { distro, linuxUser, linuxPath });
+      let openedRoot: string;
       try {
-        await sup.request("workspace.open", { root: linuxPath });
+        const opened = (await sup.request("workspace.open", { root: linuxPath })) as { root?: unknown };
+        if (!opened || typeof opened.root !== "string") throw { code: "INTERNAL_ERROR", message: "Workspace did not open." };
+        openedRoot = opened.root;
       } catch (openErr) {
-        console.error("[wsl-connect] workspace.open failed", { distro, linuxPath, error: toHelperError(openErr) });
+        console.error("[wsl-connect] workspace.open failed", { distro, linuxUser, linuxPath, error: toHelperError(openErr) });
         sup.disconnect();
         return { ok: false, error: toHelperError(openErr) };
       }
-      console.error("[wsl-connect] workspace.open ok", { distro, linuxPath });
-      const reg = registry.register("windows-wsl", `${distro}:${linuxPath}`, linuxPath, distro);
+      console.error("[wsl-connect] workspace.open ok", { distro, linuxUser, linuxPath, openedRoot });
+      const reg = workspaces.registerWsl(`${distro}:${linuxUser}:${linuxPath}`, openedRoot, distro, linuxUser);
       return { ok: true, result: { ...toWorkspaceInfo(reg), connection: "connected" as const } };
     } catch (err) {
       return { ok: false, error: { code: "DISCONNECTED", message: "Could not connect to WSL helper.", detail: String(err) } };
+    }
+  });
+
+  ipcMain.handle("workspace:listWslUsers", async (event, distro: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const gate = requireWslCapable();
+    if (!gate.ok) return gate;
+    if (!isValidDistroId(distro)) {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown distribution." } };
+    }
+    // Validate against the discovered set when listing works. A listing
+    // failure falls through — discovery below surfaces its own precise error.
+    try {
+      const known = await workspaces.listDistributions();
+      if (!known.some((d) => d.name === distro)) {
+        return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown distribution." } };
+      }
+    } catch {
+      /* discovery below reports precisely */
+    }
+    // Validate sender + distro, then delegate to the WorkspaceService seam.
+    // Only the explicitly selected distro is entered (as its default user);
+    // unrelated distros are never woken.
+    try {
+      const users = await workspaces.listUsers(distro);
+      return { ok: true, result: users };
+    } catch (err) {
+      return { ok: false, error: toHelperError(err) };
     }
   });
 
@@ -311,7 +330,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
+    const reg = workspaces.get(wid.workspaceId);
     if (!reg || typeof relativePath !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid reveal request." } };
     }
@@ -327,82 +346,95 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     return { ok: true, result: null };
   });
 
+  // Thin IPC seam (ADR-0009): validate sender + wire shapes, then delegate
+  // to NoteService. No filesystem logic lives in these handlers.
   ipcMain.handle("directory:list", async (event, workspaceId: unknown, relativePath: unknown) => {
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
-    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
-    if (!isNativeWorkspace(reg)) {
-      const v = normalizeWslRel(relativePath, true);
-      if ("error" in v) return { ok: false, error: v.error };
-      const sup = supervisor;
-      if (!sup?.getSession()) return helperDisconnected();
-      try {
-        const entries = (await sup.request("directory.list", { relativePath: v.rel })) as DirectoryEntry[];
-        return { ok: true, result: entries };
-      } catch (err) {
-        return { ok: false, error: toHelperError(err) };
-      }
+    if (typeof relativePath !== "string") {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid directory request." } };
     }
-    const rel = typeof relativePath === "string" ? toCanonicalRel(relativePath) : "";
-    const out = await listDirectory(reg.root, reg.type, rel);
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
+    const prep = handlerRel(reg, relativePath, true);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const out = await getNotes().listTree(wid.workspaceId, prep.rel);
     if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: out.entries };
+  });
+
+  ipcMain.handle("directory:create", async (event, workspaceId: unknown, relativePath: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const wid = validateWorkspaceId(workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    if (typeof relativePath !== "string") {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid directory request." } };
+    }
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
+    const prep = handlerRel(reg, relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const rel = prep.rel;
+    const out = await getNotes().createDirectory(wid.workspaceId, rel);
+    if ("error" in out) return { ok: false, error: out.error };
+    return { ok: true, result: null };
+  });
+
+  ipcMain.handle("directory:rename", async (event, workspaceId: unknown, oldPath: unknown, newPath: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const wid = validateWorkspaceId(workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    if (typeof oldPath !== "string" || typeof newPath !== "string") {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid rename request." } };
+    }
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
+    if (!isNativeWorkspace(reg)) {
+      const vOld = normalizeWslRel(oldPath, false);
+      if ("error" in vOld) return { ok: false, error: vOld.error };
+      const vNew = normalizeWslRel(newPath, false);
+      if ("error" in vNew) return { ok: false, error: vNew.error };
+      const out = await getNotes().renameDirectory(wid.workspaceId, vOld.rel, vNew.rel);
+      if ("error" in out) return { ok: false, error: out.error };
+      return { ok: true, result: null };
+    }
+    const out = await getNotes().renameDirectory(wid.workspaceId, toCanonicalRel(oldPath), toCanonicalRel(newPath));
+    if ("error" in out) return { ok: false, error: out.error };
+    return { ok: true, result: null };
+  });
+
+  ipcMain.handle("directory:delete", async (event, workspaceId: unknown, relativePath: unknown, recursive: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const wid = validateWorkspaceId(workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    if (typeof relativePath !== "string" || (typeof recursive !== "boolean" && typeof recursive !== "undefined")) {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid directory request." } };
+    }
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
+    const prep = handlerRel(reg, relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const rel = prep.rel;
+    const out = await getNotes().deleteDirectory(wid.workspaceId, rel, recursive === true);
+    if ("error" in out) return { ok: false, error: out.error };
+    return { ok: true, result: null };
   });
 
   ipcMain.handle("file:read", async (event, workspaceId: unknown, relativePath: unknown) => {
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
-    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
-    if (!isNativeWorkspace(reg)) {
-      if (typeof relativePath !== "string") {
-        return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid file read request." } };
-      }
-      const v = normalizeWslRel(relativePath, false);
-      if ("error" in v) {
-        console.error("[file-read] wsl rejected path", { workspaceId: wid.workspaceId, root: reg.root, distro: reg.distro, raw: relativePath, error: v.error });
-        return { ok: false, error: v.error };
-      }
-      const sup = supervisor;
-      if (!sup?.getSession()) {
-        console.error("[file-read] wsl no helper session", { workspaceId: wid.workspaceId, root: reg.root, distro: reg.distro, relativePath: v.rel });
-        return helperDisconnected();
-      }
-      console.error("[file-read] wsl request", {
-        workspaceId: wid.workspaceId,
-        root: reg.root,
-        distro: reg.distro,
-        sessionId: sup.getSession()?.sessionId,
-        relativePath: v.rel,
-      });
-      try {
-        const result = await sup.request("file.read", { relativePath: v.rel });
-        const rev = (result as { revision?: { hash?: string; size?: number } }).revision;
-        console.error("[file-read] wsl ok", { workspaceId: wid.workspaceId, relativePath: v.rel, hash: rev?.hash, size: rev?.size });
-        return { ok: true, result };
-      } catch (err) {
-        console.error("[file-read] wsl helper error", {
-          workspaceId: wid.workspaceId,
-          root: reg.root,
-          distro: reg.distro,
-          sessionId: sup.getSession()?.sessionId,
-          relativePath: v.rel,
-          error: toHelperError(err),
-        });
-        return { ok: false, error: toHelperError(err) };
-      }
-    }
     if (typeof relativePath !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid file read request." } };
     }
-    const out = await readTextFile(reg.root, reg.type, toCanonicalRel(relativePath));
-    if ("error" in out) {
-      console.error("[file-read] native error", { workspaceId: wid.workspaceId, kind: reg.type, root: reg.root, relativePath, error: out.error });
-      return { ok: false, error: out.error };
-    }
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
+    const prep = handlerRel(reg, relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const rel = prep.rel;
+    const out = await getNotes().readFile(wid.workspaceId, rel);
+    if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: out.result };
   });
 
@@ -411,61 +443,108 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     const a = args as { workspaceId?: unknown; relativePath?: unknown; content?: unknown; expectedHash?: unknown; newlineStyle?: unknown; hadBom?: unknown };
     const wid = validateWorkspaceId(a?.workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
-    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
-    if (!isNativeWorkspace(reg)) {
-      if (typeof a?.relativePath !== "string" || typeof a?.content !== "string" || typeof a?.expectedHash !== "string") {
-        return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid file write request." } };
-      }
-      const v = normalizeWslRel(a.relativePath, false);
-      if ("error" in v) return { ok: false, error: v.error };
-      const sup = supervisor;
-      if (!sup?.getSession()) return helperDisconnected();
-      try {
-        const revision = await sup.request("file.write", {
-          relativePath: v.rel,
-          content: a.content,
-          expectedHash: a.expectedHash,
-          newlineStyle: a.newlineStyle === "crlf" ? "crlf" : "lf",
-        });
-        return { ok: true, result: revision };
-      } catch (err) {
-        return { ok: false, error: toHelperError(err) };
-      }
-    }
     if (typeof a?.relativePath !== "string" || typeof a?.content !== "string" || typeof a?.expectedHash !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid file write request." } };
     }
-    const out = await writeTextFile(reg.root, reg.type, toCanonicalRel(a.relativePath), a.content, a.expectedHash, a.newlineStyle === "crlf" ? "crlf" : "lf", a.hadBom === true);
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
+    const prep = handlerRel(reg, a.relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const rel = prep.rel;
+    const out = await getNotes().writeFile(wid.workspaceId, rel, a.content, a.expectedHash, a.newlineStyle === "crlf" ? "crlf" : "lf", a.hadBom === true);
     if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: out.revision };
+  });
+
+  ipcMain.handle("recovery:captureChanged", async (event, args: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const a = args as { workspaceId?: unknown; relativePath?: unknown; content?: unknown; reason?: unknown };
+    const wid = validateWorkspaceId(a?.workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg || typeof a?.relativePath !== "string" || typeof a?.content !== "string") {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid recovery snapshot request." } };
+    }
+    const prep = handlerRel(reg, a.relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const reason =
+      a.reason === "save" || a.reason === "close" || a.reason === "shutdown" || a.reason === "restore-before" ? a.reason : "edit";
+    return recovery().captureChanged({ workspaceId: wid.workspaceId, relativePath: prep.rel, content: a.content, reason });
+  });
+
+  ipcMain.handle("recovery:list", async (event, workspaceId: unknown, relativePath: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const wid = validateWorkspaceId(workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg || typeof relativePath !== "string") {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid recovery history request." } };
+    }
+    const prep = handlerRel(reg, relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    return recovery().list(wid.workspaceId, prep.rel);
+  });
+
+  ipcMain.handle("recovery:read", async (event, snapshotId: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    if (typeof snapshotId !== "string") {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid recovery snapshot id." } };
+    }
+    return recovery().read(snapshotId);
+  });
+
+  ipcMain.handle("recovery:restore", async (event, args: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const a = args as {
+      workspaceId?: unknown;
+      relativePath?: unknown;
+      snapshotId?: unknown;
+      currentContent?: unknown;
+      expectedHash?: unknown;
+      newlineStyle?: unknown;
+      hadBom?: unknown;
+    };
+    const wid = validateWorkspaceId(a?.workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    const reg = workspaces.get(wid.workspaceId);
+    if (
+      !reg ||
+      typeof a?.relativePath !== "string" ||
+      typeof a?.snapshotId !== "string" ||
+      typeof a?.currentContent !== "string" ||
+      typeof a?.expectedHash !== "string"
+    ) {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid recovery restore request." } };
+    }
+    const prep = handlerRel(reg, a.relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    return recovery().restore(
+      {
+        workspaceId: wid.workspaceId,
+        relativePath: prep.rel,
+        snapshotId: a.snapshotId,
+        currentContent: a.currentContent,
+        expectedHash: a.expectedHash,
+        newlineStyle: a.newlineStyle === "crlf" ? "crlf" : "lf",
+        hadBom: a.hadBom === true,
+      },
+      (content, expectedHash, newlineStyle, hadBom) => getNotes().writeFile(wid.workspaceId, prep.rel, content, expectedHash, newlineStyle, hadBom),
+    );
   });
 
   ipcMain.handle("file:create", async (event, workspaceId: unknown, relativePath: unknown) => {
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
-    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
-    if (!isNativeWorkspace(reg)) {
-      if (typeof relativePath !== "string") {
-        return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid file create request." } };
-      }
-      const v = normalizeWslRel(relativePath, false);
-      if ("error" in v) return { ok: false, error: v.error };
-      const sup = supervisor;
-      if (!sup?.getSession()) return helperDisconnected();
-      try {
-        const revision = await sup.request("file.create", { relativePath: v.rel });
-        return { ok: true, result: revision };
-      } catch (err) {
-        return { ok: false, error: toHelperError(err) };
-      }
-    }
     if (typeof relativePath !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid file create request." } };
     }
-    const out = await createTextFile(reg.root, reg.type, toCanonicalRel(relativePath));
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
+    const prep = handlerRel(reg, relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const rel = prep.rel;
+    const out = await getNotes().createFile(wid.workspaceId, rel);
     if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: out.revision };
   });
@@ -474,14 +553,21 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
-    if (!reg || typeof oldPath !== "string" || typeof newPath !== "string") {
+    if (typeof oldPath !== "string" || typeof newPath !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid rename request." } };
     }
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
     if (!isNativeWorkspace(reg)) {
-      return { ok: false, error: { code: "INVALID_REQUEST", message: "Rename is not supported in WSL workspaces in this version." } };
+      const vOld = normalizeWslRel(oldPath, false);
+      if ("error" in vOld) return { ok: false, error: vOld.error };
+      const vNew = normalizeWslRel(newPath, false);
+      if ("error" in vNew) return { ok: false, error: vNew.error };
+      const out = await getNotes().renamePath(wid.workspaceId, vOld.rel, vNew.rel);
+      if ("error" in out) return { ok: false, error: out.error };
+      return { ok: true, result: null };
     }
-    const out = await renamePath(reg.root, reg.type, toCanonicalRel(oldPath), toCanonicalRel(newPath));
+    const out = await getNotes().renamePath(wid.workspaceId, toCanonicalRel(oldPath), toCanonicalRel(newPath));
     if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: null };
   });
@@ -490,69 +576,25 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
-    if (!reg || typeof relativePath !== "string") {
+    if (typeof relativePath !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid trash request." } };
     }
-    if (!isNativeWorkspace(reg)) {
-      return { ok: false, error: { code: "INVALID_REQUEST", message: "Trash is not supported in WSL workspaces in this version." } };
-    }
-    const v = validateNativeRel(reg.type, toCanonicalRel(relativePath));
-    if ("error" in v) return { ok: false, error: v.error };
-    const r = await resolveInsideRoot(reg.root, reg.type, v.relativePath);
-    if ("error" in r) return { ok: false, error: r.error };
-    try {
-      // OS trash semantics (Recycle Bin / Trash) via Electron (§30).
-      await shell.trashItem(r.absolutePath);
-    } catch (err) {
-      return { ok: false, error: { code: "INTERNAL_ERROR", message: "Could not move to trash.", detail: String(err) } };
-    }
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
+    // WSL trash is permanent-delete in P1 (helper `file.delete`): the wire
+    // shape is validated exactly like every other WSL mutation — main
+    // validates the shape only, confinement lives in the helper.
+    const prep = handlerRel(reg, relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const rel = isNativeWorkspace(reg) ? toCanonicalRel(prep.rel) : prep.rel;
+    const out = await getNotes().trashPath(wid.workspaceId, rel);
+    if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: null };
   });
 
-  ipcMain.handle("search:files", async (event, workspaceId: unknown, query: unknown) => {
-    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
-    const wid = validateWorkspaceId(workspaceId);
-    if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
-    if (!reg || typeof query !== "string") {
-      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid search request." } };
-    }
-    if (!isNativeWorkspace(reg)) {
-      const sup = supervisor;
-      if (!sup?.getSession()) return helperDisconnected();
-      try {
-        const matches = await searchWslWorkspace(sup, { query, includeFilenames: true, includeContent: false, maxResults: 200 });
-        return { ok: true, result: matches };
-      } catch (err) {
-        return { ok: false, error: toHelperError(err) };
-      }
-    }
-    const matches = await searchWorkspace(reg.root, { query, includeFilenames: true, includeContent: false, maxResults: 200 });
-    return { ok: true, result: matches };
-  });
-
-  ipcMain.handle("search:content", async (event, workspaceId: unknown, query: unknown) => {
-    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
-    const wid = validateWorkspaceId(workspaceId);
-    if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
-    if (!reg || typeof query !== "string") {
-      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid search request." } };
-    }
-    if (!isNativeWorkspace(reg)) {
-      const sup = supervisor;
-      if (!sup?.getSession()) return helperDisconnected();
-      try {
-        const matches = await searchWslWorkspace(sup, { query, includeFilenames: false, includeContent: true, maxResults: 1000 });
-        return { ok: true, result: matches };
-      } catch (err) {
-        return { ok: false, error: toHelperError(err) };
-      }
-    }
-    const matches = await searchWorkspace(reg.root, { query, includeFilenames: false, includeContent: true, maxResults: 1000 });
-    return { ok: true, result: matches };
-  });
+  // Search V1 (P1-08) runs renderer-side over the P1-07 in-memory index —
+  // no filesystem walk per query. The old `search:*` scan handlers were
+  // removed with the scan module, not kept in parallel.
 
   ipcMain.handle("app:version", () => ({ ok: true, result: app.getVersion() }));
 
@@ -575,12 +617,13 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const v = validateDraftPut(args);
     if ("error" in v) return { ok: false, error: v.error };
-    const reg = registry.get(v.workspaceId);
+    const reg = workspaces.get(v.workspaceId);
     if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
     const out = await saveDraft(draftsBaseDir(), {
       workspaceType: reg.type,
       workspaceRoot: reg.root,
       distro: reg.distro,
+      linuxUser: reg.linuxUser,
       workspaceDisplayName: reg.displayName,
       relativePath: v.relativePath,
       baseRevisionHash: v.baseRevisionHash,
@@ -594,7 +637,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
+    const reg = workspaces.get(wid.workspaceId);
     if (!reg || typeof relativePath !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid draft request." } };
     }
@@ -602,6 +645,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       workspaceType: reg.type,
       workspaceRoot: reg.root,
       distro: reg.distro,
+      linuxUser: reg.linuxUser,
       relativePath: toCanonicalRel(relativePath),
     });
     if (!draft) return { ok: true, result: null };
@@ -620,7 +664,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = registry.get(wid.workspaceId);
+    const reg = workspaces.get(wid.workspaceId);
     if (!reg || typeof relativePath !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid draft request." } };
     }
@@ -628,6 +672,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       workspaceType: reg.type,
       workspaceRoot: reg.root,
       distro: reg.distro,
+      linuxUser: reg.linuxUser,
       relativePath: toCanonicalRel(relativePath),
     });
     return { ok: true, result: null };

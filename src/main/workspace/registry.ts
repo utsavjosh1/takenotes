@@ -12,15 +12,28 @@ export type WorkspaceRegistration = {
   /** Trusted main-process-only root (native path or WSL Linux path). */
   root: string;
   distro?: string;
+  /** WSL Linux user (P1-03): part of the Connection identity. `Ubuntu /
+   * utsav` and `Ubuntu / work` are distinct workspaces even on one distro. */
+  linuxUser?: string;
 };
 
-/** Renderer-safe projection (no absolute roots). */
+/** Renderer-safe projection (no absolute roots). Distro + Linux user ride
+ * along explicitly so the status strip (P1-06) never infers identity from
+ * display text. */
 export function toWorkspaceInfo(reg: WorkspaceRegistration): {
   workspaceId: string;
   displayName: string;
   type: WorkspaceType;
+  distro?: string;
+  linuxUser?: string;
 } {
-  return { workspaceId: reg.id, displayName: reg.displayName, type: reg.type };
+  return {
+    workspaceId: reg.id,
+    displayName: reg.displayName,
+    type: reg.type,
+    ...(reg.distro === undefined ? {} : { distro: reg.distro }),
+    ...(reg.linuxUser === undefined ? {} : { linuxUser: reg.linuxUser }),
+  };
 }
 
 /** Native (direct-Node-filesystem) workspaces vs the WSL helper path. */
@@ -31,7 +44,7 @@ export function isNativeWorkspace(reg: WorkspaceRegistration): boolean {
 export class WorkspaceRegistry {
   private readonly workspaces = new Map<string, WorkspaceRegistration>();
 
-  register(type: WorkspaceType, displayName: string, root: string, distro?: string): WorkspaceRegistration {
+  register(type: WorkspaceType, displayName: string, root: string, distro?: string, linuxUser?: string): WorkspaceRegistration {
     const reg: WorkspaceRegistration = {
       id: randomUUID(),
       type,
@@ -39,6 +52,7 @@ export class WorkspaceRegistry {
       displayName,
       root,
       distro,
+      linuxUser,
     };
     this.workspaces.set(reg.id, reg);
     return reg;

@@ -97,8 +97,8 @@ export function formatShortcut(id: CommandId, platform: DesktopPlatform): string
 export function shortcutLabelsFor(platform: DesktopPlatform): Record<string, string> {
   const out: Record<string, string> = {};
   const ids: CommandId[] = [
-    "file.new", "file.save", "file.closeTab", "file.quickOpen", "file.closeWindow",
-    "workspace.search", "commandPalette.open", "editor.find", "settings.open",
+    "note.new", "editor.save", "note.close", "quickOpen.open", "app.closeWindow",
+    "search.open", "palette.open", "editor.find", "settings.open",
     "view.toggleSidebar", "view.toggleFocus", "view.nextTab", "view.prevTab",
     "tree.rename", "tree.trash",
   ];

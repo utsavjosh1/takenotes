@@ -137,6 +137,27 @@ input { font: inherit; color: inherit; }
 /* main column */
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--surface-editor); }
 
+/* split panes (P1-06): two-pane model. "vertical" = side-by-side
+ * (split right), "horizontal" = stacked (split down). */
+.split-wrap { flex: 1; display: flex; min-height: 0; min-width: 0; }
+.split-wrap.vertical { flex-direction: row; }
+.split-wrap.horizontal { flex-direction: column; }
+.pane { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.split-wrap.vertical .pane + .pane { border-left: 1px solid var(--border-subtle); }
+.split-wrap.horizontal .pane + .pane { border-top: 1px solid var(--border-subtle); }
+.pane-bar {
+  flex: none; display: flex; align-items: center;
+  min-height: 28px; padding: 0 var(--sp-8);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-sidebar);
+  font-size: 11px; color: var(--text-muted);
+}
+.pane.active .pane-bar { color: var(--text-secondary); }
+.pane-title { font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
+.pane-actions { margin-left: auto; display: flex; gap: var(--sp-8); }
+.pane-actions .link { background: none; border: none; padding: 2px 4px; font: inherit; color: inherit; cursor: pointer; }
+.pane-actions .link:hover { color: var(--text-primary); text-decoration: underline; }
+
 /* tabs */
 .tabstrip {
   height: var(--tabstrip-height); flex: none;

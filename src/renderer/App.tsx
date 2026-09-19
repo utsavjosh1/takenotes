@@ -1,19 +1,43 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import type { DirectoryEntry, SearchMatch, WorkspaceInfo, WslDistribution } from "../shared/contracts/ipc";
+import type { CommandListResult, DirectoryEntry, RecoverySnapshotMeta, SearchMatch, WorkspaceInfo, WslDistribution, WslLinuxUser } from "../shared/contracts/ipc";
 import { usePlatform } from "./hooks/use-platform";
 import { isWslKind, moveToTrashLabel, revealLabel, trashName } from "../shared/platform/filesystem";
-import type { CommandId } from "../shared/platform/keymap";
-import { useCodeMirrorEditor } from "./hooks/use-editor";
+import { COMMAND_DEFINITIONS, type CommandId } from "../shared/commands/registry";
 import { TitleBar, ActivityRail, StatusBar } from "./components/chrome";
+import { PaneView } from "./components/pane-view";
+import { buildWorkspaceIndex, workspaceIndex } from "./index/workspace-index";
+import { commandForKeyEvent } from "../shared/commands/hotkeys";
+import { indexedEntryToQuickOpenItem } from "../shared/commands/palette";
+import { parseSearchQuery } from "../shared/search/query";
+import { searchContent, searchFilenames } from "../shared/search/search";
 import { FileTree, type TreeState } from "./components/tree";
 import { SearchPanel, useDebouncedValue } from "./components/search";
 import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
-import { CommandMenu, type CommandItem, type PaletteMode } from "./components/palette";
+import { CommandMenu, type CommandItem } from "./components/palette";
 import { SettingsDialog } from "./components/settings";
 import { Icon } from "./components/icons";
 import stackedDarkUrl from "./assets/brand/takenotes-stacked-dark.svg";
 import stackedLightUrl from "./assets/brand/takenotes-stacked-light.svg";
-import { DEFAULT_SETTINGS, displayPath, fileName, joinRel, parentDir, type CtxMenu, type Settings, type TabState, type Toast } from "./components/types";
+import { DEFAULT_SETTINGS, displayPath, fileName, joinRel, parentDir, type CtxMenu, type Settings, type Toast } from "./components/types";
+import { friendlyError } from "./error-text";
+import {
+  activateDoc,
+  activatePane,
+  activeDoc,
+  applyRename,
+  closeDocInPane,
+  closePane,
+  createLayout,
+  markConflict,
+  markSaved,
+  markSaving,
+  openDocInPane,
+  paneDocs,
+  removeDocsForEntry,
+  resolveDoc,
+  splitPane,
+  updateDocContent,
+} from "./panes";
 
 let toastId = 1;
 
@@ -56,6 +80,22 @@ function safeDraftClear(workspaceId: string, relativePath: string): void {
   }
 }
 
+async function safeRecoveryCapture(args: {
+  workspaceId: string;
+  relativePath: string;
+  content: string;
+  reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
+}): Promise<void> {
+  try {
+    const bridge = window.takenotes.recovery;
+    if (!bridge || typeof bridge.captureChanged !== "function") return;
+    const res = await bridge.captureChanged(args);
+    if (!res.ok) console.error("[recovery] snapshot failed", { code: res.error.code, message: res.error.message });
+  } catch (err) {
+    console.error("[recovery] snapshot failed", err);
+  }
+}
+
 function loadSettings(): Settings {
   try {
     return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem("takenotes.settings") ?? "{}") };
@@ -68,12 +108,15 @@ export default function App(): JSX.Element {
   const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null);
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
   const [tree, setTree] = useState<TreeState>({ expanded: new Set(), children: new Map(), loading: new Set(), renaming: null, selected: null });
-  const [tabs, setTabs] = useState<TabState[]>([]);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+  // Pane layout (P1-06): shared open docs + explicit active pane. Dirty,
+  // revision baselines, conflict, and save progress live per DOCUMENT —
+  // saving one tab never alters another's state. Layout is window-local,
+  // never persisted.
+  const [layout, setLayout] = useState(() => createLayout());
   const [view, setView] = useState<"files" | "search">("files");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem("takenotes.sidebarWidth") ?? 240) || 240);
-  const [palette, setPalette] = useState<PaletteMode | null>(null);
+  const [palette, setPalette] = useState<{ initialQuery: string } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -83,18 +126,26 @@ export default function App(): JSX.Element {
   const [filenameHits, setFilenameHits] = useState<SearchMatch[]>([]);
   const [contentHits, setContentHits] = useState<SearchMatch[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [allFiles, setAllFiles] = useState<DirectoryEntry[]>([]);
   const [recents, setRecents] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("takenotes.recents") ?? "[]"); } catch { return []; } });
   const [recentWorkspaces, setRecentWorkspaces] = useState<{ name: string; kind: string }[]>(() => { try { return JSON.parse(localStorage.getItem("takenotes.recentWs") ?? "[]"); } catch { return []; } });
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
+  const [commandDefinitions, setCommandDefinitions] = useState<CommandListResult>([...COMMAND_DEFINITIONS]);
+  const [indexVersion, setIndexVersion] = useState(0);
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
-  const [saveState, setSaveState] = useState<"clean" | "dirty" | "saving" | "saved" | "conflict" | "error">("clean");
-  const [savedAt, setSavedAt] = useState<string>("");
   // Crash-recovery drafts (userData store, main process). Keyed by tab key.
   // This is RECOVERY data only: `Saved` is shown exclusively for bytes that
   // reached the note file. A persisted draft never flips the save indicator.
   const [recovery, setRecovery] = useState<Record<string, { content: string; updatedAt: number; stale: boolean; diskChanged: boolean }>>({});
-  const [wslDialog, setWslDialog] = useState<{ distros: WslDistribution[]; distro: string; path: string; error: string | null; connecting: boolean } | null>(null);
+  const [historyDialog, setHistoryDialog] = useState<{ docKey: string; loading: boolean; error: string | null; snapshots: RecoverySnapshotMeta[] } | null>(null);
+  const recoveryLastEditCapture = useRef<Record<string, number>>({});
+  const [wslDialog, setWslDialog] = useState<{
+    distros: WslDistribution[]; distro: string;
+    users: WslLinuxUser[]; linuxUser: string;
+    usersLoading: boolean; usersError: string | null;
+    path: string; error: string | null; connecting: boolean;
+  } | null>(null);
   // In-app software update dialog (ADR-0006). Null = hidden. Auto-checks
   // stay silent unless an update is actually available.
   type UpdatePhase = "checking" | "available" | "uptodate" | "downloading" | "verifying" | "launching" | "error";
@@ -110,7 +161,20 @@ export default function App(): JSX.Element {
   const platform = usePlatform();
   const sc = (id: CommandId): string => platform.shortcutLabel(id);
 
-  const activeTab = tabs.find((t) => t.key === activeKey) ?? null;
+  const activeTab = activeDoc(layout);
+  // Status save segment derives from the ACTIVE document (P1-06): a
+  // conflict elsewhere never poisons this indicator.
+  const docSaveView = !activeTab
+    ? ("clean" as const)
+    : activeTab.conflict
+      ? ("conflict" as const)
+      : activeTab.saving
+        ? ("saving" as const)
+        : activeTab.dirty
+          ? ("dirty" as const)
+          : activeTab.savedAt
+            ? ("saved" as const)
+            : ("clean" as const);
   const dragResize = useRef<{ startX: number; startW: number } | null>(null);
 
   /* ---------- helpers ---------- */
@@ -118,6 +182,20 @@ export default function App(): JSX.Element {
     const id = toastId++;
     setToasts((p) => [...p.slice(-3), { id, kind, text }]);
     if (kind === "info") setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 5000);
+  }, []);
+
+  /** Distinct error toasts (P1-04): the headline names the failure kind so
+   * PERMISSION_DENIED never reads as NOT_FOUND. Takes the structured
+   * `{ code, message }` every IPC result carries. */
+  const errToast = useCallback((error: { code: string; message: string }, prefix?: string) => {
+    const text = friendlyError(error.code, error.message);
+    toast(prefix ? `${prefix} — ${text}` : text, "error");
+  }, [toast]);
+
+  useEffect(() => {
+    void window.takenotes.commands.list().then((res) => {
+      if (res.ok) setCommandDefinitions(res.result);
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -159,9 +237,9 @@ export default function App(): JSX.Element {
       setTree((p) => ({ ...p, children: new Map(), expanded: new Set(), renaming: null }));
     } else {
       if (isWslKind(ws.type)) setWslError(res.error.message);
-      else toast(res.error.message, "error");
+      else errToast(res.error);
     }
-  }, [toast]);
+  }, [toast, errToast]);
 
   const rebuildAllFiles = useCallback(async (ws: WorkspaceInfo) => {
     // Quick-open index builds from directory.list, which is helper-backed
@@ -180,9 +258,21 @@ export default function App(): JSX.Element {
     setAllFiles(out);
   }, []);
 
+  // Parse-once index refresh (P1-07): runs async after open so the editor
+  // stays snappy; workspace-level failures surface like tree failures.
+  const refreshWorkspaceIndex = useCallback(async (ws: WorkspaceInfo) => {
+    const res = await buildWorkspaceIndex(window.takenotes, workspaceIndex, ws);
+    if (!res.ok) {
+      if (isWslKind(ws.type)) setWslError(res.error.message);
+      else errToast(res.error, "Couldn't build the search index");
+      return;
+    }
+    setIndexVersion((v) => v + 1);
+  }, [errToast]);
+
   const openWorkspace = useCallback(async (ws: WorkspaceInfo) => {
     setWorkspace(ws);
-    setTabs([]); setActiveKey(null); setSaveState("clean");
+    setLayout(createLayout()); setCursor({ line: 1, col: 1 });
     setRecentWorkspaces((p) => {
       const next = [{ name: ws.displayName, kind: ws.type }, ...p.filter((r) => r.name !== ws.displayName)].slice(0, 8);
       localStorage.setItem("takenotes.recentWs", JSON.stringify(next));
@@ -190,7 +280,9 @@ export default function App(): JSX.Element {
     });
     await refreshTree(ws);
     await rebuildAllFiles(ws);
-  }, [refreshTree, rebuildAllFiles]);
+    // Index builds in the background: open stays fast on big workspaces.
+    void refreshWorkspaceIndex(ws);
+  }, [refreshTree, rebuildAllFiles, refreshWorkspaceIndex]);
 
   const openLocal = useCallback(async () => {
     const res = await window.takenotes.workspace.openLocal();
@@ -198,23 +290,39 @@ export default function App(): JSX.Element {
     if (res.result) void openWorkspace(res.result);
   }, [openWorkspace, toast]);
 
+  const fetchWslUsers = useCallback(async (distro: string, base: NonNullable<typeof wslDialog>) => {
+    setWslDialog({ ...base, distro, users: [], linuxUser: "", usersLoading: true, usersError: null });
+    const res = await window.takenotes.workspace.listWslUsers(distro);
+    // The dialog may have closed or switched distros while loading: only
+    // apply results that still belong to the requested distro.
+    setWslDialog((cur) => {
+      if (!cur || cur.distro !== distro) return cur;
+      if (!res.ok) return { ...cur, users: [], linuxUser: "", usersLoading: false, usersError: res.error.message };
+      const def = res.result.find((u) => u.isDefault) ?? res.result[0];
+      return { ...cur, users: res.result, linuxUser: def?.username ?? "", usersLoading: false, usersError: null };
+    });
+  }, []);
+
   const openWslDialog = useCallback(async () => {
     const res = await window.takenotes.workspace.listWslDistributions();
     if (!res.ok) {
-      setWslDialog({ distros: [], distro: "", path: "~/notes", error: res.error.message, connecting: false });
+      setWslDialog({ distros: [], distro: "", users: [], linuxUser: "", usersLoading: false, usersError: null, path: "~/notes", error: res.error.message, connecting: false });
       return;
     }
-    setWslDialog({ distros: res.result, distro: res.result[0]?.name ?? "", path: "~/notes", error: null, connecting: false });
-  }, []);
+    const distro = res.result[0]?.name ?? "";
+    const base = { distros: res.result, distro, users: [] as WslLinuxUser[], linuxUser: "", usersLoading: true, usersError: null as string | null, path: "~/notes", error: null as string | null, connecting: false };
+    setWslDialog(base);
+    if (distro) void fetchWslUsers(distro, base);
+  }, [fetchWslUsers]);
 
   const connectWsl = useCallback(async () => {
-    if (!wslDialog || !wslDialog.distro) return;
+    if (!wslDialog || !wslDialog.distro || !wslDialog.linuxUser) return;
     setWslDialog({ ...wslDialog, connecting: true, error: null });
-    const res = await window.takenotes.workspace.connectWsl(wslDialog.distro, wslDialog.path || "~/notes");
+    const res = await window.takenotes.workspace.connectWsl(wslDialog.distro, wslDialog.linuxUser, wslDialog.path || "~/notes");
     setWslDialog({ ...wslDialog, connecting: false, error: res.ok ? null : res.error.message });
     if (res.ok) {
       setWslDialog(null);
-      toast(`Connecting to ${wslDialog.distro}…`);
+      toast(`Connecting to ${wslDialog.distro} as ${wslDialog.linuxUser}…`);
       await openWorkspace(res.result);
     }
   }, [wslDialog, openWorkspace, toast]);
@@ -259,13 +367,17 @@ export default function App(): JSX.Element {
     }
   }, []);
 
-  const openFile = useCallback(async (relativePath: string) => {
+  // Every opener names its pane explicitly (default: the active pane) so
+  // tree/search/palette actions always land in a known place.
+  const openFile = useCallback(async (relativePath: string, paneId?: string) => {
     if (!workspace) return;
+    const targetPane = paneId ?? layout.activePaneId;
     const key = `${workspace.workspaceId}:${relativePath}`;
-    const existing = tabs.find((t) => t.key === key);
-    if (existing) {
-      setActiveKey(key);
-      setSaveState(existing.conflict ? "conflict" : existing.dirty ? "dirty" : "clean");
+    if (layout.docs[key]) {
+      // Already open: reveal it. State (dirty/conflict/baseline) is kept —
+      // reopening never resets revision baselines.
+      setLayout((l) => activateDoc(l, targetPane, key));
+      setCursor({ line: 1, col: 1 });
       return;
     }
     // Recovery draft check runs alongside the read (paths only, never contents, in logs).
@@ -287,23 +399,19 @@ export default function App(): JSX.Element {
       if ((res.error.code === "NOT_FOUND" || res.error.code === "INVALID_PATH") && draft && draft.content) {
         // File deleted/moved externally: retain the draft as an unsaved tab.
         // The note file is untouched (it is already gone); nothing is written.
-        setTabs((p) => [...p, { key, relativePath, content: draft.content, dirty: true, revisionHash: "", newlineStyle: "lf", hadBom: false, conflict: false, loadError: null }]);
-        setActiveKey(key);
-        setSaveState("dirty");
+        setLayout((l) => openDocInPane(l, targetPane, { key, relativePath, content: draft.content, dirty: true, revisionHash: "", newlineStyle: "lf", hadBom: false, conflict: false, loadError: null, saving: false, savedAt: "" }));
+        setCursor({ line: 1, col: 1 });
         setRecovery((p) => ({ ...p, [key]: { content: draft.content, updatedAt: draft.updatedAt, stale: draft.stale, diskChanged: true } }));
         toast("The original file is gone. Your unsaved draft was retained — save it to keep it.", "error");
         return;
       }
       if (res.error.code === "TOO_LARGE" || res.error.code === "UNSUPPORTED_ENCODING") {
-        setTabs((p) => [...p, { key, relativePath, content: "", dirty: false, revisionHash: "", newlineStyle: "lf", hadBom: false, conflict: false, loadError: res.error.message }]);
-        setActiveKey(key);
-      } else toast(res.error.message, "error");
+        setLayout((l) => openDocInPane(l, targetPane, { key, relativePath, content: "", dirty: false, revisionHash: "", newlineStyle: "lf", hadBom: false, conflict: false, loadError: res.error.message, saving: false, savedAt: "" }));
+      } else errToast(res.error, `Couldn't open ${fileName(relativePath)}`);
       return;
     }
     const file = res.result;
-    setTabs((p) => [...p, { key, relativePath, content: file.content, dirty: false, revisionHash: file.revision.hash, newlineStyle: file.newlineStyle, hadBom: file.hadBom, conflict: false, loadError: null }]);
-    setActiveKey(key);
-    setSaveState("clean");
+    setLayout((l) => openDocInPane(l, targetPane, { key, relativePath, content: file.content, dirty: false, revisionHash: file.revision.hash, newlineStyle: file.newlineStyle, hadBom: file.hadBom, conflict: false, loadError: null, saving: false, savedAt: "" }));
     setCursor({ line: 1, col: 1 });
     if (draft && draft.content !== file.content) {
       // A recovery draft exists and differs from disk: never auto-apply.
@@ -323,99 +431,124 @@ export default function App(): JSX.Element {
       localStorage.setItem("takenotes.recents", JSON.stringify(next));
       return next;
     });
-  }, [workspace, tabs, toast]);
+  }, [workspace, layout, toast, errToast]);
 
-  const onEdit = useCallback((content: string) => {
-    if (!activeKey) return;
-    setTabs((p) => p.map((t) => (t.key === activeKey ? { ...t, content, dirty: true } : t)));
-    setSaveState("dirty");
-  }, [activeKey]);
+  // Edits name their document: with two panes on one file, both render the
+  // same shared doc, so either pane's keystrokes dirty both views at once.
+  const onEdit = useCallback((docKey: string, content: string) => {
+    setLayout((l) => updateDocContent(l, docKey, content));
+    const doc = layout.docs[docKey];
+    if (!workspace || !doc || doc.loadError) return;
+    const now = Date.now();
+    const last = recoveryLastEditCapture.current[docKey] ?? 0;
+    if (last === 0 || now - last >= 5 * 60 * 1000) {
+      recoveryLastEditCapture.current[docKey] = now;
+      void safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: doc.relativePath, content, reason: "edit" });
+    }
+  }, [workspace, layout]);
 
-  const save = useCallback(async () => {
-    if (!workspace || !activeTab || activeTab.loadError) return;
-    setSaveState("saving");
+  // Save names its document explicitly (default: the active pane's active
+  // doc). Only the target doc's dirty/conflict/baseline change — neighbors
+  // are untouched. No save/conflict semantics change (P1-05 owns those).
+  const save = useCallback(async (docKey?: string) => {
+    if (!workspace) return;
+    const target = docKey ? layout.docs[docKey] : activeDoc(layout);
+    if (!target || target.loadError) return;
+    const key = target.key;
+    await safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: target.relativePath, content: target.content, reason: "save" });
+    recoveryLastEditCapture.current[key] = Date.now();
+    setLayout((l) => markSaving(l, key, true));
     const res = await window.takenotes.file.write({
       workspaceId: workspace.workspaceId,
-      relativePath: activeTab.relativePath,
-      content: activeTab.content,
-      expectedHash: activeTab.revisionHash,
-      newlineStyle: activeTab.newlineStyle,
-      hadBom: activeTab.hadBom,
+      relativePath: target.relativePath,
+      content: target.content,
+      expectedHash: target.revisionHash,
+      newlineStyle: target.newlineStyle,
+      hadBom: target.hadBom,
     });
     if (!res.ok) {
       if (res.error.code === "CONFLICT") {
-        setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, conflict: true } : t)));
-        setSaveState("conflict");
+        setLayout((l) => markConflict(l, key));
       } else {
-        setSaveState("error");
-        toast(`Couldn't save ${fileName(activeTab.relativePath)} — ${res.error.message} Your edits are still safe.`, "error");
+        setLayout((l) => markSaving(l, key, false));
+        errToast(res.error, `Couldn't save ${fileName(target.relativePath)}. Your edits are still safe`);
       }
       return;
     }
-    setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, dirty: false, conflict: false, revisionHash: res.result.hash } : t)));
-    setSaveState("saved");
-    setSavedAt(new Date().toLocaleTimeString());
+    setLayout((l) => markSaved(l, key, res.result.hash, new Date().toLocaleTimeString()));
+    // File changed → replace exactly this index entry (content + the
+    // authoritative post-write revision: zero extra reads).
+    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res.result);
+    setIndexVersion((v) => v + 1);
     // The file now holds the truth: the recovery draft is obsolete.
     setRecovery((p) => {
-      if (!(activeTab.key in p)) return p;
+      if (!(key in p)) return p;
       const next = { ...p };
-      delete next[activeTab.key];
+      delete next[key];
       return next;
     });
-    safeDraftClear(workspace.workspaceId, activeTab.relativePath);
+    safeDraftClear(workspace.workspaceId, target.relativePath);
     void rebuildAllFiles(workspace);
-  }, [workspace, activeTab, toast, rebuildAllFiles]);
+  }, [workspace, layout, toast, errToast, rebuildAllFiles]);
 
-  const reloadFromDisk = useCallback(async () => {
-    if (!workspace || !activeTab) return;
+  const reloadFromDisk = useCallback(async (docKey?: string) => {
+    if (!workspace) return;
+    const target = docKey ? layout.docs[docKey] : activeDoc(layout);
+    if (!target) return;
     console.error("[file-read] reload request", {
       workspaceId: workspace.workspaceId,
       workspaceType: workspace.type,
-      relativePath: activeTab.relativePath,
+      relativePath: target.relativePath,
     });
-    const res = await window.takenotes.file.read(workspace.workspaceId, activeTab.relativePath);
+    const res = await window.takenotes.file.read(workspace.workspaceId, target.relativePath);
     if (!res.ok) {
       console.error("[file-read] reload failed", {
         workspaceId: workspace.workspaceId,
         workspaceType: workspace.type,
-        relativePath: activeTab.relativePath,
+        relativePath: target.relativePath,
         code: res.error.code,
         message: res.error.message,
       });
-      toast(res.error.message, "error"); return; }
-    setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, content: res.result.content, dirty: false, conflict: false, revisionHash: res.result.revision.hash } : t)));
-    setSaveState("clean");
-  }, [workspace, activeTab, toast]);
+      errToast(res.error, "Couldn't reload from disk"); return; }
+    setLayout((l) => resolveDoc(l, target.key, res.result.content, res.result.revision.hash));
+  }, [workspace, layout, toast, errToast]);
 
-  const keepMyVersion = useCallback(async () => {
-    if (!workspace || !activeTab) return;
-    const res = await window.takenotes.file.read(workspace.workspaceId, activeTab.relativePath);
-    if (!res.ok) { toast(res.error.message, "error"); return; }
+  const keepMyVersion = useCallback(async (docKey?: string) => {
+    if (!workspace) return;
+    const target = docKey ? layout.docs[docKey] : activeDoc(layout);
+    if (!target) return;
+    const res = await window.takenotes.file.read(workspace.workspaceId, target.relativePath);
+    if (!res.ok) { errToast(res.error); return; }
     const diskHash = res.result.revision.hash;
     const res2 = await window.takenotes.file.write({
-      workspaceId: workspace.workspaceId, relativePath: activeTab.relativePath, content: activeTab.content,
-      expectedHash: diskHash, newlineStyle: activeTab.newlineStyle, hadBom: activeTab.hadBom,
+      workspaceId: workspace.workspaceId, relativePath: target.relativePath, content: target.content,
+      expectedHash: diskHash, newlineStyle: target.newlineStyle, hadBom: target.hadBom,
     });
-    if (!res2.ok) { toast(res2.error.message, "error"); return; }
-    setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, dirty: false, conflict: false, revisionHash: res2.result.hash } : t)));
-    setSaveState("saved");
-  }, [workspace, activeTab, toast]);
+    if (!res2.ok) { errToast(res2.error); return; }
+    setLayout((l) => markSaved(l, target.key, res2.result.hash, new Date().toLocaleTimeString()));
+    // Conflict resolved by overwrite: the file changed → re-parse it.
+    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res2.result);
+    setIndexVersion((v) => v + 1);
+  }, [workspace, layout, toast, errToast]);
 
-  const closeTab = useCallback((key: string) => {
-    // Closing a tab does NOT delete its recovery draft: a quit-with-dirty
-    // followed by a restart must still offer recovery. Drafts die on save
-    // (draft:clear) or explicit Discard in the recovery banner.
-    setTabs((p) => {
-      const i = p.findIndex((t) => t.key === key);
-      const next = p.filter((t) => t.key !== key);
-      if (key === activeKey) {
-        const nb = next[Math.min(i, next.length - 1)];
-        setActiveKey(nb ? nb.key : null);
-        setSaveState(nb ? (nb.conflict ? "conflict" : nb.dirty ? "dirty" : "clean") : "clean");
-      }
-      return next;
-    });
-  }, [activeKey]);
+  const closeTab = useCallback((paneId: string, key: string) => {
+    // Dirty tabs are never silently discarded: flush the dirty buffer into
+    // the EXISTING draft store first (P1-10 owns recovery; this only feeds
+    // it — no second unsaved-content system). Closing still does NOT delete
+    // drafts: a quit-with-dirty followed by restart must offer recovery.
+    const doc = layout.docs[key];
+    if (workspace && doc && doc.dirty && !doc.loadError && doc.revisionHash) {
+      void safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: doc.relativePath, content: doc.content, reason: "close" });
+      safeDraftPut({
+        workspaceId: workspace.workspaceId,
+        relativePath: doc.relativePath,
+        baseRevisionHash: doc.revisionHash,
+        content: doc.content,
+      });
+    }
+    setLayout((l) => closeDocInPane(l, paneId, key).layout);
+    setCursor({ line: 1, col: 1 });
+  }, [workspace, layout]);
 
   /* ---------- crash-recovery drafts ---------- */
   // Debounced (750 ms): keystroke bursts collapse into one main-process
@@ -451,36 +584,97 @@ export default function App(): JSX.Element {
         clearTimeout(draftTimer.current);
         draftTimer.current = null;
       }
-      if (workspace && activeTab?.dirty && !activeTab.loadError && activeTab.revisionHash) {
-        safeDraftPut({
-          workspaceId: workspace.workspaceId,
-          relativePath: activeTab.relativePath,
-          baseRevisionHash: activeTab.revisionHash,
-          content: activeTab.content,
-        });
+      if (workspace) {
+        for (const doc of Object.values(layout.docs)) {
+          if (doc.dirty && !doc.loadError && doc.revisionHash) {
+            void safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: doc.relativePath, content: doc.content, reason: "shutdown" });
+            safeDraftPut({
+              workspaceId: workspace.workspaceId,
+              relativePath: doc.relativePath,
+              baseRevisionHash: doc.revisionHash,
+              content: doc.content,
+            });
+          }
+        }
       }
     };
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
-  }, [workspace, activeTab]);
+  }, [workspace, layout]);
 
   const restoreDraft = useCallback((key: string) => {
     const rec = recovery[key];
     if (!rec) return;
-    setTabs((tabs) => tabs.map((t) => (t.key === key ? { ...t, content: rec.content, dirty: true } : t)));
-    setSaveState("dirty");
+    setLayout((l) => updateDocContent(l, key, rec.content));
   }, [recovery]);
 
   const discardDraft = useCallback((key: string) => {
     if (!workspace) return;
-    const tab = tabs.find((t) => t.key === key);
-    if (tab) safeDraftClear(workspace.workspaceId, tab.relativePath);
+    const doc = layout.docs[key];
+    if (doc) safeDraftClear(workspace.workspaceId, doc.relativePath);
     setRecovery((p) => {
       const next = { ...p };
       delete next[key];
       return next;
     });
-  }, [workspace, tabs]);
+  }, [workspace, layout]);
+
+  const openHistory = useCallback(async (docKey?: string) => {
+    if (!workspace) return;
+    const doc = docKey ? layout.docs[docKey] : activeDoc(layout);
+    if (!doc) return;
+    setHistoryDialog({ docKey: doc.key, loading: true, error: null, snapshots: [] });
+    try {
+      const res = await window.takenotes.recovery.list(workspace.workspaceId, doc.relativePath);
+      if (!res.ok) {
+        setHistoryDialog({ docKey: doc.key, loading: false, error: res.error.message, snapshots: [] });
+        return;
+      }
+      setHistoryDialog({ docKey: doc.key, loading: false, error: null, snapshots: res.result });
+    } catch (err) {
+      setHistoryDialog({ docKey: doc.key, loading: false, error: String(err), snapshots: [] });
+    }
+  }, [workspace, layout]);
+
+  const copyRecoverySnapshot = useCallback(async (snapshotId: string) => {
+    const res = await window.takenotes.recovery.read(snapshotId);
+    if (!res.ok) { errToast(res.error, "Couldn't copy recovery snapshot"); return; }
+    await navigator.clipboard.writeText(res.result.content);
+    toast("Copied recovery snapshot contents.");
+  }, [errToast, toast]);
+
+  const restoreRecoverySnapshot = useCallback(async (snapshotId: string) => {
+    if (!workspace || !historyDialog) return;
+    const doc = layout.docs[historyDialog.docKey];
+    if (!doc || doc.loadError) return;
+    if (!window.confirm(`Restore this recovery snapshot over ${fileName(doc.relativePath)}? The current editor content will be snapshotted first.`)) return;
+    const res = await window.takenotes.recovery.restore({
+      workspaceId: workspace.workspaceId,
+      relativePath: doc.relativePath,
+      snapshotId,
+      currentContent: doc.content,
+      expectedHash: doc.revisionHash,
+      newlineStyle: doc.newlineStyle,
+      hadBom: doc.hadBom,
+    });
+    if (!res.ok) {
+      if (res.error.code === "CONFLICT") setLayout((l) => markConflict(l, doc.key));
+      errToast(res.error, "Couldn't restore recovery snapshot");
+      return;
+    }
+    setLayout((l) => resolveDoc(l, doc.key, res.result.content, res.result.revision.hash));
+    workspaceIndex.upsert(workspace.workspaceId, doc.relativePath, res.result.content, res.result.revision);
+    setIndexVersion((v) => v + 1);
+    safeDraftClear(workspace.workspaceId, doc.relativePath);
+    setRecovery((p) => {
+      if (!(doc.key in p)) return p;
+      const next = { ...p };
+      delete next[doc.key];
+      return next;
+    });
+    await openHistory(doc.key);
+    toast("Restored recovery snapshot. The previous current content was snapshotted first.");
+  }, [workspace, historyDialog, layout, errToast, toast, openHistory]);
 
   /* ---------- tree ops ---------- */
   const toggleDir = useCallback(async (dir: string) => {
@@ -503,20 +697,37 @@ export default function App(): JSX.Element {
       } else {
         expanded.delete(dir);
         setTree((p) => ({ ...p, expanded, loading: loading2 }));
-        toast(res.error.message, "error");
+        errToast(res.error);
       }
       return;
     }
     setTree((p) => ({ ...p, expanded }));
-  }, [workspace, tree, toast]);
+  }, [workspace, tree, toast, errToast]);
 
   const commitCreate = useCallback(async () => {
     if (!workspace || !creating || !createName.trim()) return;
     const name = createName.trim();
+    // Folders go through directory.create; notes through file.create (parents
+    // created implicitly). Both refresh the tree when complete.
+    if (creating.folder) {
+      const rel = joinRel(creating.dir, name);
+      const res = await window.takenotes.directory.create(workspace.workspaceId, rel);
+      if (!res.ok) { errToast(res.error, `Couldn't create folder "${name}"`); return; }
+      setCreating(null); setCreateName("");
+      if (creating.dir) {
+        const res2 = await window.takenotes.directory.list(workspace.workspaceId, creating.dir);
+        if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(creating.dir, res2.result) }));
+      } else await refreshTree(workspace);
+      await rebuildAllFiles(workspace);
+      return;
+    }
     const rel = joinRel(creating.dir, name);
-    const target = creating.folder ? joinRel(rel, "untitled.md") : (/\.md$/i.test(rel) ? rel : `${rel}.md`);
+    const target = (/\.md$/i.test(rel) ? rel : `${rel}.md`);
     const res = await window.takenotes.file.create(workspace.workspaceId, target);
-    if (!res.ok) { toast(res.error.message, "error"); return; }
+    if (!res.ok) { errToast(res.error, `Couldn't create "${target}"`); return; }
+    // Created files are empty: index the blank entry with its revision.
+    workspaceIndex.upsert(workspace.workspaceId, target, "", res.result);
+    setIndexVersion((v) => v + 1);
     setCreating(null); setCreateName("");
     if (creating.dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, creating.dir);
@@ -524,127 +735,197 @@ export default function App(): JSX.Element {
     } else await refreshTree(workspace);
     await rebuildAllFiles(workspace);
     await openFile(target);
-  }, [workspace, creating, createName, toast, refreshTree, rebuildAllFiles, openFile]);
+  }, [workspace, creating, createName, toast, errToast, refreshTree, rebuildAllFiles, openFile]);
 
   const commitRename = useCallback(async (entry: DirectoryEntry, newName: string) => {
     if (!workspace) return;
     const dir = parentDir(entry.relativePath);
     const newRel = joinRel(dir, newName);
-    const res = await window.takenotes.file.rename(workspace.workspaceId, entry.relativePath, newRel);
+    // Folders rename through directory.rename; files through file.rename.
+    const res = entry.kind === "directory"
+      ? await window.takenotes.directory.rename(workspace.workspaceId, entry.relativePath, newRel)
+      : await window.takenotes.file.rename(workspace.workspaceId, entry.relativePath, newRel);
     setTree((p) => ({ ...p, renaming: null }));
-    if (!res.ok) { toast(res.error.message, "error"); return; }
-    setTabs((p) => p.map((t) => {
-      if (t.relativePath !== entry.relativePath && !t.relativePath.startsWith(`${entry.relativePath}/`)) return t;
-      const suffix = t.relativePath.slice(entry.relativePath.length);
-      const nr = newRel + suffix;
-      return { ...t, key: `${workspace.workspaceId}:${nr}`, relativePath: nr };
-    }));
+    if (!res.ok) { errToast(res.error, "Couldn't rename"); return; }
+    // Rename remaps open keys in place: baselines survive the rename.
+    setLayout((l) => applyRename(l, workspace.workspaceId, entry.relativePath, newRel));
+    // Rename moves the index entry without re-parsing (bytes unchanged).
+    if (entry.kind === "directory") workspaceIndex.movePrefix(workspace.workspaceId, entry.relativePath, newRel);
+    else workspaceIndex.move(workspace.workspaceId, entry.relativePath, newRel);
+    setIndexVersion((v) => v + 1);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
       if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
     } else await refreshTree(workspace);
     await rebuildAllFiles(workspace);
-  }, [workspace, toast, refreshTree, rebuildAllFiles]);
+  }, [workspace, toast, errToast, refreshTree, rebuildAllFiles]);
 
-  const trashEntry = useCallback(async (entry: DirectoryEntry) => {
+  const deleteDirectory = useCallback(async (entry: DirectoryEntry) => {
     if (!workspace) return;
-    if (settings.confirmTrash && !window.confirm(`Move "${entry.name}" to trash?`)) return;
-    const res = await window.takenotes.file.trash(workspace.workspaceId, entry.relativePath);
-    if (!res.ok) { toast(res.error.message, "error"); return; }
-    setTabs((p) => p.filter((t) => t.relativePath !== entry.relativePath && !t.relativePath.startsWith(`${entry.relativePath}/`)));
+    // WSL folders delete permanently in P1 (helper `directory.delete`):
+    // label it honestly, never as Recycle Bin trash.
+    const wslDel = isWslKind(workspace.type);
+    if (settings.confirmTrash && !window.confirm(wslDel ? `Permanently delete folder "${entry.name}"? This cannot be undone.` : `Delete folder "${entry.name}"?`)) return;
+    const res = await window.takenotes.directory.delete(workspace.workspaceId, entry.relativePath);
+    if (!res.ok) {
+      // Non-empty folders need an explicit recursive confirm (no silent wipe).
+      if (res.error.code === "DIRECTORY_NOT_EMPTY") {
+        if (!window.confirm(`"${entry.name}" is not empty. Delete it and everything inside?`)) return;
+        const res2 = await window.takenotes.directory.delete(workspace.workspaceId, entry.relativePath, true);
+        if (!res2.ok) { errToast(res2.error, `Couldn't delete folder "${entry.name}"`); return; }
+      } else {
+        errToast(res.error, `Couldn't delete folder "${entry.name}"`);
+        return;
+      }
+    }
+    setLayout((l) => removeDocsForEntry(l, workspace.workspaceId, entry.relativePath));
+    // Folder delete drops the whole index prefix (exact + everything under).
+    workspaceIndex.removePrefix(workspace.workspaceId, entry.relativePath);
+    setIndexVersion((v) => v + 1);
     const dir = parentDir(entry.relativePath);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
       if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
     } else await refreshTree(workspace);
     await rebuildAllFiles(workspace);
-    toast(`Moved "${entry.name}" to trash. Recoverable from ${trashName(platform.platform)} — ${moveToTrashLabel(platform.platform)}.`);
-  }, [workspace, settings.confirmTrash, toast, refreshTree, rebuildAllFiles]);
+    toast(`Deleted folder "${entry.name}".`);
+  }, [workspace, settings.confirmTrash, toast, errToast, refreshTree, rebuildAllFiles]);
 
-  /* ---------- search ---------- */
+  const trashEntry = useCallback(async (entry: DirectoryEntry) => {
+    if (!workspace) return;
+    // WSL delete is permanent-delete in P1 (helper `file.delete`): label it
+    // honestly — never "Move to trash" / Recycle Bin for WSL workspaces.
+    const wsl = isWslKind(workspace.type);
+    if (settings.confirmTrash && !window.confirm(wsl ? `Permanently delete "${entry.name}"? This cannot be undone.` : `Move "${entry.name}" to trash?`)) return;
+    const res = await window.takenotes.file.trash(workspace.workspaceId, entry.relativePath);
+    if (!res.ok) { errToast(res.error, wsl ? `Couldn't delete "${entry.name}"` : undefined); return; }
+    setLayout((l) => removeDocsForEntry(l, workspace.workspaceId, entry.relativePath));
+    workspaceIndex.removePrefix(workspace.workspaceId, entry.relativePath);
+    setIndexVersion((v) => v + 1);
+    const dir = parentDir(entry.relativePath);
+    if (dir) {
+      const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
+      if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
+    } else await refreshTree(workspace);
+    await rebuildAllFiles(workspace);
+    if (isWslKind(workspace.type)) toast(`Permanently deleted "${entry.name}". This cannot be undone — WSL workspaces don't use the ${trashName(platform.platform)}.`);
+    else toast(`Moved "${entry.name}" to trash. Recoverable from ${trashName(platform.platform)} — ${moveToTrashLabel(platform.platform)}.`);
+  }, [workspace, settings.confirmTrash, toast, errToast, refreshTree, rebuildAllFiles, platform.platform]);
+
+  const removeEntry = useCallback(async (entry: DirectoryEntry) => {
+    // Folders delete through directory.delete; files move to OS trash.
+    if (entry.kind === "directory") return deleteDirectory(entry);
+    return trashEntry(entry);
+  }, [deleteDirectory, trashEntry]);
+
+  /* ---------- search (P1-08: in-memory index, zero filesystem reads) ---------- */
   const debouncedQuery = useDebouncedValue(searchQuery, 250);
   useEffect(() => {
     if (!workspace || !debouncedQuery.trim()) {
-      setFilenameHits([]); setContentHits([]); setSearching(false);
+      setFilenameHits([]); setContentHits([]); setSearchError(null); setSearching(false);
       return;
     }
-    let cancelled = false;
-    setSearching(true);
-    void (async () => {
-      const q = debouncedQuery.trim();
-      const [f, c] = await Promise.all([
-        window.takenotes.search.files(workspace.workspaceId, q),
-        window.takenotes.search.content(workspace.workspaceId, q),
-      ]);
-      if (cancelled) return;
+    // Queries read the live P1-07 index only — never IPC, never the
+    // filesystem. `layout` in deps re-runs the query after saves, renames,
+    // and deletes, so results follow mutations with no rescan.
+    const parsed = parseSearchQuery(debouncedQuery.trim());
+    if (!parsed.ok) {
+      setFilenameHits([]); setContentHits([]);
+      setSearchError(parsed.error.message);
       setSearching(false);
-      setFilenameHits(f.ok ? f.result.slice(0, 20) : []);
-      setContentHits(c.ok ? c.result.slice(0, 60) : []);
-    })();
-    return () => { cancelled = true; };
-  }, [debouncedQuery, workspace]);
+      return;
+    }
+    setSearchError(null);
+    setSearching(false);
+    setFilenameHits(searchFilenames(workspaceIndex, workspace.workspaceId, parsed.query).slice(0, 20));
+    setContentHits(searchContent(workspaceIndex, workspace.workspaceId, parsed.query).slice(0, 60));
+  }, [debouncedQuery, workspace, layout]);
 
   /* ---------- commands ---------- */
-  const runCommand = useCallback((id: string) => {
+  const rememberCommand = useCallback((id: CommandId) => {
     setRecentCommands((p) => [id, ...p.filter((c) => c !== id)].slice(0, 10));
   }, []);
 
   const newNote = useCallback(() => {
-    runCommand("new-note");
     if (!workspace) { void openLocal(); return; }
     const sel = tree.selected;
     const dir = sel && entries.concat(...tree.children.values()).some((e) => e.relativePath === sel && e.kind === "directory") ? sel : "";
     setView("files"); setSidebarOpen(true);
     setCreating({ dir, folder: false }); setCreateName("");
-  }, [workspace, openLocal, tree.selected, tree.children, entries, runCommand]);
+  }, [workspace, openLocal, tree.selected, tree.children, entries]);
 
-  /* Semantic command table. Shortcut labels come from the platform registry
-   * (§117–§119): never hardcode `Ctrl+P` in shared components. WSL entries
-   * only exist where the capability exists (§185). */
-  const commands: CommandItem[] = useMemo(() => {
-    const items: CommandItem[] = [
-      { id: "file.new", title: "Create new note", shortcut: sc("file.new"), run: () => newNote() },
-      { id: "file.save", title: "Save current file", shortcut: sc("file.save"), run: () => void save() },
-      { id: "file.quickOpen", title: "Quick open…", shortcut: sc("file.quickOpen"), run: () => setPalette({ kind: "quick" }) },
-      { id: "workspace.openLocal", title: "Open folder…", run: () => void openLocal() },
-      { id: "view.toggleSidebar", title: "Toggle sidebar", shortcut: sc("view.toggleSidebar"), run: () => setSidebarOpen((v) => !v) },
-      { id: "view.toggleFocus", title: "Toggle focus mode", shortcut: sc("view.toggleFocus"), run: () => setFocusMode((v) => !v) },
-      { id: "view.fullWidth", title: "Toggle full-width editor", run: () => setSettings((s) => ({ ...s, fullWidth: !s.fullWidth })) },
-      { id: "file.closeTab", title: "Close current tab", shortcut: sc("file.closeTab"), run: () => { if (activeKey) closeTab(activeKey); } },
-      { id: "workspace.refresh", title: "Refresh file tree", run: () => { if (workspace) { void refreshTree(workspace); void rebuildAllFiles(workspace); } } },
-      { id: "settings.open", title: "Open settings", shortcut: sc("settings.open"), run: () => setSettingsOpen(true) },
-    ];
-    if (platform.capabilities.updates) {
-      items.push({ id: "app.checkForUpdates", title: "Check for updates…", run: () => void checkForUpdates(true) });
-    }
-    if (platform.capabilities.wsl) {
-      items.splice(4, 0, { id: "workspace.openWsl", title: "Open WSL folder…", run: () => void openWslDialog() });
-    }
-    return items;
-  }, [newNote, save, openLocal, openWslDialog, checkForUpdates, activeKey, closeTab, workspace, refreshTree, rebuildAllFiles, sc, platform.capabilities.wsl, platform.capabilities.updates]);
+  // Split helpers: two-pane model, window-local, never persisted.
+  const splitActive = useCallback((orientation: "horizontal" | "vertical") => {
+    setLayout((l) => splitPane(l, l.activePaneId, orientation));
+    setCursor({ line: 1, col: 1 });
+  }, []);
+
+  const closeActivePane = useCallback(() => {
+    setLayout((l) => closePane(l, l.activePaneId));
+    setCursor({ line: 1, col: 1 });
+  }, []);
+
+  const focusOtherPane = useCallback(() => {
+    setLayout((l) => {
+      if (l.panes.length < 2) return l;
+      const i = l.panes.findIndex((p) => p.id === l.activePaneId);
+      const next = l.panes[(i + 1) % l.panes.length]!;
+      return activatePane(l, next.id);
+    });
+    setCursor({ line: 1, col: 1 });
+  }, []);
+
+  const commandHandlers = useMemo<Partial<Record<CommandId, () => void>>>(() => ({
+    "note.new": () => newNote(),
+    "note.open": () => setPalette({ initialQuery: "" }),
+    "note.close": () => { const a = activeDoc(layout); if (a) closeTab(layout.activePaneId, a.key); },
+    "workspace.open": () => { void openLocal(); },
+    "workspace.openWsl": () => { void openWslDialog(); },
+    "workspace.close": () => { if (workspace) { void window.takenotes.workspace.close(workspace.workspaceId); setWorkspace(null); setLayout(createLayout()); } },
+    "workspace.refresh": () => { if (workspace) { void refreshTree(workspace); void rebuildAllFiles(workspace); void refreshWorkspaceIndex(workspace); } },
+    "editor.save": () => { void save(); },
+    "search.open": () => { setView("search"); setSidebarOpen(true); },
+    "quickOpen.open": () => setPalette({ initialQuery: "" }),
+    "palette.open": () => setPalette({ initialQuery: ">" }),
+    "view.toggleSidebar": () => setSidebarOpen((v) => !v),
+    "view.toggleFocus": () => setFocusMode((v) => !v),
+    "pane.splitVertical": () => splitActive("vertical"),
+    "pane.splitHorizontal": () => splitActive("horizontal"),
+    "pane.close": () => closeActivePane(),
+    "pane.focusNext": () => focusOtherPane(),
+    "settings.open": () => setSettingsOpen(true),
+    "app.checkForUpdates": () => { void checkForUpdates(true); },
+    "app.closeWindow": () => window.close(),
+    "editor.find": () => undefined,
+  }), [newNote, layout, closeTab, openLocal, openWslDialog, workspace, refreshTree, rebuildAllFiles, refreshWorkspaceIndex, save, splitActive, closeActivePane, focusOtherPane, checkForUpdates]);
+
+  const commandEnabled = useCallback((id: CommandId): boolean => {
+    if (id === "editor.save" || id === "note.close") return activeDoc(layout) !== null;
+    if (id === "pane.close" || id === "pane.focusNext") return layout.panes.length > 1;
+    if (id === "workspace.refresh" || id === "workspace.close" || id === "search.open") return workspace !== null;
+    if (id === "workspace.openWsl") return platform.capabilities.wsl;
+    if (id === "app.checkForUpdates") return platform.capabilities.updates;
+    if (id === "workspace.switch") return false;
+    return commandHandlers[id] !== undefined;
+  }, [layout, workspace, platform.capabilities.wsl, platform.capabilities.updates, commandHandlers]);
+
+  const executeCommand = useCallback((id: CommandId) => {
+    const run = commandHandlers[id];
+    if (!run || !commandEnabled(id)) return;
+    rememberCommand(id);
+    run();
+  }, [commandHandlers, commandEnabled, rememberCommand]);
+
+  const commands: CommandItem[] = useMemo(() => commandDefinitions.map((definition) => ({
+    ...definition,
+    shortcut: sc(definition.id),
+    enabled: commandEnabled(definition.id),
+    run: () => executeCommand(definition.id),
+  })), [commandDefinitions, sc, commandEnabled, executeCommand]);
 
   /* Native menu → same command dispatch (§59). Menu accelerators and the
    * palette forward CommandIds here; mouse and keyboard share one path. */
-  useEffect(() => {
-    const off = window.takenotes.events.onCommand((id: CommandId) => {
-      switch (id) {
-        case "file.new": newNote(); break;
-        case "file.save": void save(); break;
-        case "file.quickOpen": setPalette({ kind: "quick" }); break;
-        case "file.closeTab": if (activeKey) closeTab(activeKey); break;
-        case "commandPalette.open": setPalette({ kind: "commands" }); break;
-        case "workspace.search": setView("search"); setSidebarOpen(true); break;
-        case "editor.find": break; // CodeMirror search keymap owns editor find (§58)
-        case "settings.open": setSettingsOpen(true); break;
-        case "app.checkForUpdates": void checkForUpdates(true); break;
-        case "view.toggleSidebar": setSidebarOpen((v) => !v); break;
-        case "view.toggleFocus": setFocusMode((v) => !v); break;
-        case "file.closeWindow": window.close(); break;
-        default: break;
-      }
-    });
-    return off;
-  }, [newNote, save, activeKey, closeTab, checkForUpdates]);
+  useEffect(() => window.takenotes.events.onCommand((id: CommandId) => executeCommand(id)), [executeCommand]);
 
   /* ---------- global keyboard ---------- */
   useEffect(() => {
@@ -660,27 +941,48 @@ export default function App(): JSX.Element {
       // Modal owns the keyboard while open (§54): palette capture-handlers
       // deal with Arrows/Enter/Escape; app shortcuts stay out of the way.
       // Save still works so a quick-open detour never blocks persisting.
+      const keyCommand = commandForKeyEvent(platform.platform, e);
       if (palette) {
-        if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); void save(); }
+        if (keyCommand === "editor.save") { e.preventDefault(); executeCommand("editor.save"); }
         return;
       }
-      if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); void save(); return; }
-      if (mod && e.key.toLowerCase() === "p" && e.shiftKey) { e.preventDefault(); setPalette({ kind: "commands" }); return; }
-      if (mod && e.key.toLowerCase() === "p") { e.preventDefault(); setPalette({ kind: "quick" }); return; }
-      if (mod && e.key.toLowerCase() === "n") { e.preventDefault(); newNote(); return; }
-      if (mod && e.key.toLowerCase() === "w") { e.preventDefault(); if (activeKey) closeTab(activeKey); return; }
-      if (mod && e.key === "\\") { e.preventDefault(); setSidebarOpen((v) => !v); return; }
-      if (mod && e.key.toLowerCase() === ",") { e.preventDefault(); setSettingsOpen(true); return; }
-      if (mod && e.key === ".") { e.preventDefault(); setFocusMode((v) => !v); return; }
-      if (mod && e.key === "Tab") {
+      if (
+        keyCommand === "editor.save" ||
+        keyCommand === "palette.open" ||
+        keyCommand === "quickOpen.open" ||
+        keyCommand === "note.new" ||
+        keyCommand === "note.close" ||
+        keyCommand === "search.open" ||
+        keyCommand === "view.toggleSidebar" ||
+        keyCommand === "view.toggleFocus" ||
+        keyCommand === "settings.open"
+      ) {
         e.preventDefault();
-        setTabs((p) => {
-          if (p.length < 2 || !activeKey) return p;
-          const i = p.findIndex((t) => t.key === activeKey);
-          const n = p[(i + (e.shiftKey ? p.length - 1 : 1)) % p.length]!;
-          setActiveKey(n.key);
-          return p;
-        });
+        executeCommand(keyCommand);
+        return;
+      }
+      // Pane focus without stealing editor focus: Alt+1 / Alt+2 selects the
+      // pane; the editor keeps whatever focus it had (no jump on switch).
+      if (e.altKey && !mod && (e.key === "1" || e.key === "2")) {
+        const target = layout.panes[Number(e.key) - 1];
+        if (target && target.id !== layout.activePaneId) {
+          e.preventDefault();
+          setLayout((l) => activatePane(l, target.id));
+          setCursor({ line: 1, col: 1 });
+        }
+        return;
+      }
+      if (mod && e.key === "Tab") {
+        // Tab cycling stays inside the active pane.
+        e.preventDefault();
+        const keys = paneDocs(layout, layout.activePaneId).map((d) => d.key);
+        const cur = activeDoc(layout)?.key;
+        if (keys.length >= 2 && cur) {
+          const i = keys.indexOf(cur);
+          const n = keys[(i + (e.shiftKey ? keys.length - 1 : 1)) % keys.length]!;
+          setLayout((l) => activateDoc(l, layout.activePaneId, n));
+          setCursor({ line: 1, col: 1 });
+        }
         return;
       }
       // Tree rename/trash follow platform convention (§43–§44): F2 + Delete
@@ -697,18 +999,18 @@ export default function App(): JSX.Element {
       if (!isMacTree && e.key === "Delete" && tree.selected && !inField(e.target)) {
         const sel = tree.selected;
         const found = entries.concat(...tree.children.values()).find((x) => x.relativePath === sel);
-        if (found) { e.preventDefault(); void trashEntry(found); }
+        if (found) { e.preventDefault(); void removeEntry(found); }
         return;
       }
       if (isMacTree && e.metaKey && e.key === "Backspace" && tree.selected && !inField(e.target)) {
         const sel = tree.selected;
         const found = entries.concat(...tree.children.values()).find((x) => x.relativePath === sel);
-        if (found) { e.preventDefault(); void trashEntry(found); }
+        if (found) { e.preventDefault(); void removeEntry(found); }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [save, newNote, activeKey, closeTab, tree.selected, tree.children, entries, trashEntry, palette, platform.platform]);
+  }, [executeCommand, layout, tree.selected, tree.children, entries, removeEntry, palette, platform.platform]);
 
   /* tree arrow navigation */
   const visibleRows = useMemo(() => {
@@ -768,50 +1070,59 @@ export default function App(): JSX.Element {
         { label: "Copy relative path", run: () => void navigator.clipboard.writeText(displayPath(entry.relativePath)) },
         { label: revealLabel(platform.platform), run: () => void window.takenotes.shell.reveal(workspace!.workspaceId, entry.relativePath) },
         { label: "---", run: () => undefined },
-        { label: moveToTrashLabel(platform.platform), danger: true, run: () => void trashEntry(entry) },
+        { label: "Delete folder", danger: true, run: () => void removeEntry(entry) },
       ] : [
         { label: "Open", run: () => void openFile(entry.relativePath), disabled: !openable },
         { label: "Rename", shortcut: sc("tree.rename"), run: () => setTree((p) => ({ ...p, renaming: entry.relativePath })) },
         { label: "Copy relative path", run: () => void navigator.clipboard.writeText(displayPath(entry.relativePath)) },
         { label: revealLabel(platform.platform), run: () => void window.takenotes.shell.reveal(workspace!.workspaceId, entry.relativePath) },
         { label: "---", run: () => undefined },
-        { label: moveToTrashLabel(platform.platform), shortcut: sc("tree.trash"), danger: true, run: () => void trashEntry(entry) },
+        { label: workspace && isWslKind(workspace.type) ? "Delete permanently…" : moveToTrashLabel(platform.platform), shortcut: sc("tree.trash"), danger: true, run: () => void trashEntry(entry) },
       ],
     });
   };
 
-  const tabMenu = (e: React.MouseEvent, key: string): void => {
+  // Tab context actions stay inside their own pane; sibling panes are
+  // untouched (each close still flushes dirty buffers to drafts first).
+  const tabMenu = (paneId: string, key: string, e: React.MouseEvent): void => {
     e.preventDefault();
     setMenu({
       x: e.clientX, y: e.clientY,
       items: [
-        { label: "Close", shortcut: sc("file.closeTab"), run: () => closeTab(key) },
-        { label: "Close others", run: () => { setTabs((p) => p.filter((t) => t.key === key)); setActiveKey(key); } },
-        { label: "Close to the right", run: () => {
-          setTabs((p) => { const i = p.findIndex((t) => t.key === key); return p.filter((_, j) => j <= i); });
-          if (activeKey && !tabs.slice(0, tabs.findIndex((t) => t.key === key) + 1).some((t) => t.key === activeKey)) setActiveKey(key);
-        } },
+        { label: "Close", shortcut: sc("note.close"), run: () => closeTab(paneId, key) },
+        {
+          label: "Close others",
+          run: () => {
+            for (const k of paneDocs(layout, paneId).map((d) => d.key).filter((k) => k !== key)) closeTab(paneId, k);
+          },
+        },
+        {
+          label: "Close to the right",
+          run: () => {
+            const keys = paneDocs(layout, paneId).map((d) => d.key);
+            for (const k of keys.slice(keys.indexOf(key) + 1)) closeTab(paneId, k);
+          },
+        },
       ],
     });
   };
 
   /* ---------- editor ---------- */
-  const sessionKey = activeTab ? `${activeTab.key}|ln${settings.lineNumbers ? 1 : 0}|ww${settings.wordWrap ? 1 : 0}` : "none";
-  const contentRef = useRef("");
-  contentRef.current = activeTab?.content ?? "";
-  const editorRef = useCodeMirrorEditor(sessionKey, contentRef.current, {
-    lineNumbers: settings.lineNumbers,
-    wordWrap: settings.wordWrap,
-    onChange: onEdit,
-    onCursor: (line, col) => setCursor((p) => (p.line === line && p.col === col ? p : { line, col })),
-  });
+  // Cursor reports come from the active pane's editor only (PaneView gates
+  // with reportCursor); switching panes never steals keyboard focus.
+  const onCursor = useCallback((line: number, col: number) => {
+    setCursor((p) => (p.line === line && p.col === col ? p : { line, col }));
+  }, []);
 
   const words = useMemo(() => {
     const c = activeTab?.content.trim() ?? "";
     return c ? c.split(/\s+/).length : 0;
   }, [activeTab?.content]);
 
-  const saveLabel = saveState === "saved" ? `Saved${savedAt ? ` ${savedAt}` : ""}` : saveState;
+  const quickOpenFiles = useMemo(
+    () => (workspace ? workspaceIndex.list(workspace.workspaceId).map(indexedEntryToQuickOpenItem) : []),
+    [workspace?.workspaceId, indexVersion],
+  );
 
   /* ---------- render ---------- */
   if (!workspace) {
@@ -845,7 +1156,7 @@ export default function App(): JSX.Element {
             </>
           )}
         </div>
-        {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
+        {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onDistro={(d) => void fetchWslUsers(d, wslDialog)} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
         <Toasts toasts={toasts} onDismiss={(id) => setToasts((p) => p.filter((t) => t.id !== id))} />
       </div>
     );
@@ -854,7 +1165,7 @@ export default function App(): JSX.Element {
   return (
     <div className="app">
       {!focusMode && (
-        <TitleBar workspace={workspace} platform={platform} onQuickOpen={() => setPalette({ kind: "quick" })} onOpenWindows={() => void openLocal()} onOpenWsl={() => void openWslDialog()} />
+        <TitleBar workspace={workspace} platform={platform} onQuickOpen={() => executeCommand("quickOpen.open")} onOpenWindows={() => void openLocal()} onOpenWsl={() => void openWslDialog()} />
       )}
       <div className="body">
         {!focusMode && (
@@ -865,15 +1176,15 @@ export default function App(): JSX.Element {
             <aside className="sidebar" style={{ width: Math.min(360, Math.max(180, sidebarWidth)) }} aria-label="Sidebar">
               <div className="sidebar-head" title={workspace.displayName}>
                 <span className="name">{workspace.displayName}
-                  {isWslKind(workspace.type) && <span className="sub">WSL</span>}
+                  {isWslKind(workspace.type) && <span className="sub">WSL{workspace.linuxUser ? ` · ${workspace.linuxUser}` : ""}</span>}
                 </span>
-                <button className="icon-btn" title={`New note (${sc("file.new")})`} aria-label="New note" onClick={newNote}><Icon name="plus" /></button>
+                <button className="icon-btn" title={`New note (${sc("note.new")})`} aria-label="New note" onClick={() => executeCommand("note.new")}><Icon name="plus" /></button>
                 <button
                   className="icon-btn" title="More actions" aria-label="More actions"
                   onClick={(e) => setMenu({
                     x: e.clientX, y: e.clientY,
                     items: [
-                      { label: "New note", shortcut: sc("file.new"), run: () => newNote() },
+                      { label: "New note", shortcut: sc("note.new"), run: () => executeCommand("note.new") },
                       { label: "New folder…", run: () => { setCreating({ dir: "", folder: true }); setCreateName(""); } },
                       { label: "---", run: () => undefined },
                       { label: "Refresh file tree", run: () => { void refreshTree(workspace); void rebuildAllFiles(workspace); } },
@@ -932,6 +1243,7 @@ export default function App(): JSX.Element {
                     query={searchQuery}
                     onQuery={setSearchQuery}
                     searching={searching}
+                    searchError={searchError}
                     filenameHits={filenameHits}
                     contentHits={contentHits}
                     onOpen={(rel, line) => {
@@ -967,95 +1279,171 @@ export default function App(): JSX.Element {
           </>
         )}
         <main className="main">
-          {!focusMode && (
-            <TabStrip
-              tabs={tabs}
-              activeKey={activeKey}
-              onActivate={(k) => {
-                setActiveKey(k);
-                const t = tabs.find((x) => x.key === k);
-                setSaveState(t ? (t.conflict ? "conflict" : t.dirty ? "dirty" : "clean") : "clean");
-              }}
-              onClose={closeTab}
-              onContext={tabMenu}
-              onReorder={(from, to) => setTabs((p) => {
-                const a = p.findIndex((t) => t.key === from);
-                const b = p.findIndex((t) => t.key === to);
-                if (a < 0 || b < 0) return p;
-                const next = [...p];
-                const [mv] = next.splice(a, 1);
-                next.splice(b, 0, mv!);
-                return next;
-              })}
-            />
-          )}
           {wslError && (
             <div className="wsl-banner" role="alert">
               <span style={{ flex: 1 }}>Workspace unavailable — {wslError}</span>
-              <button className="btn" onClick={() => void refreshTree(workspace)}>Reconnect</button>
+              <button className="btn" onClick={() => { void refreshTree(workspace); void refreshWorkspaceIndex(workspace); }}>Reconnect</button>
             </div>
           )}
-          {activeTab && recovery[activeTab.key] && (
-            <div className="conflict-bar" role="alert" style={{ background: "var(--banner-recovery, #4a3800)", borderColor: "var(--border)" }}>
-              <span style={{ flex: 1 }}>
-                {recovery[activeTab.key]!.diskChanged
-                  ? `${fileName(activeTab.relativePath)} changed since this unsaved draft was kept. Both versions are safe — choose one.`
-                  : `Unsaved draft recovered from ${new Date(recovery[activeTab.key]!.updatedAt).toLocaleString()}. Not saved to file.`}
-                {recovery[activeTab.key]!.stale ? " This draft is over 30 days old." : ""}
-              </span>
-              <button className="btn" onClick={() => restoreDraft(activeTab.key)}>Restore draft</button>
-              <button className="btn" onClick={() => void discardDraft(activeTab.key)}>Discard draft</button>
-            </div>
-          )}
-          {activeTab?.conflict && (
-            <div className="conflict-bar" role="alert">
-              <span style={{ flex: 1 }}>{fileName(activeTab.relativePath)} changed outside Desktop Notes. Your edits are still safe.</span>
-              <button className="btn" onClick={() => void reloadFromDisk()}>Reload from disk</button>
-              <button className="btn" onClick={() => void keepMyVersion()}>Keep my version</button>
-            </div>
-          )}
-          {!activeTab ? (
-            <div className="empty">
-              <h2>No note open</h2>
-              <p className="hint"><kbd className="k">{sc("file.quickOpen")}</kbd> Quick open · <kbd className="k">{sc("file.new")}</kbd> New note</p>
-              {entries.length === 0 && !sidebarLoading && (
-                <div className="actions"><button className="btn primary" onClick={newNote}>New note</button></div>
-              )}
-            </div>
-          ) : activeTab.loadError ? (
-            <div className="empty">
-              <h2>Couldn&apos;t open {fileName(activeTab.relativePath)}</h2>
-              <p>{activeTab.loadError} Your file is untouched.</p>
-              <div className="actions"><button className="btn" onClick={() => closeTab(activeTab.key)}>Close tab</button></div>
-            </div>
-          ) : (
-            <div className="editor-scroll">
-              <div className={`editor-col${settings.fullWidth ? " full-width" : ""}`}>
-                <div key={activeTab.key} ref={editorRef} aria-label={`Editing ${displayPath(activeTab.relativePath)}`} />
-              </div>
-            </div>
-          )}
+          {/* Split panes (P1-06): at most two, side-by-side or stacked.
+              Each pane owns its tab order and active tab; documents are
+              shared, so two panes on one file always agree. Banners bind to
+              the pane's own doc — a conflict elsewhere never leaks in. */}
+          <div className={`split-wrap ${layout.orientation}`} role="group" aria-label="Editor panes">
+            {layout.panes.map((p, pi) => {
+              const docs = paneDocs(layout, p.id);
+              const doc = p.activeKey ? layout.docs[p.activeKey] ?? null : null;
+              const isActive = p.id === layout.activePaneId;
+              const rec = doc ? recovery[doc.key] : undefined;
+              return (
+                <section
+                  key={p.id}
+                  className={`pane${isActive ? " active" : ""}`}
+                  aria-label={`Editor pane ${pi + 1}${isActive ? ", active" : ""}`}
+                  onMouseDown={() => { if (!isActive) setLayout((l) => activatePane(l, p.id)); }}
+                >
+                  {!focusMode && (
+                    <div className="pane-bar">
+                      {layout.panes.length > 1 && <span className="pane-title">Pane {pi + 1}</span>}
+                      <span className="pane-actions">
+                        {doc && <button className="link" title="Open recovery history" aria-label={`Open recovery history for pane ${pi + 1}`} onClick={() => void openHistory(doc.key)}>History</button>}
+                        <button className="link" title="Split editor right" aria-label={`Split pane ${pi + 1} right`} onClick={() => splitActive("vertical")}>Split right</button>
+                        <button className="link" title="Split editor below" aria-label={`Split pane ${pi + 1} down`} onClick={() => splitActive("horizontal")}>Split down</button>
+                        {layout.panes.length > 1 && (
+                          <button className="link" title="Close this split pane" aria-label={`Close pane ${pi + 1}`} onClick={() => closeActivePane()}>Close pane</button>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {!focusMode && (
+                    <TabStrip
+                      tabs={docs}
+                      activeKey={p.activeKey}
+                      onActivate={(k) => { setLayout((l) => activateDoc(l, p.id, k)); setCursor({ line: 1, col: 1 }); }}
+                      onClose={(k) => closeTab(p.id, k)}
+                      onContext={(e, k) => tabMenu(p.id, k, e)}
+                      onReorder={(from, to) => setLayout((l) => {
+                        const pp = l.panes.find((x) => x.id === p.id)!;
+                        const a = pp.openKeys.indexOf(from);
+                        const b = pp.openKeys.indexOf(to);
+                        if (a < 0 || b < 0) return l;
+                        const openKeys = [...pp.openKeys];
+                        const [mv] = openKeys.splice(a, 1);
+                        openKeys.splice(b, 0, mv!);
+                        return { ...l, panes: l.panes.map((x) => (x.id === p.id ? { ...x, openKeys } : x)) };
+                      })}
+                    />
+                  )}
+                  {doc && rec && (
+                    <div className="conflict-bar" role="alert" style={{ background: "var(--banner-recovery, #4a3800)", borderColor: "var(--border)" }}>
+                      <span style={{ flex: 1 }}>
+                        {rec.diskChanged
+                          ? `${fileName(doc.relativePath)} changed since this unsaved draft was kept. Both versions are safe — choose one.`
+                          : `Unsaved draft recovered from ${new Date(rec.updatedAt).toLocaleString()}. Not saved to file.`}
+                        {rec.stale ? " This draft is over 30 days old." : ""}
+                      </span>
+                      <button className="btn" onClick={() => restoreDraft(doc.key)}>Restore draft</button>
+                      <button className="btn" onClick={() => void discardDraft(doc.key)}>Discard draft</button>
+                    </div>
+                  )}
+                  {doc?.conflict && (
+                    <div className="conflict-bar" role="alert">
+                      <span style={{ flex: 1 }}>{fileName(doc.relativePath)} changed outside Desktop Notes. Your edits are still safe.</span>
+                      <button className="btn" onClick={() => void reloadFromDisk(doc.key)}>Reload from disk</button>
+                      <button className="btn" onClick={() => void keepMyVersion(doc.key)}>Keep my version</button>
+                    </div>
+                  )}
+                  {!doc ? (
+                    <div className="empty">
+                      <h2>No note open</h2>
+                      <p className="hint"><kbd className="k">{sc("quickOpen.open")}</kbd> Quick open · <kbd className="k">{sc("note.new")}</kbd> New note</p>
+                      {entries.length === 0 && !sidebarLoading && (
+                        <div className="actions"><button className="btn primary" onClick={newNote}>New note</button></div>
+                      )}
+                    </div>
+                  ) : doc.loadError ? (
+                    <div className="empty">
+                      <h2>Couldn&apos;t open {fileName(doc.relativePath)}</h2>
+                      <p>{doc.loadError} Your file is untouched.</p>
+                      <div className="actions"><button className="btn" onClick={() => closeTab(p.id, doc.key)}>Close tab</button></div>
+                    </div>
+                  ) : (
+                    <PaneView
+                      docKey={doc.key}
+                      content={doc.content}
+                      relativePath={doc.relativePath}
+                      lineNumbers={settings.lineNumbers}
+                      wordWrap={settings.wordWrap}
+                      fullWidth={settings.fullWidth}
+                      reportCursor={isActive}
+                      onEdit={onEdit}
+                      onCursor={onCursor}
+                    />
+                  )}
+                </section>
+              );
+            })}
+          </div>
         </main>
       </div>
       {!focusMode && (
-        <StatusBar workspace={workspace} words={words} line={cursor.line} col={cursor.col} saveState={saveLabel} />
+        <StatusBar
+          workspace={workspace}
+          words={words}
+          line={cursor.line}
+          col={cursor.col}
+          doc={docSaveView}
+          savedAt={activeTab?.savedAt ?? ""}
+          connection={wslError ? "disconnected" : workspace.connection}
+          fileCount={allFiles.length}
+        />
       )}
       {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
       {palette && (
         <CommandMenu
-          mode={palette}
-          files={allFiles}
+          initialQuery={palette.initialQuery}
+          files={quickOpenFiles}
           recents={recents}
           commands={commands}
           recentCommands={recentCommands}
-          onOpenFile={(rel) => { runCommand("quick-open"); void openFile(rel); }}
+          onOpenFile={(rel) => { rememberCommand("quickOpen.open"); void openFile(rel); }}
           onClose={() => setPalette(null)}
         />
       )}
       {settingsOpen && (
         <SettingsDialog settings={settings} onChange={setSettings} version={version} platform={platform} updatesEnabled={platform.capabilities.updates} onCheckUpdates={() => void checkForUpdates(true)} onClose={() => setSettingsOpen(false)} />
       )}
-      {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
+      {historyDialog && (
+        <div className="dialog-wrap" onMouseDown={() => setHistoryDialog(null)}>
+          <div className="dialog" role="dialog" aria-label="Recovery history" style={{ width: 460 }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="dialog-head"><span style={{ flex: 1 }}>History</span>
+              <button className="icon-btn" onClick={() => setHistoryDialog(null)} aria-label="Close"><Icon name="x" /></button>
+            </div>
+            <div className="dialog-content" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>Recovery is not backup. Snapshots are local to this app profile and retained for 7 days.</p>
+              {historyDialog.loading && <p style={{ fontSize: 13 }}>Loading recovery history…</p>}
+              {historyDialog.error && <p className="inline-error" role="alert">{historyDialog.error}</p>}
+              {!historyDialog.loading && !historyDialog.error && historyDialog.snapshots.length === 0 && (
+                <p style={{ fontSize: 13 }}>No recovery snapshots for this note yet.</p>
+              )}
+              {!historyDialog.loading && historyDialog.snapshots.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {historyDialog.snapshots.map((s) => (
+                    <div key={s.snapshotId} className="tree-row" style={{ padding: "8px 0", display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ flex: 1, fontSize: 13 }}>
+                        {new Date(s.createdAt).toLocaleString()} · {s.reason === "restore-before" ? "before restore" : s.reason} · {s.byteLength} bytes
+                      </span>
+                      <button className="btn" onClick={() => void restoreRecoverySnapshot(s.snapshotId)}>Restore</button>
+                      <button className="btn" onClick={() => void copyRecoverySnapshot(s.snapshotId)}>Copy</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onDistro={(d) => void fetchWslUsers(d, wslDialog)} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
       {updateDlg && (
         <div className="dialog-wrap" onMouseDown={() => { if (updateDlg.phase !== "downloading" && updateDlg.phase !== "verifying" && updateDlg.phase !== "launching") setUpdateDlg(null); }}>
           <div className="dialog" role="dialog" aria-label="Software update" style={{ width: 440 }} onMouseDown={(e) => e.stopPropagation()}>
@@ -1105,14 +1493,35 @@ export default function App(): JSX.Element {
   );
 }
 
+/** Picker label: `Name · Running|Stopped · WSL2` (+ default marker).
+ * State/version are absent on the quiet fallback path — show honestly. */
+function distroLabel(d: WslDistribution): string {
+  const state = d.state ?? "Unknown";
+  const version = d.version ? `WSL ${d.version}` : "WSL";
+  const def = d.isDefault ? " (default)" : "";
+  return `${d.name} · ${state} · ${version}${def}`;
+}
+
 function WslDialog({
   dialog,
   onChange,
+  onDistro,
   onConnect,
   onClose,
 }: {
-  dialog: { distros: WslDistribution[]; distro: string; path: string; error: string | null; connecting: boolean };
-  onChange: (d: { distros: WslDistribution[]; distro: string; path: string; error: string | null; connecting: boolean }) => void;
+  dialog: {
+    distros: WslDistribution[]; distro: string;
+    users: WslLinuxUser[]; linuxUser: string;
+    usersLoading: boolean; usersError: string | null;
+    path: string; error: string | null; connecting: boolean;
+  };
+  onChange: (d: {
+    distros: WslDistribution[]; distro: string;
+    users: WslLinuxUser[]; linuxUser: string;
+    usersLoading: boolean; usersError: string | null;
+    path: string; error: string | null; connecting: boolean;
+  }) => void;
+  onDistro: (distro: string) => void;
   onConnect: () => void;
   onClose: () => void;
 }): JSX.Element {
@@ -1129,11 +1538,31 @@ function WslDialog({
               <label style={{ fontSize: 13 }}>Distribution
                 <select
                   className="input" style={{ marginTop: 4 }}
-                  value={dialog.distro} onChange={(e) => onChange({ ...dialog, distro: e.target.value })}
+                  value={dialog.distro} onChange={(e) => onDistro(e.target.value)}
                 >
-                  {dialog.distros.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
+                  {dialog.distros.map((d) => <option key={d.name} value={d.name}>{distroLabel(d)}</option>)}
                 </select>
               </label>
+              <label style={{ fontSize: 13 }}>Linux user
+                <select
+                  className="input" style={{ marginTop: 4 }}
+                  value={dialog.linuxUser}
+                  disabled={dialog.usersLoading || dialog.users.length === 0}
+                  onChange={(e) => onChange({ ...dialog, linuxUser: e.target.value })}
+                  aria-label="Linux user"
+                >
+                  {dialog.users.map((u) => (
+                    <option key={u.username} value={u.username}>
+                      {u.username}{u.isDefault ? " (default)" : ""} — {u.home}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {dialog.usersLoading && <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Loading Linux users…</p>}
+              {dialog.usersError && <p className="inline-error" role="alert">{dialog.usersError}</p>}
+              {!dialog.usersLoading && !dialog.usersError && dialog.users.length === 0 && (
+                <p style={{ fontSize: 13 }}>No interactive users found in this distribution.</p>
+              )}
               <label style={{ fontSize: 13 }}>Folder in {dialog.distro || "WSL"}
                 <input
                   className="input" style={{ marginTop: 4 }}
@@ -1143,7 +1572,7 @@ function WslDialog({
               </label>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button className="btn" onClick={onClose}>Cancel</button>
-                <button className="btn primary" disabled={!dialog.distro || dialog.connecting} onClick={onConnect}>
+                <button className="btn primary" disabled={!dialog.distro || !dialog.linuxUser || dialog.connecting} onClick={onConnect}>
                   {dialog.connecting ? "Connecting…" : "Connect"}
                 </button>
               </div>

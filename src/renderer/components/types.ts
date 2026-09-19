@@ -10,6 +10,11 @@ export type TabState = {
   hadBom: boolean;
   conflict: boolean;
   loadError: string | null;
+  /** In-flight save (per-document, P1-06): the status strip derives
+   * Saving… from the active document, never from a global flag. */
+  saving: boolean;
+  /** Last successful save time for the `Saved …` status segment. */
+  savedAt: string;
 };
 
 export type Toast = { id: number; kind: "info" | "error"; text: string };

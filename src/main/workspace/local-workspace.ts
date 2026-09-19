@@ -233,6 +233,12 @@ export async function writeTextFile(
   if (currentHash !== expectedHash) {
     return { error: appError("CONFLICT", "The file changed on disk. Reload before saving.") };
   }
+  // Guarantee (P1-05, honest, no false CAS claim): the expected-hash check
+  // and the atomic rename below are two separate steps. A change landing
+  // BEFORE the check yields CONFLICT with the file untouched; a change
+  // landing BETWEEN the check and the rename wins last-writer-wins — but
+  // the replace itself is always an atomic rename, so the file is never
+  // torn or truncated. Same guarantee as the helper `file.write`.
   const bytes = encodeUtf8(content, newlineStyle, hadBom, false);
   if (bytes.length > MAX_FILE_BYTES) {
     return { error: appError("TOO_LARGE", "This file is too large to edit safely.") };
@@ -304,4 +310,124 @@ export async function createTextFile(
   }
   const stat = await fs.stat(r.absolutePath);
   return { revision: revisionOfBytes(bytes, stat.mtimeMs) };
+}
+
+/** Create a directory (parents created recursively). */
+export async function createDirectory(
+  root: string,
+  kind: WorkspaceKind,
+  relativePath: string,
+): Promise<{ ok: true } | { error: AppError }> {
+  const pm = pathModuleFor(kind);
+  const v = validateNativeRel(kind, relativePath);
+  if ("error" in v) return v;
+  const r = await resolveInsideRoot(root, kind, v.relativePath);
+  if ("error" in r) return r;
+  try {
+    await fs.mkdir(r.absolutePath, { recursive: true });
+  } catch (err) {
+    return { error: mapFsError(err as NodeJS.ErrnoException, "directory") };
+  }
+  // Confirm we ended up with a directory (a file at this path is a conflict).
+  try {
+    const st = await fs.stat(r.absolutePath);
+    if (!st.isDirectory()) {
+      return { error: appError("ALREADY_EXISTS", "A file with that name already exists.") };
+    }
+  } catch (err) {
+    return { error: mapFsError(err as NodeJS.ErrnoException, "directory") };
+  }
+  // Realpath containment for newly created chains that pass through
+  // pre-existing symlinked parents `mkdir -p` would otherwise follow.
+  const realRoot = await realpathSubtle(root);
+  const realTarget = await realpathSubtle(r.absolutePath);
+  if (realRoot && realTarget) {
+    const rel = pm.relative(realRoot, realTarget);
+    if (rel.startsWith("..") || pm.isAbsolute(rel)) {
+      return { error: appError("OUTSIDE_ROOT", "Path escapes the workspace.") };
+    }
+  }
+  return { ok: true };
+}
+
+/** Delete a directory. Non-empty without `recursive` → DIRECTORY_NOT_EMPTY. */
+export async function deleteDirectory(
+  root: string,
+  kind: WorkspaceKind,
+  relativePath: string,
+  recursive: boolean,
+): Promise<{ ok: true } | { error: AppError }> {
+  const v = validateNativeRel(kind, relativePath);
+  if ("error" in v) return v;
+  const r = await resolveInsideRoot(root, kind, v.relativePath);
+  if ("error" in r) return r;
+  let st;
+  try {
+    st = await fs.stat(r.absolutePath);
+  } catch (err) {
+    return { error: mapFsError(err as NodeJS.ErrnoException, "directory") };
+  }
+  if (!st.isDirectory()) {
+    return { error: appError("INVALID_REQUEST", "Not a directory.") };
+  }
+  if (!recursive) {
+    let children;
+    try {
+      children = await fs.readdir(r.absolutePath);
+    } catch (err) {
+      return { error: mapFsError(err as NodeJS.ErrnoException, "directory") };
+    }
+    if (children.length > 0) {
+      return { error: appError("DIRECTORY_NOT_EMPTY", "Directory is not empty. Confirm recursive delete.") };
+    }
+    try {
+      await fs.rmdir(r.absolutePath);
+    } catch (err) {
+      return { error: mapFsError(err as NodeJS.ErrnoException, "directory") };
+    }
+    return { ok: true };
+  }
+  try {
+    await fs.rm(r.absolutePath, { recursive: true, force: false });
+  } catch (err) {
+    return { error: mapFsError(err as NodeJS.ErrnoException, "directory") };
+  }
+  return { ok: true };
+}
+
+/** Rename a directory; refuses moves that escape the root. */
+export async function renameDirectory(
+  root: string,
+  kind: WorkspaceKind,
+  oldRelativePath: string,
+  newRelativePath: string,
+): Promise<{ ok: true } | { error: AppError }> {
+  const vOld = validateNativeRel(kind, oldRelativePath);
+  if ("error" in vOld) return vOld;
+  const vNew = validateNativeRel(kind, newRelativePath);
+  if ("error" in vNew) return vNew;
+  const rOld = await resolveInsideRoot(root, kind, vOld.relativePath);
+  if ("error" in rOld) return rOld;
+  const rNew = await resolveInsideRoot(root, kind, vNew.relativePath);
+  if ("error" in rNew) return rNew;
+  try {
+    const st = await fs.stat(rOld.absolutePath);
+    if (!st.isDirectory()) {
+      return { error: appError("INVALID_REQUEST", "Not a directory.") };
+    }
+  } catch (err) {
+    return { error: mapFsError(err as NodeJS.ErrnoException, "directory") };
+  }
+  try {
+    await fs.access(rNew.absolutePath);
+    return { error: appError("ALREADY_EXISTS", "A file with that name already exists.") };
+  } catch {
+    /* target free — proceed */
+  }
+  try {
+    await fs.rename(rOld.absolutePath, rNew.absolutePath);
+  } catch (err) {
+    return { error: mapFsError(err as NodeJS.ErrnoException, "directory") };
+  }
+  return { ok: true };
 }

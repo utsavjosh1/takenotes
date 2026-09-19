@@ -15,6 +15,56 @@ export function resolveWslExe(): string {
   return "wsl.exe";
 }
 
+/** Distro identifiers travel as `wsl.exe` spawn argv (shell:false) and into
+ * UI text: constrain them before any use. Names with spaces are valid. */
+export function isValidDistroId(input: unknown): input is string {
+  return (
+    typeof input === "string" &&
+    input.length >= 1 &&
+    input.length <= 128 &&
+    !input.includes("\0") &&
+    !input.includes("/") &&
+    !input.includes("\\") &&
+    input.trim() === input
+  );
+}
+
+/** Linux usernames become `-u` spawn argv: same argv discipline as distros,
+ * plus no whitespace (POSIX usernames never contain it). */
+export function isValidLinuxUser(input: unknown): input is string {
+  return (
+    typeof input === "string" &&
+    input.length >= 1 &&
+    input.length <= 32 &&
+    !input.includes("\0") &&
+    !input.includes("/") &&
+    !input.includes("\\") &&
+    !/\s/.test(input) &&
+    input.trim() === input
+  );
+}
+
+/** Argv for spawning the helper inside a distro. Separate elements,
+ * `shell: false` at the call site — distro/user values are never
+ * interpolated into a command string. `linuxUser === null` spawns as the
+ * distro's default user (user discovery); a name runs as that user
+ * (connect). Throws on hostile values before anything reaches spawn. */
+export function buildWslHelperArgv(
+  distro: string,
+  linuxUser: string | null,
+  nodePath: string,
+  helperPath: string,
+): string[] {
+  if (!isValidDistroId(distro)) throw new Error("Refusing to spawn WSL helper for an invalid distro id.");
+  if (linuxUser !== null && !isValidLinuxUser(linuxUser)) {
+    throw new Error("Refusing to spawn WSL helper for an invalid Linux user.");
+  }
+  const argv = ["-d", distro];
+  if (linuxUser !== null) argv.push("-u", linuxUser);
+  argv.push("--exec", nodePath, helperPath, "--stdio");
+  return argv;
+}
+
 /** Strip variables that must never steer the helper runtime.
  * The helper needs no network and no inherited Node behavior. */
 const STRIPPED_ENV = new Set([

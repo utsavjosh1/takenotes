@@ -1,4 +1,5 @@
 import type { AppError } from "../errors.js";
+import type { CommandDefinition } from "../commands/registry.js";
 import type { WorkspaceKind } from "../platform/types.js";
 
 /** Workspace kinds (§11). Legacy `"windows"` means `"windows-local"` and
@@ -10,6 +11,11 @@ export type WorkspaceInfo = {
   displayName: string;
   type: WorkspaceType;
   connection: "connected" | "disconnected" | "reconnecting" | "failed";
+  /** WSL distro (P1-06): explicit identity for the status strip — the
+   * renderer never parses it out of display text. */
+  distro?: string;
+  /** WSL Linux user (P1-03). Never a raw root — main resolves those. */
+  linuxUser?: string;
 };
 
 export type DirectoryEntry = {
@@ -39,7 +45,26 @@ export type IpcResult<T> = { ok: true; result: T } | { ok: false; error: AppErro
 
 export type WslDistribution = {
   name: string;
+  /** Running|Stopped… — absent on the quiet fallback path (names only). */
   state?: string;
+  /** WSL version ("2"…); absent on the quiet fallback path. */
+  version?: string;
+  /** True for the `*` default distro in `wsl -l -v`. */
+  isDefault?: boolean;
+};
+
+/** Structured Linux-user record (helper `users.list`, `/etc/passwd`-backed).
+ * The renderer receives these only — it never parses passwd itself and
+ * never gains shell execution. */
+export type WslLinuxUser = {
+  username: string;
+  uid: number;
+  gid?: number;
+  home: string;
+  shell?: string;
+  /** True for the user the discovery helper ran as (distro default user).
+   * The picker offers it as the preselected "Default" row. */
+  isDefault?: boolean;
 };
 
 export type UpdateCheckResult = {
@@ -61,6 +86,28 @@ export type SearchMatch = {
   column: number;
   preview: string;
 };
+
+export type RecoverySnapshotMeta = {
+  snapshotId: string;
+  workspaceId: string;
+  relativePath: string;
+  createdAt: number;
+  contentHash: string;
+  byteLength: number;
+  reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
+};
+
+export type RecoverySnapshotRead = RecoverySnapshotMeta & {
+  content: string;
+};
+
+export type RecoveryRestoreResult = {
+  revision: FileRevision;
+  content: string;
+  preRestoreSnapshot: RecoverySnapshotMeta | null;
+};
+
+export type CommandListResult = CommandDefinition[];
 
 export type PlatformReport = {
   platform: "windows" | "macos" | "linux";

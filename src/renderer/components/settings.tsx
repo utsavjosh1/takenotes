@@ -4,7 +4,7 @@ import { Icon } from "./icons";
 import horizontalDarkUrl from "../assets/brand/takenotes-horizontal-dark.svg";
 import horizontalLightUrl from "../assets/brand/takenotes-horizontal-light.svg";
 import type { PlatformState } from "../hooks/use-platform";
-import type { CommandId } from "../../shared/platform/keymap";
+import type { CommandId } from "../../shared/commands/registry";
 
 const TABS = ["General", "Appearance", "Editor", "Files", "Shortcuts", "About"] as const;
 
@@ -123,8 +123,8 @@ function Row({ title, desc, children }: { title: string; desc: string; children:
 /** Shortcut reference rendered from the platform registry (§117). */
 export function ShortcutTable({ platform }: { platform: PlatformState }): JSX.Element {
   const rows: [CommandId | "escape", string][] = [
-    ["file.new", "New note"], ["file.quickOpen", "Quick open"], ["commandPalette.open", "Commands"],
-    ["file.save", "Save"], ["file.closeTab", "Close tab"], ["view.nextTab", "Next tab"],
+    ["note.new", "New note"], ["quickOpen.open", "Quick open"], ["palette.open", "Commands"],
+    ["editor.save", "Save"], ["note.close", "Close tab"], ["view.nextTab", "Next tab"],
     ["view.prevTab", "Previous tab"], ["view.toggleSidebar", "Toggle sidebar"], ["view.toggleFocus", "Focus mode"],
     ["settings.open", "Settings"], ["tree.rename", "Rename"], ["tree.trash", "Trash"], ["escape", "Close transient"],
   ];
