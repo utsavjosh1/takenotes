@@ -237,3 +237,129 @@ verification is STILL NOT VERIFIED — nothing below substitutes for it.
   one vector table against Core, the production native adapter, and
   windows-local validation; the WSL helper is covered by its round-trip
   symlink tests. Windows reserved-name behavior is P1-11, not a vector.
+
+## P1-11 evidence run — ATTEMPTED 2026-09-19, BLOCKED (no Windows host)
+
+> No Windows 11 host was available in this environment, so **no P1-11
+> acceptance item is verified**. This section records the attempt, the
+> environment facts, the automated gate that did run, and exactly what the
+> future real-Windows run must execute. Per the evidence standard, "test
+> exists" is not Windows evidence — every item below is BLOCKED, not passed.
+
+### Environment facts (this attempt)
+
+```text
+uname: Linux Joker 6.18.33.2-microsoft-standard-WSL2 x86_64 (Ubuntu 24.04 container)
+wsl.exe: NOT FOUND (command -v wsl.exe → empty)
+powershell.exe: NOT FOUND
+/mnt/c: contains only `Users` (no Windows system surface, no interop)
+/etc/os-release: Ubuntu 24.04.5 LTS
+```
+
+There is no `wsl.exe` spawn path here, no NTFS volume, no Windows desktop to
+launch the packaged app, and no `wsl --terminate`/installer surface. Items
+§5–§43 of the P1-11 ticket (distro picker, users, HOME, mutations, trash,
+conflicts, BOM/CRLF, panes, status, index UX, Search, Quick Open, hotkeys,
+Recovery flows, disconnect/reconnect, second distro, installer) all require
+that surface and are BLOCKED on it — not failed, not passed.
+
+### Automated gate (Linux container, 2026-09-19)
+
+```bash
+npm ci            # ok, 0 vulnerabilities
+npm run typecheck # ok, clean
+npm run lint      # ok, clean
+npm test          # 45 files passed | 3 skipped (48); 322 passed | 6 skipped (328)
+npm run build     # ok (renderer + electron main/preload + helper)
+npm run build:electron  # ok
+npm run build:server    # ok → dist-server/server.cjs
+npm run version:check   # ok: 0.0.7
+```
+
+Identical totals to the pre-P1-11 baseline (322/6). No code changed, so no
+drift; the gate result is reproducibility evidence only — not Windows proof.
+
+### Skip analysis (why the 6 skips are legitimate here)
+
+- `tests/wsl/distro-list.windows.test.ts` (1 test), `users-list.windows.test.ts`
+  (1 test), `mutations.windows.test.ts` (2 tests): gated on
+  `process.platform === "win32" && TAKENOTES_LIVE_WSL === "1"`. Correct to
+  skip on Linux; these ARE the P1-11 live-evidence tests.
+- `tests/filesystem/directories.test.ts` (2 tests, windows-local suite):
+  gated on `process.platform === "win32"`. Runs on any Windows host/CI.
+- The posix counterparts (`helper-roundtrip`, `helper-mutations`,
+  `save-conflict`, posix directory suite, confinement vectors) all PASS here.
+
+### Readiness gap found (docs only, no code): live-WSL invocation undocumented
+
+Even on a real Windows host, the three live-evidence suites skip unless
+`TAKENOTES_LIVE_WSL=1` is set — and no CI job or document set that variable
+(`.github/workflows/ci.yml` runs `windows-latest` but without WSL2 distros
+or the env flag). The future evidence run must therefore be manual on a
+prepared host AND must export the flag. Canonical invocations:
+
+```powershell
+# PowerShell, on the prepared Windows 11 host (Ubuntu + Debian installed,
+# users utsav + work present, one distro left Stopped):
+$env:TAKENOTES_LIVE_WSL="1"; npx vitest run tests/wsl/
+npx vitest run tests/filesystem/directories.test.ts  # windows-local suite
+```
+
+```bash
+# cmd.exe equivalent:
+set TAKENOTES_LIVE_WSL=1 && npx vitest run tests/wsl/
+```
+
+Host prerequisites (per ticket): Windows 11 + WSL2, Ubuntu with Linux users
+`utsav` + `work` (distinct HOMEs, one `chmod 700` private dir), plus a second
+distro (e.g. Debian) left Stopped for the no-autostart proof. Record
+`winver`, `wsl --version`, `wsl -l -v` (before/after picker),
+`cat /etc/os-release`, `id utsav`, `id work` with the evidence.
+
+### Per-area classification (this attempt)
+
+Every area: BLOCKED (no Windows 11 + WSL2 host in this environment).
+NOTHING below is VERIFIED; nothing FAILED (nothing executed to fail).
+
+```text
+Windows local filesystem / trash / directory semantics ... BLOCKED
+WSL distro discovery / no-autostart / default distro ..... BLOCKED
+Linux user discovery / per-user HOME / identity .......... BLOCKED
+WSL mutations / permissions / confinement / symlinks ..... BLOCKED
+ (logic counterparts pass on Linux: helper round-trips, confinement
+ vectors, CONFLICT/BOM/CRLF contract suites — recorded as logic
+ coverage, NOT as Windows evidence)
+Native + WSL CONFLICT / BOM / CRLF ....................... BLOCKED
+Panes / commands / status strip .......................... BLOCKED
+Index build / partial-index warning / large-file skip .... BLOCKED
+ (warning logic unit-tested: indexStatusMessage — logic only)
+Search V1 / deferred operators / freshness ............... BLOCKED
+Quick Open / palette / hotkeys ........................... BLOCKED
+Recovery flows / reopen / isolation / restore / CONFLICT . BLOCKED
+ (reopen + isolation + scoped-read regression tests pass on Linux;
+  the ticket-6/35 manual reopen proof still needs the real host)
+Disconnect/reconnect / helper lifecycle / second distro .. BLOCKED
+Installed-app behavior (package:win, NSIS, launch) ....... BLOCKED
+Gate B / Docker / TLS / server auth ...................... NOT APPLICABLE (§44: independent of Phase 1)
+```
+
+### Known limitations (restated for the P1-11 record)
+
+- WSL singleton helper identity: one active session; second connect
+  disconnects the first; mismatch → DISCONNECTED, never wrong-user exec.
+- Save race: `expectedRevision` check and atomic rename are separate steps —
+  a change landing between them is last-writer-wins (never torn); a change
+  landing before the check is CONFLICT with bytes untouched.
+- Symlink TOCTOU: path-check-then-open via userland Node APIs, no `O_NOFOLLOW`
+  dirfd discipline; malicious renderer/path input defended, malicious local
+  process racing the filesystem is an explicit MVP limitation (`docs/security.md`).
+- Partial index bounds: 2000 listed files (`truncated`), 1 MiB per file
+  (`skipped`); both surface a user-visible notice, never silent.
+- Gate B is transport parity proof only and not part of P1.
+
+### What unblocks P1-11
+
+A real Windows 11 + WSL2 host meeting the prerequisites above, running the
+manual scenarios (§5–§43) plus the live-test invocations in this section,
+with before/after `wsl -l -v` outputs and hashes recorded. Until then:
+Phase 1 stays open.
