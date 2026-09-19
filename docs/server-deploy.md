@@ -8,6 +8,7 @@ run through the same `CoreNoteService` → same policy → `HostFilesystem`.
 ```bash
 umask 077
 read -rsp "takenotes owner password: " TAKENOTES_PASSWORD; echo
+install -m 600 /dev/null .env
 printf 'TAKENOTES_PASSWORD=%s\n' "$TAKENOTES_PASSWORD" > .env
 unset TAKENOTES_PASSWORD
 docker compose up --build
@@ -15,8 +16,9 @@ docker compose up --build
 ```
 
 Do not pass the real password inline on the `docker compose` command: shell
-history and local process inspection can expose it. Keep `.env` protected
-(`0600`) and remove it after first boot if you do not need it for automation.
+history and local process inspection can expose it. The `install -m 600` step
+creates or truncates `.env` with restrictive permissions before the password is
+written; remove `.env` after first boot if you do not need it for automation.
 
 First boot initializes owner auth and seeds a `Notes` workspace with
 `README.md`. Later boots reuse `/data` as-is; `TAKENOTES_PASSWORD` is then
