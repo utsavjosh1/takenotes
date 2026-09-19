@@ -20,6 +20,8 @@
     "build:renderer": "vite build",
     "build:electron": "node scripts/build-main.mjs",
     "build:helper": "node scripts/build-helper.mjs",
+    "build:server": "node scripts/build-server.mjs",
+    "server:start": "node dist-server/server.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
@@ -40,7 +42,9 @@
     "@codemirror/search": "6.7.2",
     "@codemirror/state": "6.7.4",
     "@codemirror/view": "6.43.11",
+    "@hono/node-server": "^1.19.17",
     "@lezer/highlight": "1.2.3",
+    "hono": "^4.13.8",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "yaml": "2.9.1"

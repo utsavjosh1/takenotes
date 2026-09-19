@@ -1,0 +1,26 @@
+# Local Gate-C proof: `TAKENOTES_PASSWORD=... docker compose up`
+# Browser: http://localhost:3000 (plain local HTTP → insecure-cookie mode).
+# Production behind TLS: drop TAKENOTES_INSECURE_HTTP so the locked
+# __Host-/Secure/HttpOnly/SameSite=Strict contract applies.
+services:
+  takenotes:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      TAKENOTES_DATA: /data
+      # Container-loopback is unreachable from the host, so the compose
+      # demo explicitly opts into 0.0.0.0. Bare server runs default to
+      # 127.0.0.1 and never bind publicly on their own.
+      TAKENOTES_HOST: "0.0.0.0"
+      # First boot only: initializes the owner password. Ignored afterwards
+      # (use the authenticated password-change endpoint to rotate).
+      TAKENOTES_PASSWORD: ${TAKENOTES_PASSWORD:-}
+      # Plain local HTTP demo: browsers drop Secure cookies over http.
+      TAKENOTES_INSECURE_HTTP: "1"
+    volumes:
+      - takenotes-data:/data
+    restart: unless-stopped
+
+volumes:
+  takenotes-data:
