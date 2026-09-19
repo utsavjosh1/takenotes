@@ -1,4 +1,5 @@
 import type { WorkspaceKind } from "../../shared/platform/types.js";
+import { CoreNoteService } from "../../core/services/note-service.js";
 import { appError, type AppError } from "../../shared/errors.js";
 import type { DirectoryEntry } from "../../shared/contracts/ipc.js";
 import type { FileRevision } from "./revisions.js";
@@ -9,11 +10,10 @@ import {
   listDirectory,
   renameDirectory,
   renamePath,
-  readTextFile,
   resolveInsideRoot,
-  writeTextFile,
 } from "./local-workspace.js";
 import type { ReadResult } from "./local-workspace.js";
+import { LocalHostFilesystem } from "./local-host-filesystem.js";
 import { validatePosixRelativePath, validateWindowsRelativePath } from "./path-security.js";
 
 /** Storage seam (ADR-0009): services dispatch by workspace kind to either
@@ -55,10 +55,14 @@ export interface FileAdapter {
   trash(root: string, kind: WorkspaceKind, relativePath: string): Promise<{ ok: true } | { error: AppError }>;
 }
 
-/** Windows/macOS/Linux local workspaces: existing `local-workspace.ts`
- *  behavior, unchanged. Trash goes through the injected OS-trash function
- *  (Electron `shell.trashItem` in production) so the adapter stays testable. */
+/** Windows/macOS/Linux local workspaces. Gate B routes note read/write
+ * through CoreNoteService; the remaining tree/mutation operations stay on the
+ * existing local-workspace helpers until their own slices migrate. Trash goes
+ * through the injected OS-trash function (Electron `shell.trashItem` in
+ * production) so the adapter stays testable. */
 export class NativeFileAdapter implements FileAdapter {
+  private readonly coreNotes = new CoreNoteService(new LocalHostFilesystem());
+
   constructor(private readonly trashItem: (absolutePath: string) => Promise<void>) {}
 
   list(root: string, kind: WorkspaceKind, relativePath: string): Promise<{ entries: DirectoryEntry[] } | { error: AppError }> {
@@ -66,7 +70,7 @@ export class NativeFileAdapter implements FileAdapter {
   }
 
   read(root: string, kind: WorkspaceKind, relativePath: string): Promise<{ result: ReadResult } | { error: AppError }> {
-    return readTextFile(root, kind, relativePath);
+    return this.coreNotes.read({ root, kind }, relativePath);
   }
 
   write(
@@ -78,7 +82,7 @@ export class NativeFileAdapter implements FileAdapter {
     newlineStyle: "lf" | "crlf",
     hadBom: boolean,
   ): Promise<{ revision: FileRevision } | { error: AppError }> {
-    return writeTextFile(root, kind, relativePath, content, expectedHash, newlineStyle, hadBom);
+    return this.coreNotes.update({ root, kind }, relativePath, content, expectedHash, newlineStyle, hadBom);
   }
 
   createFile(root: string, kind: WorkspaceKind, relativePath: string): Promise<{ revision: FileRevision } | { error: AppError }> {
