@@ -11,6 +11,7 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { appError, type AppError } from "../../shared/errors.js";
+import { isWindowsReservedName } from "../../shared/platform/filesystem.js";
 import type { WorkspaceKind } from "../../shared/platform/types.js";
 
 export const MAX_PATH_CHARS = 1024;
@@ -38,7 +39,7 @@ export function validateWindowsRelativePath(input: unknown): { relativePath: str
   // eslint-disable-next-line no-control-regex
   const bad = /[<>:"|?*\u0000-\u001f]/;
   for (const part of normalized.split(path.win32.sep)) {
-    if (part === "" || part === "." || part === ".." || bad.test(part)) {
+    if (part === "" || part === "." || part === ".." || bad.test(part) || isWindowsReservedName(part)) {
       return { error: appError("INVALID_PATH", `Invalid path component: ${part}`) };
     }
     if (part.endsWith(" ") || part.endsWith(".")) {

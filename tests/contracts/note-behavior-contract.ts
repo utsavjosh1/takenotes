@@ -119,6 +119,13 @@ export function defineNoteBehaviorSuite(
       expect(readFileSync(join(ws.root, "small.md"), "utf8")).toBe("small\n");
     });
 
+    it("returns TOO_LARGE before hashing an oversized current file on update", async () => {
+      const { service, ws } = await makeService();
+      writeFileSync(join(ws.root, "huge-current.md"), Buffer.alloc(MAX_FILE_BYTES + 1, "a"));
+      const out = await service.update(ws, "huge-current.md", "small\n", "0".repeat(64), "lf", false);
+      expect(out).toMatchObject({ error: { code: "TOO_LARGE" } });
+    });
+
     it("returns UNSUPPORTED_ENCODING for non-UTF-8 bytes", async () => {
       const { service, ws } = await makeService();
       writeFileSync(join(ws.root, "binary.md"), Buffer.from([0xff, 0xfe, 0x00, 0x41]));

@@ -48,10 +48,14 @@ export type CandidateFilter = {
   currentUid?: number;
 };
 
+function isNonInteractiveShell(shell: string): boolean {
+  const base = shell.split("/").pop()?.toLowerCase() ?? shell.toLowerCase();
+  return base === "nologin" || base === "false";
+}
+
 /** Filter to interactive/human candidates: uid >= minUid plus the current
- * user always. System/service accounts (root, daemons, nologin uid < minUid)
- * are dropped. Shells are parsed metadata, not a filter — a human with an
- * unusual shell is still a human. */
+ * user always. System/service accounts (root, daemons, nobody, non-current
+ * nologin/false shells) are dropped. */
 export function filterCandidateUsers(users: PasswdUser[], filter: CandidateFilter = {}): CandidateUser[] {
   const minUid = filter.minUid ?? 1000;
   const currentUid = filter.currentUid ?? -1;
@@ -62,6 +66,7 @@ export function filterCandidateUsers(users: PasswdUser[], filter: CandidateFilte
     // runs the helper (isCurrent still wins below).
     if (u.uid === 65534 && u.uid !== currentUid) continue;
     if (u.uid < minUid && u.uid !== currentUid) continue;
+    if (u.uid !== currentUid && isNonInteractiveShell(u.shell)) continue;
     out.push({ ...u, isCurrent: u.uid === currentUid });
   }
   out.sort((a, b) => a.name.localeCompare(b.name));

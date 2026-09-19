@@ -265,8 +265,10 @@ export default function App(): JSX.Element {
   // Parse-once index refresh (P1-07): runs async after open so the editor
   // stays snappy; workspace-level failures surface like tree failures.
   const refreshWorkspaceIndex = useCallback(async (ws: WorkspaceInfo) => {
+    setIndexNotice(null);
     const res = await buildWorkspaceIndex(window.takenotes, workspaceIndex, ws);
     if (!res.ok) {
+      setIndexNotice(null);
       if (isWslKind(ws.type)) setWslError(res.error.message);
       else errToast(res.error, "Couldn't build the search index");
       return;

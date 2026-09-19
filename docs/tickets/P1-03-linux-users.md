@@ -6,7 +6,8 @@ Phase: 1 Foundation. Blocked by: P1-02 (needs distro selection flow).
 
 After picking a distro, the picker lists interactive Linux users (from the
 helper, `/etc/passwd`-backed: uid ≥ 1000 plus current/default user, threshold
-overridable). Picking `Ubuntu → work` runs all subsequent helper work as
+overridable, excluding non-current `/usr/sbin/nologin` and `/bin/false`
+shells). Picking `Ubuntu → work` runs all subsequent helper work as
 `work`; `~` resolves to that user's home (never on Windows). Registry and
 `WorkspaceInfo` carry `linuxUser`; `connectWsl(distro, linuxUser, linuxPath)`
 replaces the 2-arg form end to end (preload, IPC, dialog).

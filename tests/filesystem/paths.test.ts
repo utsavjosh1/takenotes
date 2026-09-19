@@ -24,9 +24,12 @@ describe("windows path validation", () => {
     expect("error" in validateWindowsRelativePath("a\0b")).toBe(true);
   });
 
-  it("rejects illegal Windows characters", () => {
+  it("rejects illegal Windows characters and reserved device names", () => {
     expect("error" in validateWindowsRelativePath("a<b.md")).toBe(true);
     expect("error" in validateWindowsRelativePath("a?.md")).toBe(true);
+    for (const p of ["CON", "aux.md", "notes\\NUL.txt", "COM1", "LPT9.log"]) {
+      expect("error" in validateWindowsRelativePath(p)).toBe(true);
+    }
   });
 });
 

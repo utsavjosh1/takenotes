@@ -6,9 +6,17 @@ run through the same `CoreNoteService` → same policy → `HostFilesystem`.
 ## Run
 
 ```bash
-TAKENOTES_PASSWORD=<min-12-chars> docker compose up --build
+umask 077
+read -rsp "takenotes owner password: " TAKENOTES_PASSWORD; echo
+printf 'TAKENOTES_PASSWORD=%s\n' "$TAKENOTES_PASSWORD" > .env
+unset TAKENOTES_PASSWORD
+docker compose up --build
 # Browser: http://localhost:3000
 ```
+
+Do not pass the real password inline on the `docker compose` command: shell
+history and local process inspection can expose it. Keep `.env` protected
+(`0600`) and remove it after first boot if you do not need it for automation.
 
 First boot initializes owner auth and seeds a `Notes` workspace with
 `README.md`. Later boots reuse `/data` as-is; `TAKENOTES_PASSWORD` is then
@@ -46,11 +54,10 @@ editing, sync, multi-user, public API docs, WebSocket, Caddy/Tailscale specifics
 
 ## Implementation notes (pre-P1-11 repair pass)
 
-- Password KDF is scrypt (`scrypt-16384-8-1`, `node:crypto`), NOT Argon2id:
-  ADR-0014 names Argon2id, but that needs a native addon and the Docker
-  runtime stage ships dependency-free. Parameters are stored alongside the
+- Password KDF is scrypt (`scrypt-16384-8-1`, `node:crypto`), accepted by
+  ADR-0014 for dependency-free server V1. Parameters are stored alongside the
   verifier (`kdf` field) so a future Argon2id migration can re-hash on next
-  login. Recorded here instead of silently diverging from the ADR.
+  login.
 - Deployment is NOT VERIFIED in this environment (Linux container, no Docker
   daemon run here): the image has never been built, `docker compose up` has
   never executed, and no TLS-terminated production run exists. The compose

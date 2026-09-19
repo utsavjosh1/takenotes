@@ -18,7 +18,7 @@ takenotes supports two application hosts over one internal Service Layer.
 - `/api/rpc/*` is a private unstable encoding, not `/api/v1/*`.
 - HTTP is authenticated even on Tailscale/LAN; no reverse-proxy identity-header trust in V1.
 - WebSocket deferred until after the HTTP note slice proves.
-- Single-owner server V1 (`TAKENOTES_PASSWORD` bootstrap → Argon2id, opaque persistent sessions, `__Host-` cookie, explicit CSRF, `authGeneration` invalidation).
+- Single-owner server V1 (`TAKENOTES_PASSWORD` bootstrap → dependency-free scrypt KDF (`scrypt-16384-8-1`) with KDF metadata for future migration, opaque persistent sessions, `__Host-` cookie, explicit CSRF, `authGeneration` invalidation). Argon2id remains preferred for a later server hardening pass when adding native/runtime dependencies is acceptable.
 - Remote workspaces have one authoritative server-side copy (`$TAKENOTES_DATA/workspaces/*`); server-local state lives under `$TAKENOTES_DATA/app/*` (auth, sessions, workspace registry, drafts, recovery, grants, logs, indexes). No automatic local↔server sync in V1.
 - Server filesystem is ordinary `linux-local` behavior on that host; opaque `workspaceId` persists in a registry and is never recycled (delete → `missing`/tombstone). Empty `/data/workspaces/` is a valid empty state.
 - ADR-0009's Service Layer and MCP intent remain; only its `no listening port / no REST` absolute is scoped to the desktop-only host.

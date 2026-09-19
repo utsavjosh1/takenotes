@@ -140,6 +140,10 @@ export class CoreNoteService {
     if ("error" in r) return r;
     let current: Buffer;
     try {
+      const st = await this.host.stat(r.absolutePath);
+      if (st.size > MAX_FILE_BYTES) {
+        return { error: appError("TOO_LARGE", "This file is too large to edit safely.") };
+      }
       current = await this.host.readBytes(r.absolutePath);
     } catch (err) {
       return { error: mapFsError(err as NodeJS.ErrnoException, "file") };
@@ -157,8 +161,11 @@ export class CoreNoteService {
     } catch (err) {
       return { error: mapFsError(err as NodeJS.ErrnoException, "file") };
     }
-    const st = await this.host.stat(r.absolutePath);
-    const written = await this.host.readBytes(r.absolutePath);
-    return { revision: revisionOfBytes(written, st.mtimeMs) };
+    try {
+      const st = await this.host.stat(r.absolutePath);
+      return { revision: revisionOfBytes(bytes, st.mtimeMs) };
+    } catch (err) {
+      return { error: mapFsError(err as NodeJS.ErrnoException, "file") };
+    }
   }
 }

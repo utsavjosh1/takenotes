@@ -1,12 +1,16 @@
-# Local Gate-C proof: `TAKENOTES_PASSWORD=... docker compose up`
-# Browser: http://localhost:3000 (plain local HTTP → insecure-cookie mode).
-# Production behind TLS: drop TAKENOTES_INSECURE_HTTP so the locked
-# __Host-/Secure/HttpOnly/SameSite=Strict contract applies.
+# Local Gate-C proof: create a protected .env with TAKENOTES_PASSWORD, then
+# `docker compose up --build`. Browser: http://localhost:3000 (plain local
+# HTTP → insecure-cookie mode, loopback-published only).
+# Production behind TLS: drop TAKENOTES_INSECURE_HTTP and the loopback-only
+# port binding so the locked __Host-/Secure/HttpOnly/SameSite=Strict contract
+# applies behind the TLS terminator.
 services:
   takenotes:
     build: .
     ports:
-      - "3000:3000"
+      # Insecure-cookie demo: loopback only. Remove this restriction only
+      # together with TAKENOTES_INSECURE_HTTP, behind a TLS terminator.
+      - "127.0.0.1:3000:3000"
     environment:
       TAKENOTES_DATA: /data
       # Container-loopback is unreachable from the host, so the compose

@@ -82,10 +82,7 @@ describe("confinement parity vectors", () => {
   });
 
   it("windows-local validation refuses the same vectors on any host (pure policy)", () => {
-    // NOTE: Windows reserved device names (`aux.md`, `nul`, …) are accepted
-    // by every boundary today — consistent, so no drift. Real reserved-name
-    // behavior on NTFS is P1-11 Windows verification, not a parity vector.
-    for (const p of [...REFUSED_VECTORS, "note.md:bad"]) {
+    for (const p of [...REFUSED_VECTORS, "note.md:bad", "aux.md", "NUL", "dir/COM1.txt", "LPT9"] as const) {
       const out = validateNoteRelativePath("windows-local", p);
       expect("error" in out, `windows-local accepts ${JSON.stringify(p)}`).toBe(true);
     }
