@@ -31,8 +31,12 @@ export type CoreWorkspace = {
 
 type PathModule = Pick<typeof path.win32, "join" | "normalize" | "dirname" | "relative" | "isAbsolute" | "sep">;
 
-function pathModuleFor(kind: WorkspaceKind): PathModule {
-  return kind === "windows-local" ? path.win32 : path.posix;
+function looksLikeWindowsRoot(root: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(root) || root.startsWith("\\\\");
+}
+
+function pathModuleForRoot(kind: WorkspaceKind, root: string): PathModule {
+  return kind === "windows-local" || looksLikeWindowsRoot(root) ? path.win32 : path.posix;
 }
 
 export class CoreNoteService {
@@ -43,7 +47,7 @@ export class CoreNoteService {
     kind: WorkspaceKind,
     relativePath: string,
   ): Promise<{ absolutePath: string } | { error: AppError }> {
-    const pm = pathModuleFor(kind);
+    const pm = pathModuleForRoot(kind, root);
     const abs = pm.join(root, relativePath);
     const realRoot = await this.host.realpath(root);
     const relParts = pm.normalize(relativePath).split(pm.sep);

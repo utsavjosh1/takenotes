@@ -13,7 +13,7 @@
  */
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createTakenotesServer } from "../../src/server/app.js";
 import { FileOwnerAuth } from "../../src/server/auth-store.js";
@@ -315,12 +315,16 @@ describe("Gate C restart + rotation", () => {
   it("managed workspaces cannot escape the workspaces directory", async () => {
     const h = await makeHarness();
     try {
+      const insideWorkspacesDir = (root: string): boolean => {
+        const rel = relative(h.workspacesDir, root);
+        return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+      };
       const ws = await h.registry.registerManagedWorkspace("Second", h.workspacesDir, "second");
-      expect(ws.root.startsWith(`${h.workspacesDir}/`)).toBe(true);
+      expect(insideWorkspacesDir(ws.root)).toBe(true);
       // Traversal in the display/dir name is neutralized by slug sanitizing:
       // it must land inside the workspaces dir, never outside it.
       const evil = await h.registry.registerManagedWorkspace("Evil", h.workspacesDir, "../../evil");
-      expect(evil.root.startsWith(`${h.workspacesDir}/`)).toBe(true);
+      expect(insideWorkspacesDir(evil.root)).toBe(true);
     } finally {
       cleanup(h);
     }
