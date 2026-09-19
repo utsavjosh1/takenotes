@@ -5,6 +5,7 @@ import { isWslKind, moveToTrashLabel, revealLabel, trashName } from "../shared/p
 import type { CommandId } from "../shared/platform/keymap";
 import { TitleBar, ActivityRail, StatusBar } from "./components/chrome";
 import { PaneView } from "./components/pane-view";
+import { buildWorkspaceIndex, workspaceIndex } from "./index/workspace-index";
 import { FileTree, type TreeState } from "./components/tree";
 import { SearchPanel, useDebouncedValue } from "./components/search";
 import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
@@ -226,6 +227,16 @@ export default function App(): JSX.Element {
     setAllFiles(out);
   }, []);
 
+  // Parse-once index refresh (P1-07): runs async after open so the editor
+  // stays snappy; workspace-level failures surface like tree failures.
+  const refreshWorkspaceIndex = useCallback(async (ws: WorkspaceInfo) => {
+    const res = await buildWorkspaceIndex(window.takenotes, workspaceIndex, ws);
+    if (!res.ok) {
+      if (isWslKind(ws.type)) setWslError(res.error.message);
+      else errToast(res.error, "Couldn't build the search index");
+    }
+  }, [errToast]);
+
   const openWorkspace = useCallback(async (ws: WorkspaceInfo) => {
     setWorkspace(ws);
     setLayout(createLayout()); setCursor({ line: 1, col: 1 });
@@ -236,7 +247,9 @@ export default function App(): JSX.Element {
     });
     await refreshTree(ws);
     await rebuildAllFiles(ws);
-  }, [refreshTree, rebuildAllFiles]);
+    // Index builds in the background: open stays fast on big workspaces.
+    void refreshWorkspaceIndex(ws);
+  }, [refreshTree, rebuildAllFiles, refreshWorkspaceIndex]);
 
   const openLocal = useCallback(async () => {
     const res = await window.takenotes.workspace.openLocal();
@@ -420,6 +433,9 @@ export default function App(): JSX.Element {
       return;
     }
     setLayout((l) => markSaved(l, key, res.result.hash, new Date().toLocaleTimeString()));
+    // File changed → replace exactly this index entry (content + the
+    // authoritative post-write revision: zero extra reads).
+    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res.result);
     // The file now holds the truth: the recovery draft is obsolete.
     setRecovery((p) => {
       if (!(key in p)) return p;
@@ -466,6 +482,8 @@ export default function App(): JSX.Element {
     });
     if (!res2.ok) { errToast(res2.error); return; }
     setLayout((l) => markSaved(l, target.key, res2.result.hash, new Date().toLocaleTimeString()));
+    // Conflict resolved by overwrite: the file changed → re-parse it.
+    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res2.result);
   }, [workspace, layout, toast, errToast]);
 
   const closeTab = useCallback((paneId: string, key: string) => {
@@ -599,6 +617,8 @@ export default function App(): JSX.Element {
     const target = (/\.md$/i.test(rel) ? rel : `${rel}.md`);
     const res = await window.takenotes.file.create(workspace.workspaceId, target);
     if (!res.ok) { errToast(res.error, `Couldn't create "${target}"`); return; }
+    // Created files are empty: index the blank entry with its revision.
+    workspaceIndex.upsert(workspace.workspaceId, target, "", res.result);
     setCreating(null); setCreateName("");
     if (creating.dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, creating.dir);
@@ -620,6 +640,9 @@ export default function App(): JSX.Element {
     if (!res.ok) { errToast(res.error, "Couldn't rename"); return; }
     // Rename remaps open keys in place: baselines survive the rename.
     setLayout((l) => applyRename(l, workspace.workspaceId, entry.relativePath, newRel));
+    // Rename moves the index entry without re-parsing (bytes unchanged).
+    if (entry.kind === "directory") workspaceIndex.movePrefix(workspace.workspaceId, entry.relativePath, newRel);
+    else workspaceIndex.move(workspace.workspaceId, entry.relativePath, newRel);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
       if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
@@ -646,6 +669,8 @@ export default function App(): JSX.Element {
       }
     }
     setLayout((l) => removeDocsForEntry(l, workspace.workspaceId, entry.relativePath));
+    // Folder delete drops the whole index prefix (exact + everything under).
+    workspaceIndex.removePrefix(workspace.workspaceId, entry.relativePath);
     const dir = parentDir(entry.relativePath);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
@@ -664,6 +689,7 @@ export default function App(): JSX.Element {
     const res = await window.takenotes.file.trash(workspace.workspaceId, entry.relativePath);
     if (!res.ok) { errToast(res.error, wsl ? `Couldn't delete "${entry.name}"` : undefined); return; }
     setLayout((l) => removeDocsForEntry(l, workspace.workspaceId, entry.relativePath));
+    workspaceIndex.removePrefix(workspace.workspaceId, entry.relativePath);
     const dir = parentDir(entry.relativePath);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
@@ -755,7 +781,7 @@ export default function App(): JSX.Element {
       { id: "view.splitDown", title: "Split editor down", run: () => splitActive("horizontal") },
       { id: "view.closeSplit", title: "Close split pane", run: () => closeActivePane() },
       { id: "view.focusOtherPane", title: "Focus other pane", run: () => focusOtherPane() },
-      { id: "workspace.refresh", title: "Refresh file tree", run: () => { if (workspace) { void refreshTree(workspace); void rebuildAllFiles(workspace); } } },
+      { id: "workspace.refresh", title: "Refresh file tree", run: () => { if (workspace) { void refreshTree(workspace); void rebuildAllFiles(workspace); void refreshWorkspaceIndex(workspace); } } },
       { id: "settings.open", title: "Open settings", shortcut: sc("settings.open"), run: () => setSettingsOpen(true) },
     ];
     if (platform.capabilities.updates) {
@@ -765,7 +791,7 @@ export default function App(): JSX.Element {
       items.splice(4, 0, { id: "workspace.openWsl", title: "Open WSL folder…", run: () => void openWslDialog() });
     }
     return items;
-  }, [newNote, save, openLocal, openWslDialog, checkForUpdates, layout, closeTab, splitActive, closeActivePane, focusOtherPane, workspace, refreshTree, rebuildAllFiles, sc, platform.capabilities.wsl, platform.capabilities.updates]);
+  }, [newNote, save, openLocal, openWslDialog, checkForUpdates, layout, closeTab, splitActive, closeActivePane, focusOtherPane, workspace, refreshTree, rebuildAllFiles, refreshWorkspaceIndex, sc, platform.capabilities.wsl, platform.capabilities.updates]);
 
   /* Native menu → same command dispatch (§59). Menu accelerators and the
    * palette forward CommandIds here; mouse and keyboard share one path. */
@@ -1131,7 +1157,7 @@ export default function App(): JSX.Element {
           {wslError && (
             <div className="wsl-banner" role="alert">
               <span style={{ flex: 1 }}>Workspace unavailable — {wslError}</span>
-              <button className="btn" onClick={() => void refreshTree(workspace)}>Reconnect</button>
+              <button className="btn" onClick={() => { void refreshTree(workspace); void refreshWorkspaceIndex(workspace); }}>Reconnect</button>
             </div>
           )}
           {/* Split panes (P1-06): at most two, side-by-side or stacked.
