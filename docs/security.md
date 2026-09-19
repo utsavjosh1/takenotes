@@ -7,6 +7,11 @@
   `shell`, `child_process`, or `require` reaches React.
 - Every privileged IPC handler validates sender, arguments, workspace id,
   relative path, then operates and returns a structured `{ ok, result|error }`.
+  The sender rule is uniform — including low-sensitivity handlers like
+  `app:platform` and `app:version` — enforced by the shared
+  `src/main/ipc/guard.ts` boundary and tripwired by `tests/ipc/sender-guard.test.ts`.
+- Recovery snapshots are namespaced by stable workspace identity and scoped
+  reads never cross workspaces (`NOT_FOUND`, never another workspace's bytes).
 
 ## Path confinement
 

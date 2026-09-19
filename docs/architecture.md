@@ -64,3 +64,33 @@ User Markdown files are authoritative; the app never moves them into a database.
 - WSL install location: `~/.local/share/takenotes/` (user-owned, no sudo).
 - No localhost server, no SQLite, no native addons, no plugin system in MVP.
 - See `docs/protocol.md`, `docs/security.md`, and `docs/decisions/`.
+
+## Repair-pass notes (pre-P1-11)
+
+- **Recovery identity**: the runtime `workspaceId` is random per open. Recovery
+  storage is keyed by a stable namespace (`kind + canonical root + distro +
+  linuxUser`, reusing the drafts `workspaceKeyFor` identity), resolved from the
+  registration at the IPC boundary. Reopening the same Workspace under a new
+  runtime id keeps history; `Ubuntu/utsav` and `Ubuntu/work` stay separate.
+  Legacy `recovery/<random-id>/` data from development builds is left on disk,
+  never silently deleted, but is not surfaced under the new namespace.
+- **Recovery reads are scoped**: `recovery:read` takes `(workspaceId,
+  snapshotId)` and only searches that workspace's namespace; cross-workspace
+  reads fail `NOT_FOUND`.
+- **Gate A (landed)**: production native note read/update goes
+  `IPC → NoteService → NativeFileAdapter → CoreNoteService →
+  LocalHostFilesystem`. Directory/tree/rename/delete/trash intentionally stay
+  on the existing `local-workspace` helpers until their own slices migrate.
+- **Gate B**: `src/server/auth.ts` (`SingleOwnerAuth`) is a TRANSPORT PARITY
+  PROOF harness, not production auth. The fuller owner-auth server
+  (`auth-store.ts`: password bootstrap, persisted sessions, `authGeneration`
+  invalidation, `__Host-` cookies) is proven by `tests/server/gate-c.test.ts`
+  but its deployment (Docker image, TLS, real-host run) is NOT VERIFIED here.
+- **WSL singleton**: one active helper session. Opening another distro/user
+  disconnects the first; an identity mismatch fails closed with DISCONNECTED
+  and never executes as the wrong Linux user. Phase 1 limitation, not a bug.
+- **Index bounds**: bulk builds cap at 2000 listed files (`truncated`) and
+  skip files over 1 MiB (`skipped`). Either bound sets a user-visible
+  notice in the status strip and Search panel — never a silent partial index.
+- **P1-11 is NOT VERIFIED**: real Windows 11 + WSL2 evidence is still pending
+  (see `docs/tickets/P1-11-windows-verification.md`).

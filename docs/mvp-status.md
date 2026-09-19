@@ -199,3 +199,41 @@ Status: blocked (same environmental blocker).
 
 Watching/reconciliation, notebook UI completion, release pipeline execution,
 and clean-machine install test all await Windows + WSL access.
+
+## Repair pass — pre-P1-11 audit findings (2026-09-19, Linux-verified only)
+
+Status: corrective pass only. No new product features. P1-11 real-Windows
+verification is STILL NOT VERIFIED — nothing below substitutes for it.
+
+- H-01 FIXED: recovery now uses a stable namespace (`kind + canonical root +
+  distro + linuxUser` via the drafts `workspaceKeyFor` identity) resolved at
+  the IPC boundary. Reopen under a new runtime `workspaceId` keeps history;
+  `Ubuntu/utsav` vs `Ubuntu/work` stay isolated. Old `recovery/<random-id>/`
+  development data is preserved on disk, not migrated, not surfaced.
+  Tests: `tests/workspace/recovery-reopen.test.ts` (reopen, WSL isolation,
+  restore-after-reopen, stale-CONFLICT).
+- M-01 FIXED: `recovery:read` is now `(workspaceId, snapshotId)` scoped to the
+  workspace namespace; cross-workspace reads fail `NOT_FOUND`. No global
+  snapshot lookup reaches the renderer.
+- H-02 FIXED (landed): production native note read/update runs
+  `CoreNoteService` via `NativeFileAdapter`; `tests/contracts/` proves the
+  production path satisfies the Core contract (BOM, CRLF, CONFLICT,
+  TOO_LARGE, error codes). Directory/tree/rename/delete/trash stay on the
+  existing host layer intentionally.
+- M-04 FIXED: `app:platform` + `app:version` now enforce `senderIsOurs` like
+  every other handler (`src/main/ipc/guard.ts`, tripwired by
+  `tests/ipc/sender-guard.test.ts`).
+- H-04 FIXED: index bounds (2000 listed files, 1 MiB per file) now produce a
+  user-visible notice (`indexStatusMessage`) wired into the status strip and
+  the Search panel.
+- H-03 (Gate B status) CLARIFIED: `SingleOwnerAuth` is labeled TRANSPORT
+  PARITY PROOF ONLY. The fuller owner-auth server (`auth-store.ts`) passes
+  `tests/server/gate-c.test.ts`; its deployment (Docker/TLS/real host) is
+  NOT VERIFIED. Bare server runs bind 127.0.0.1 by default.
+- M-02 DOCUMENTED: single active WSL helper session is a Phase 1 limitation;
+  identity mismatch fails closed (DISCONNECTED), never wrong-user execution.
+  Manual scenario added to P1-11 item 9.
+- M-03 DOCUMENTED + TRIPWIRED: `tests/core/confinement-vectors.test.ts` runs
+  one vector table against Core, the production native adapter, and
+  windows-local validation; the WSL helper is covered by its round-trip
+  symlink tests. Windows reserved-name behavior is P1-11, not a vector.
