@@ -10,6 +10,7 @@ import type {
   UpdateProgress,
   WorkspaceInfo,
   WslDistribution,
+  WslLinuxUser,
 } from "../shared/contracts/ipc.js";
 import type { CommandId } from "../shared/platform/keymap.js";
 
@@ -25,7 +26,10 @@ export type TakeNotesApi = {
     openLocal(): Promise<IpcResult<WorkspaceInfo | null>>;
     close(workspaceId: string): Promise<IpcResult<null>>;
     listWslDistributions(): Promise<IpcResult<WslDistribution[]>>;
-    connectWsl(distro: string, linuxPath: string): Promise<IpcResult<WorkspaceInfo>>;
+    /** Interactive Linux users for one selected distro (`/etc/passwd`-backed).
+     * Structured records only — no shell execution reaches the renderer. */
+    listWslUsers(distro: string): Promise<IpcResult<WslLinuxUser[]>>;
+    connectWsl(distro: string, linuxUser: string, linuxPath: string): Promise<IpcResult<WorkspaceInfo>>;
   };
   directory: {
     list(workspaceId: string, relativePath: string): Promise<IpcResult<DirectoryEntry[]>>;
@@ -89,7 +93,8 @@ const api: TakeNotesApi = {
     openLocal: () => ipcRenderer.invoke("workspace:openLocal"),
     close: (workspaceId) => ipcRenderer.invoke("workspace:close", workspaceId),
     listWslDistributions: () => ipcRenderer.invoke("workspace:listWsl"),
-    connectWsl: (distro, linuxPath) => ipcRenderer.invoke("wsl:connect", distro, linuxPath),
+    listWslUsers: (distro) => ipcRenderer.invoke("workspace:listWslUsers", distro),
+    connectWsl: (distro, linuxUser, linuxPath) => ipcRenderer.invoke("wsl:connect", distro, linuxUser, linuxPath),
   },
   directory: {
     list: (workspaceId, relativePath) => ipcRenderer.invoke("directory:list", workspaceId, relativePath),

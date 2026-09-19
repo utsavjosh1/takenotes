@@ -9,6 +9,7 @@ describe("preload surface (no arbitrary process spawning)", () => {
 
   it("exposes only narrow named distro functions", () => {
     expect(source).toContain("listWslDistributions");
+    expect(source).toContain("listWslUsers");
     // No process-spawning capability reaches the renderer: no child_process,
     // no spawn/exec, no shell execution. (`shell:` below is only the
     // reveal-in-file-manager key, not execution.)

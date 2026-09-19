@@ -177,6 +177,22 @@ the live list-while-stopped check (`tests/wsl/distro-list.windows.test.ts`)
 is Windows-gated and NOT yet executed — still needs a Windows 11 host with
 two distros (one stopped) to record before/after states here.
 
+### P1-03 — Linux-user discovery update (2026-09-19, Linux-verified only)
+
+Implemented: helper `users.list` (`/etc/passwd`-backed, uid ≥ 1000 plus the
+current user, threshold overridable) with per-user `~` expansion;
+`wsl.exe -d <distro> -u <user>` run-as-user spawn (no sudo); narrow
+`workspace.listWslUsers(distro)` bridge; `connectWsl(distro, linuxUser,
+linuxPath)` 3-arg end to end (old 2-arg form removed); registry and
+`WorkspaceInfo` carry `linuxUser`; `workspaceKeyFor` includes the user, so
+`Ubuntu/utsav` and `Ubuntu/work` are distinct workspaces. Picker flow is
+distro → users (default preselected) → path → Connect; discovery enters only
+the selected distro as its default user. Logic tests (parser, transport,
+argv, registry) plus helper `users.list`/`~` direct-spawn round-trips pass on
+Linux. Live Windows evidence (`users-list.windows.test.ts`, stopped-distro
+stability) is Windows-gated and NOT yet executed — needs a Windows 11 host
+with two Linux users to verify `-u` spawn, per-user `~`, and the picker.
+
 ## Stages 7–10
 
 Status: blocked (same environmental blocker).

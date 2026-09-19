@@ -10,6 +10,8 @@ export type WorkspaceInfo = {
   displayName: string;
   type: WorkspaceType;
   connection: "connected" | "disconnected" | "reconnecting" | "failed";
+  /** WSL Linux user (P1-03). Never a raw root — main resolves those. */
+  linuxUser?: string;
 };
 
 export type DirectoryEntry = {
@@ -44,6 +46,20 @@ export type WslDistribution = {
   /** WSL version ("2"…); absent on the quiet fallback path. */
   version?: string;
   /** True for the `*` default distro in `wsl -l -v`. */
+  isDefault?: boolean;
+};
+
+/** Structured Linux-user record (helper `users.list`, `/etc/passwd`-backed).
+ * The renderer receives these only — it never parses passwd itself and
+ * never gains shell execution. */
+export type WslLinuxUser = {
+  username: string;
+  uid: number;
+  gid?: number;
+  home: string;
+  shell?: string;
+  /** True for the user the discovery helper ran as (distro default user).
+   * The picker offers it as the preselected "Default" row. */
   isDefault?: boolean;
 };
 

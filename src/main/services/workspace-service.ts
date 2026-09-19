@@ -1,5 +1,6 @@
 import type { WorkspaceKind } from "../../shared/platform/types.js";
-import type { WslDistribution } from "../../shared/contracts/ipc.js";
+import type { WslDistribution, WslLinuxUser } from "../../shared/contracts/ipc.js";
+import { appError } from "../../shared/errors.js";
 import { WorkspaceRegistry, type WorkspaceRegistration } from "../workspace/registry.js";
 import { listDistributions } from "../wsl/distributions.js";
 
@@ -10,14 +11,15 @@ export class WorkspaceService {
   constructor(
     private readonly registry: WorkspaceRegistry = new WorkspaceRegistry(),
     private readonly distroSource: () => Promise<WslDistribution[]> = () => listDistributions(),
+    private readonly userSource?: (distro: string) => Promise<WslLinuxUser[]>,
   ) {}
 
   registerLocal(displayName: string, root: string, kind: WorkspaceKind = "windows-local"): WorkspaceRegistration {
     return this.registry.register(kind, displayName, root);
   }
 
-  registerWsl(displayName: string, root: string, distro: string): WorkspaceRegistration {
-    return this.registry.register("windows-wsl", displayName, root, distro);
+  registerWsl(displayName: string, root: string, distro: string, linuxUser?: string): WorkspaceRegistration {
+    return this.registry.register("windows-wsl", displayName, root, distro, linuxUser);
   }
 
   get(id: string): WorkspaceRegistration | undefined {
@@ -29,6 +31,17 @@ export class WorkspaceService {
    * Connection — Linux-user selection belongs to P1-03. */
   listDistributions(): Promise<WslDistribution[]> {
     return this.distroSource();
+  }
+
+  /** Interactive Linux users for one explicitly selected distro (P1-03).
+   * Discovery enters only that distro, as its default user; unrelated
+   * distros are never woken. The source is wired in main (ephemeral helper
+   * session) and injected in tests. */
+  listUsers(distro: string): Promise<WslLinuxUser[]> {
+    if (!this.userSource) {
+      throw appError("INTERNAL_ERROR", "Linux user discovery is not available.");
+    }
+    return this.userSource(distro);
   }
 
   close(id: string): void {

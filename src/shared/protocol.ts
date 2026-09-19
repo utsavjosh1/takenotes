@@ -39,6 +39,7 @@ export const HELPER_OPERATIONS = [
   "file.read",
   "file.write",
   "file.create",
+  "users.list",
 ] as const;
 
 export type HelperOperation = (typeof HELPER_OPERATIONS)[number];

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { PROTOCOL_VERSION } from "../../src/shared/protocol-version.js";
+import { filterCandidateUsers, parsePasswd } from "./users.js";
 
 const MAX_FRAME = 16 * 1024 * 1024;
 
@@ -98,7 +99,7 @@ async function handle(operation: string, payload: unknown, sessionId: string): P
       runtimeVersion: process.version,
       platform: process.platform,
       architecture: process.arch,
-      capabilities: ["workspace.open", "directory.list", "file.read", "file.write", "file.create"],
+      capabilities: ["workspace.open", "directory.list", "file.read", "file.write", "file.create", "users.list"],
       processId: process.pid,
       nonce: typeof nonce === "string" ? nonce : "",
       execPath: process.execPath,
@@ -106,8 +107,35 @@ async function handle(operation: string, payload: unknown, sessionId: string): P
       home: process.env["HOME"] ?? "",
     };
   }
+  if (operation === "users.list") {
+    // Interactive candidates from the account database (never /home/*).
+    // Session-independent: runs before any workspace.open, as the user the
+    // helper was spawned as (distro default without -u, selected user with -u).
+    const minUidRaw = p["minUid"];
+    const minUid = typeof minUidRaw === "number" && Number.isSafeInteger(minUidRaw) && minUidRaw >= 0 ? minUidRaw : 1000;
+    const currentUid = typeof process.getuid === "function" ? process.getuid() : -1;
+    let text: string;
+    try {
+      text = await fs.readFile("/etc/passwd", "utf8");
+    } catch (e: unknown) {
+      log("error", "users.list", "cannot read /etc/passwd", { sessionId, errno: (e as NodeJS.ErrnoException)?.code });
+      throw err("INTERNAL_ERROR", "Could not read user accounts.");
+    }
+    return { users: filterCandidateUsers(parsePasswd(text), { minUid, currentUid }) };
+  }
   if (operation === "workspace.open") {
-    const root = p["root"];
+    let root = p["root"];
+    // `~` expands under the selected user only (the helper runs as that
+    // user via `wsl -u`), never on Windows — main forwards it verbatim.
+    if (typeof root === "string" && (root === "~" || root.startsWith("~/"))) {
+      const home = process.env["HOME"];
+      if (!home) {
+        log("error", "workspace", "open rejected: no HOME for ~ expansion", { sessionId, root });
+        throw err("INVALID_REQUEST", "Cannot resolve home directory.");
+      }
+      root = root === "~" ? home : path.posix.join(home, root.slice(2));
+      log("info", "workspace", "expanded ~ to home", { sessionId, home });
+    }
     log("info", "workspace", "open request", { sessionId, root });
     if (typeof root !== "string" || !root.startsWith("/")) {
       log("error", "workspace", "open rejected: root must be absolute POSIX", { sessionId, root });

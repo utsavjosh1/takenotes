@@ -13,19 +13,41 @@ import type { WorkspaceKind } from "../../shared/platform/types.js";
 import { searchWorkspace } from "../search/search.js";
 import { clearDraft, isDraftStale, loadDraft, MAX_DRAFT_BYTES, saveDraft } from "../workspace/drafts.js";
 import { HelperSupervisor } from "../wsl/helper-supervisor.js";
+import { isValidDistroId, isValidLinuxUser } from "../wsl/launch-security.js";
+import { listWslUsers } from "../wsl/user-discovery.js";
 import { checkForUpdates, downloadAndInstall } from "../update/updater.js";
 import { currentDesktopPlatform } from "../../shared/platform/platform.js";
 import { getCapabilities } from "../../shared/platform/capabilities.js";
 import { localWorkspaceKind, toCanonicalRel } from "../../shared/platform/filesystem.js";
 import { shortcutLabelsFor } from "../../shared/platform/shortcut-labels.js";
 import { detectWayland } from "../platform/linux.js";
-import type { DirectoryEntry, PlatformReport, SearchMatch } from "../../shared/contracts/ipc.js";
+import type { DirectoryEntry, PlatformReport, SearchMatch, WslLinuxUser } from "../../shared/contracts/ipc.js";
 import type { AppError } from "../../shared/errors.js";
 
-const workspaces = new WorkspaceService(new WorkspaceRegistry());
+const workspaces = new WorkspaceService(
+  new WorkspaceRegistry(),
+  undefined,
+  // Ephemeral discovery session (default user, no workspace opened) for
+  // exactly one explicitly selected distro. Never disturbs the singleton
+  // connect session owned below. The supervisor is created lazily once the
+  // IPC broadcast channel exists (see registerIpc).
+  async (distro: string): Promise<WslLinuxUser[]> => {
+    const sup = getSupervisor(broadcastEvent ?? (() => undefined));
+    const base = sup.resourceBase();
+    const ephemeral = await sup.spawnEphemeral(distro, path.join(base, "node"), path.join(base, "helper.cjs"));
+    return listWslUsers(distro, {
+      spawnSession: async () => ({
+        request: (operation, payload) => ephemeral.request(operation, payload),
+        dispose: () => ephemeral.dispose(),
+      }),
+    });
+  },
+);
 // Single native adapter for Windows/macOS/Linux local workspaces.
 const nativeAdapter = new NativeFileAdapter((absolutePath) => shell.trashItem(absolutePath));
 let supervisor: HelperSupervisor | null = null;
+/** Broadcast channel for WSL state events, captured per registerIpc call. */
+let broadcastEvent: ((kind: string, payload: unknown) => void) | null = null;
 // NoteService dispatches by workspace kind: native → FileAdapter, WSL → helper.
 let notes: NoteService | null = null;
 
@@ -227,6 +249,7 @@ function handlerRel(
 }
 
 export function registerIpc(broadcast: (kind: string, payload: unknown) => void): void {
+  broadcastEvent = broadcast;
   // Platform report for the renderer hook + `npm run test:platform` (§210).
   // Uses app.getPath — never hardcoded platform paths (§19–§20, §100–§102).
   ipcMain.handle("app:platform", () => {
@@ -288,49 +311,79 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     }
   });
 
-  ipcMain.handle("wsl:connect", async (event, distro: unknown, linuxPath: unknown) => {
+  ipcMain.handle("wsl:connect", async (event, distro: unknown, linuxUser: unknown, linuxPath: unknown) => {
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const gate = requireWslCapable();
     if (!gate.ok) return gate;
-    // Distro names travel as spawn argv (shell:false) and into UI text: constrain
-    // them to plausible distribution identifiers before any use.
-    const distroOk =
-      typeof distro === "string" &&
-      distro.length >= 1 &&
-      distro.length <= 128 &&
-      !distro.includes("\0") &&
-      !distro.includes("/") &&
-      !distro.includes("\\") &&
-      distro.trim() === distro;
-    // The helper requires an absolute POSIX root; validate before connect so a
-    // bad root never leaves behind a connected-but-useless session.
+    // Distro/user names travel as spawn argv (shell:false) and into UI text:
+    // constrain them to plausible identifiers before any use. The Linux user
+    // comes from the picker's `users.list` discovery — never guessed, never
+    // the Windows username. No sudo/escalation: `-u` runs with that user's
+    // own permissions (ADR-0007).
+    if (!isValidDistroId(distro) || !isValidLinuxUser(linuxUser)) {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid WSL connection request." } };
+    }
+    // Absolute POSIX root, or `~`-anchored (expanded in the helper under the
+    // selected user — never on Windows). Validate before connect so a bad
+    // root never leaves behind a connected-but-useless session.
     const pathOk =
       typeof linuxPath === "string" &&
       linuxPath.length >= 1 &&
       linuxPath.length <= 1024 &&
       !linuxPath.includes("\0") &&
-      linuxPath.startsWith("/");
-    if (!distroOk || !pathOk) {
+      (linuxPath.startsWith("/") || linuxPath === "~" || linuxPath.startsWith("~/"));
+    if (!pathOk) {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid WSL connection request." } };
     }
     try {
       const sup = getSupervisor(broadcast);
       const base = sup.resourceBase();
-      // connect → hello (inside supervisor) → workspace.open(root).
-      await sup.connect(distro, path.join(base, "node"), path.join(base, "helper.cjs"));
-      console.error("[wsl-connect] hello ok, opening workspace", { distro, linuxPath });
+      // connect (-u linuxUser) → hello (inside supervisor) → workspace.open(root).
+      await sup.connect(distro, linuxUser, path.join(base, "node"), path.join(base, "helper.cjs"));
+      console.error("[wsl-connect] hello ok, opening workspace", { distro, linuxUser, linuxPath });
+      let openedRoot: string;
       try {
-        await sup.request("workspace.open", { root: linuxPath });
+        const opened = (await sup.request("workspace.open", { root: linuxPath })) as { root?: unknown };
+        if (!opened || typeof opened.root !== "string") throw { code: "INTERNAL_ERROR", message: "Workspace did not open." };
+        openedRoot = opened.root;
       } catch (openErr) {
-        console.error("[wsl-connect] workspace.open failed", { distro, linuxPath, error: toHelperError(openErr) });
+        console.error("[wsl-connect] workspace.open failed", { distro, linuxUser, linuxPath, error: toHelperError(openErr) });
         sup.disconnect();
         return { ok: false, error: toHelperError(openErr) };
       }
-      console.error("[wsl-connect] workspace.open ok", { distro, linuxPath });
-      const reg = workspaces.registerWsl(`${distro}:${linuxPath}`, linuxPath, distro);
+      console.error("[wsl-connect] workspace.open ok", { distro, linuxUser, linuxPath, openedRoot });
+      const reg = workspaces.registerWsl(`${distro}:${linuxUser}:${linuxPath}`, openedRoot, distro, linuxUser);
       return { ok: true, result: { ...toWorkspaceInfo(reg), connection: "connected" as const } };
     } catch (err) {
       return { ok: false, error: { code: "DISCONNECTED", message: "Could not connect to WSL helper.", detail: String(err) } };
+    }
+  });
+
+  ipcMain.handle("workspace:listWslUsers", async (event, distro: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const gate = requireWslCapable();
+    if (!gate.ok) return gate;
+    if (!isValidDistroId(distro)) {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown distribution." } };
+    }
+    // Validate against the discovered set when listing works. A listing
+    // failure falls through — discovery below surfaces its own precise error.
+    try {
+      const known = await workspaces.listDistributions();
+      if (!known.some((d) => d.name === distro)) {
+        return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown distribution." } };
+      }
+    } catch {
+      /* discovery below reports precisely */
+    }
+    // Validate sender + distro, then delegate to the WorkspaceService seam.
+    // Only the explicitly selected distro is entered (as its default user);
+    // unrelated distros are never woken.
+    try {
+      const users = await workspaces.listUsers(distro);
+      return { ok: true, result: users };
+    } catch (err) {
+      return { ok: false, error: toHelperError(err) };
     }
   });
 
@@ -586,6 +639,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       workspaceType: reg.type,
       workspaceRoot: reg.root,
       distro: reg.distro,
+      linuxUser: reg.linuxUser,
       workspaceDisplayName: reg.displayName,
       relativePath: v.relativePath,
       baseRevisionHash: v.baseRevisionHash,
@@ -607,6 +661,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       workspaceType: reg.type,
       workspaceRoot: reg.root,
       distro: reg.distro,
+      linuxUser: reg.linuxUser,
       relativePath: toCanonicalRel(relativePath),
     });
     if (!draft) return { ok: true, result: null };
@@ -633,6 +688,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       workspaceType: reg.type,
       workspaceRoot: reg.root,
       distro: reg.distro,
+      linuxUser: reg.linuxUser,
       relativePath: toCanonicalRel(relativePath),
     });
     return { ok: true, result: null };

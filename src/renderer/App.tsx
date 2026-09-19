@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import type { DirectoryEntry, SearchMatch, WorkspaceInfo, WslDistribution } from "../shared/contracts/ipc";
+import type { DirectoryEntry, SearchMatch, WorkspaceInfo, WslDistribution, WslLinuxUser } from "../shared/contracts/ipc";
 import { usePlatform } from "./hooks/use-platform";
 import { isWslKind, moveToTrashLabel, revealLabel, trashName } from "../shared/platform/filesystem";
 import type { CommandId } from "../shared/platform/keymap";
@@ -94,7 +94,12 @@ export default function App(): JSX.Element {
   // This is RECOVERY data only: `Saved` is shown exclusively for bytes that
   // reached the note file. A persisted draft never flips the save indicator.
   const [recovery, setRecovery] = useState<Record<string, { content: string; updatedAt: number; stale: boolean; diskChanged: boolean }>>({});
-  const [wslDialog, setWslDialog] = useState<{ distros: WslDistribution[]; distro: string; path: string; error: string | null; connecting: boolean } | null>(null);
+  const [wslDialog, setWslDialog] = useState<{
+    distros: WslDistribution[]; distro: string;
+    users: WslLinuxUser[]; linuxUser: string;
+    usersLoading: boolean; usersError: string | null;
+    path: string; error: string | null; connecting: boolean;
+  } | null>(null);
   // In-app software update dialog (ADR-0006). Null = hidden. Auto-checks
   // stay silent unless an update is actually available.
   type UpdatePhase = "checking" | "available" | "uptodate" | "downloading" | "verifying" | "launching" | "error";
@@ -198,23 +203,39 @@ export default function App(): JSX.Element {
     if (res.result) void openWorkspace(res.result);
   }, [openWorkspace, toast]);
 
+  const fetchWslUsers = useCallback(async (distro: string, base: NonNullable<typeof wslDialog>) => {
+    setWslDialog({ ...base, distro, users: [], linuxUser: "", usersLoading: true, usersError: null });
+    const res = await window.takenotes.workspace.listWslUsers(distro);
+    // The dialog may have closed or switched distros while loading: only
+    // apply results that still belong to the requested distro.
+    setWslDialog((cur) => {
+      if (!cur || cur.distro !== distro) return cur;
+      if (!res.ok) return { ...cur, users: [], linuxUser: "", usersLoading: false, usersError: res.error.message };
+      const def = res.result.find((u) => u.isDefault) ?? res.result[0];
+      return { ...cur, users: res.result, linuxUser: def?.username ?? "", usersLoading: false, usersError: null };
+    });
+  }, []);
+
   const openWslDialog = useCallback(async () => {
     const res = await window.takenotes.workspace.listWslDistributions();
     if (!res.ok) {
-      setWslDialog({ distros: [], distro: "", path: "~/notes", error: res.error.message, connecting: false });
+      setWslDialog({ distros: [], distro: "", users: [], linuxUser: "", usersLoading: false, usersError: null, path: "~/notes", error: res.error.message, connecting: false });
       return;
     }
-    setWslDialog({ distros: res.result, distro: res.result[0]?.name ?? "", path: "~/notes", error: null, connecting: false });
-  }, []);
+    const distro = res.result[0]?.name ?? "";
+    const base = { distros: res.result, distro, users: [] as WslLinuxUser[], linuxUser: "", usersLoading: true, usersError: null as string | null, path: "~/notes", error: null as string | null, connecting: false };
+    setWslDialog(base);
+    if (distro) void fetchWslUsers(distro, base);
+  }, [fetchWslUsers]);
 
   const connectWsl = useCallback(async () => {
-    if (!wslDialog || !wslDialog.distro) return;
+    if (!wslDialog || !wslDialog.distro || !wslDialog.linuxUser) return;
     setWslDialog({ ...wslDialog, connecting: true, error: null });
-    const res = await window.takenotes.workspace.connectWsl(wslDialog.distro, wslDialog.path || "~/notes");
+    const res = await window.takenotes.workspace.connectWsl(wslDialog.distro, wslDialog.linuxUser, wslDialog.path || "~/notes");
     setWslDialog({ ...wslDialog, connecting: false, error: res.ok ? null : res.error.message });
     if (res.ok) {
       setWslDialog(null);
-      toast(`Connecting to ${wslDialog.distro}…`);
+      toast(`Connecting to ${wslDialog.distro} as ${wslDialog.linuxUser}…`);
       await openWorkspace(res.result);
     }
   }, [wslDialog, openWorkspace, toast]);
@@ -893,7 +914,7 @@ export default function App(): JSX.Element {
             </>
           )}
         </div>
-        {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
+        {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onDistro={(d) => void fetchWslUsers(d, wslDialog)} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
         <Toasts toasts={toasts} onDismiss={(id) => setToasts((p) => p.filter((t) => t.id !== id))} />
       </div>
     );
@@ -913,7 +934,7 @@ export default function App(): JSX.Element {
             <aside className="sidebar" style={{ width: Math.min(360, Math.max(180, sidebarWidth)) }} aria-label="Sidebar">
               <div className="sidebar-head" title={workspace.displayName}>
                 <span className="name">{workspace.displayName}
-                  {isWslKind(workspace.type) && <span className="sub">WSL</span>}
+                  {isWslKind(workspace.type) && <span className="sub">WSL{workspace.linuxUser ? ` · ${workspace.linuxUser}` : ""}</span>}
                 </span>
                 <button className="icon-btn" title={`New note (${sc("file.new")})`} aria-label="New note" onClick={newNote}><Icon name="plus" /></button>
                 <button
@@ -1103,7 +1124,7 @@ export default function App(): JSX.Element {
       {settingsOpen && (
         <SettingsDialog settings={settings} onChange={setSettings} version={version} platform={platform} updatesEnabled={platform.capabilities.updates} onCheckUpdates={() => void checkForUpdates(true)} onClose={() => setSettingsOpen(false)} />
       )}
-      {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
+      {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onDistro={(d) => void fetchWslUsers(d, wslDialog)} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
       {updateDlg && (
         <div className="dialog-wrap" onMouseDown={() => { if (updateDlg.phase !== "downloading" && updateDlg.phase !== "verifying" && updateDlg.phase !== "launching") setUpdateDlg(null); }}>
           <div className="dialog" role="dialog" aria-label="Software update" style={{ width: 440 }} onMouseDown={(e) => e.stopPropagation()}>
@@ -1165,11 +1186,23 @@ function distroLabel(d: WslDistribution): string {
 function WslDialog({
   dialog,
   onChange,
+  onDistro,
   onConnect,
   onClose,
 }: {
-  dialog: { distros: WslDistribution[]; distro: string; path: string; error: string | null; connecting: boolean };
-  onChange: (d: { distros: WslDistribution[]; distro: string; path: string; error: string | null; connecting: boolean }) => void;
+  dialog: {
+    distros: WslDistribution[]; distro: string;
+    users: WslLinuxUser[]; linuxUser: string;
+    usersLoading: boolean; usersError: string | null;
+    path: string; error: string | null; connecting: boolean;
+  };
+  onChange: (d: {
+    distros: WslDistribution[]; distro: string;
+    users: WslLinuxUser[]; linuxUser: string;
+    usersLoading: boolean; usersError: string | null;
+    path: string; error: string | null; connecting: boolean;
+  }) => void;
+  onDistro: (distro: string) => void;
   onConnect: () => void;
   onClose: () => void;
 }): JSX.Element {
@@ -1186,11 +1219,31 @@ function WslDialog({
               <label style={{ fontSize: 13 }}>Distribution
                 <select
                   className="input" style={{ marginTop: 4 }}
-                  value={dialog.distro} onChange={(e) => onChange({ ...dialog, distro: e.target.value })}
+                  value={dialog.distro} onChange={(e) => onDistro(e.target.value)}
                 >
                   {dialog.distros.map((d) => <option key={d.name} value={d.name}>{distroLabel(d)}</option>)}
                 </select>
               </label>
+              <label style={{ fontSize: 13 }}>Linux user
+                <select
+                  className="input" style={{ marginTop: 4 }}
+                  value={dialog.linuxUser}
+                  disabled={dialog.usersLoading || dialog.users.length === 0}
+                  onChange={(e) => onChange({ ...dialog, linuxUser: e.target.value })}
+                  aria-label="Linux user"
+                >
+                  {dialog.users.map((u) => (
+                    <option key={u.username} value={u.username}>
+                      {u.username}{u.isDefault ? " (default)" : ""} — {u.home}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {dialog.usersLoading && <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Loading Linux users…</p>}
+              {dialog.usersError && <p className="inline-error" role="alert">{dialog.usersError}</p>}
+              {!dialog.usersLoading && !dialog.usersError && dialog.users.length === 0 && (
+                <p style={{ fontSize: 13 }}>No interactive users found in this distribution.</p>
+              )}
               <label style={{ fontSize: 13 }}>Folder in {dialog.distro || "WSL"}
                 <input
                   className="input" style={{ marginTop: 4 }}
@@ -1200,7 +1253,7 @@ function WslDialog({
               </label>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button className="btn" onClick={onClose}>Cancel</button>
-                <button className="btn primary" disabled={!dialog.distro || dialog.connecting} onClick={onConnect}>
+                <button className="btn primary" disabled={!dialog.distro || !dialog.linuxUser || dialog.connecting} onClick={onConnect}>
                   {dialog.connecting ? "Connecting…" : "Connect"}
                 </button>
               </div>

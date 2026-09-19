@@ -84,3 +84,22 @@ describe("NoteService seam", () => {
     expect(out).toMatchObject({ error: { code: "INVALID_REQUEST" } });
   });
 });
+
+describe("WorkspaceService user seam (P1-03)", () => {
+  it("delegates user discovery to the injected source", async () => {
+    const users = [{ username: "work", uid: 1001, home: "/home/work" }];
+    const userSource = vi.fn(async (distro: string) => {
+      expect(distro).toBe("Ubuntu");
+      return users;
+    });
+    const workspaces = new WorkspaceService(new WorkspaceRegistry(), undefined, userSource);
+    await expect(workspaces.listUsers("Ubuntu")).resolves.toEqual(users);
+    expect(userSource).toHaveBeenCalledTimes(1);
+  });
+
+  it("carries linuxUser through registration", () => {
+    const workspaces = new WorkspaceService(new WorkspaceRegistry());
+    const reg = workspaces.registerWsl("Ubuntu:work:~/x", "/home/work/x", "Ubuntu", "work");
+    expect(workspaces.get(reg.id)?.linuxUser).toBe("work");
+  });
+});
