@@ -6,6 +6,8 @@ import type { CommandId } from "../shared/platform/keymap";
 import { TitleBar, ActivityRail, StatusBar } from "./components/chrome";
 import { PaneView } from "./components/pane-view";
 import { buildWorkspaceIndex, workspaceIndex } from "./index/workspace-index";
+import { parseSearchQuery } from "../shared/search/query";
+import { searchContent, searchFilenames } from "../shared/search/search";
 import { FileTree, type TreeState } from "./components/tree";
 import { SearchPanel, useDebouncedValue } from "./components/search";
 import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
@@ -106,6 +108,7 @@ export default function App(): JSX.Element {
   const [filenameHits, setFilenameHits] = useState<SearchMatch[]>([]);
   const [contentHits, setContentHits] = useState<SearchMatch[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [allFiles, setAllFiles] = useState<DirectoryEntry[]>([]);
   const [recents, setRecents] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("takenotes.recents") ?? "[]"); } catch { return []; } });
   const [recentWorkspaces, setRecentWorkspaces] = useState<{ name: string; kind: string }[]>(() => { try { return JSON.parse(localStorage.getItem("takenotes.recentWs") ?? "[]"); } catch { return []; } });
@@ -706,28 +709,28 @@ export default function App(): JSX.Element {
     return trashEntry(entry);
   }, [deleteDirectory, trashEntry]);
 
-  /* ---------- search ---------- */
+  /* ---------- search (P1-08: in-memory index, zero filesystem reads) ---------- */
   const debouncedQuery = useDebouncedValue(searchQuery, 250);
   useEffect(() => {
     if (!workspace || !debouncedQuery.trim()) {
-      setFilenameHits([]); setContentHits([]); setSearching(false);
+      setFilenameHits([]); setContentHits([]); setSearchError(null); setSearching(false);
       return;
     }
-    let cancelled = false;
-    setSearching(true);
-    void (async () => {
-      const q = debouncedQuery.trim();
-      const [f, c] = await Promise.all([
-        window.takenotes.search.files(workspace.workspaceId, q),
-        window.takenotes.search.content(workspace.workspaceId, q),
-      ]);
-      if (cancelled) return;
+    // Queries read the live P1-07 index only — never IPC, never the
+    // filesystem. `layout` in deps re-runs the query after saves, renames,
+    // and deletes, so results follow mutations with no rescan.
+    const parsed = parseSearchQuery(debouncedQuery.trim());
+    if (!parsed.ok) {
+      setFilenameHits([]); setContentHits([]);
+      setSearchError(parsed.error.message);
       setSearching(false);
-      setFilenameHits(f.ok ? f.result.slice(0, 20) : []);
-      setContentHits(c.ok ? c.result.slice(0, 60) : []);
-    })();
-    return () => { cancelled = true; };
-  }, [debouncedQuery, workspace]);
+      return;
+    }
+    setSearchError(null);
+    setSearching(false);
+    setFilenameHits(searchFilenames(workspaceIndex, workspace.workspaceId, parsed.query).slice(0, 20));
+    setContentHits(searchContent(workspaceIndex, workspace.workspaceId, parsed.query).slice(0, 60));
+  }, [debouncedQuery, workspace, layout]);
 
   /* ---------- commands ---------- */
   const runCommand = useCallback((id: string) => {
@@ -1119,6 +1122,7 @@ export default function App(): JSX.Element {
                     query={searchQuery}
                     onQuery={setSearchQuery}
                     searching={searching}
+                    searchError={searchError}
                     filenameHits={filenameHits}
                     contentHits={contentHits}
                     onOpen={(rel, line) => {

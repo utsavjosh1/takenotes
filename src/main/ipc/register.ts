@@ -10,7 +10,6 @@ import { NoteService } from "../services/note-service.js";
 import { validatePosixRelativePath, validateWindowsRelativePath } from "../workspace/path-security.js";
 import { validateWorkspaceId } from "../workspace/path-security.js";
 import type { WorkspaceKind } from "../../shared/platform/types.js";
-import { searchWorkspace } from "../search/search.js";
 import { clearDraft, isDraftStale, loadDraft, MAX_DRAFT_BYTES, saveDraft } from "../workspace/drafts.js";
 import { HelperSupervisor } from "../wsl/helper-supervisor.js";
 import { isValidDistroId, isValidLinuxUser } from "../wsl/launch-security.js";
@@ -21,7 +20,7 @@ import { getCapabilities } from "../../shared/platform/capabilities.js";
 import { localWorkspaceKind, toCanonicalRel } from "../../shared/platform/filesystem.js";
 import { shortcutLabelsFor } from "../../shared/platform/shortcut-labels.js";
 import { detectWayland } from "../platform/linux.js";
-import type { DirectoryEntry, PlatformReport, SearchMatch, WslLinuxUser } from "../../shared/contracts/ipc.js";
+import type { PlatformReport, WslLinuxUser } from "../../shared/contracts/ipc.js";
 import type { AppError } from "../../shared/errors.js";
 import { toHelperError } from "./helper-errors.js";
 
@@ -119,10 +118,6 @@ function senderIsOurs(event: Electron.IpcMainInvokeEvent): boolean {
   return win !== null && !win.isDestroyed();
 }
 
-function helperDisconnected(): { ok: false; error: AppError } {
-  return { ok: false, error: { code: "DISCONNECTED", message: "WSL helper is not connected." } };
-}
-
 /** Draft storage root: outside every note workspace, under the Electron profile. */
 function draftsBaseDir(): string {
   return app.getPath("userData");
@@ -165,82 +160,6 @@ function normalizeWslRel(input: unknown, allowEmpty: boolean): { rel: string } |
   }
   if (rel.length > 1024) return { error: { code: "INVALID_REQUEST", message: "Invalid path." } };
   return { rel };
-}
-
-const WSL_SEARCH_EXCLUDED = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".cache"]);
-const WSL_SEARCH_TEXT_EXTS = new Set([".md", ".markdown", ".txt"]);
-
-/** WSL content/filename search composed from helper primitives.
- * The helper implements directory.list + file.read (no search.* op), so main
- * traverses via HelperClient: connect → hello → workspace.open → these calls. */
-async function searchWslWorkspace(
-  sup: HelperSupervisor,
-  options: { query: string; includeFilenames: boolean; includeContent: boolean; maxResults: number },
-): Promise<SearchMatch[]> {
-  const { query, includeFilenames, includeContent, maxResults } = options;
-  const needle = query.toLowerCase();
-  const matches: SearchMatch[] = [];
-  const dirs: string[] = [""];
-  const textFiles: string[] = [];
-  const seen = new Set<string>([""]);
-  while (dirs.length > 0 && matches.length < maxResults) {
-    const dir = dirs.pop()!;
-    let entries: DirectoryEntry[];
-    try {
-      entries = (await sup.request("directory.list", { relativePath: dir })) as DirectoryEntry[];
-    } catch {
-      continue;
-    }
-    for (const e of entries) {
-      if (matches.length >= maxResults) break;
-      if (e.kind === "directory") {
-        if (!WSL_SEARCH_EXCLUDED.has(e.name) && !seen.has(e.relativePath)) {
-          seen.add(e.relativePath);
-          dirs.push(e.relativePath);
-        }
-      } else {
-        if (includeFilenames && e.relativePath.toLowerCase().includes(needle)) {
-          matches.push({ relativePath: e.relativePath, line: 0, column: 0, preview: e.relativePath });
-          if (matches.length >= maxResults) break;
-        }
-        if (includeContent) {
-          const lower = e.relativePath.toLowerCase();
-          const dot = lower.lastIndexOf(".");
-          const ext = dot >= 0 ? lower.slice(dot) : "";
-          if (WSL_SEARCH_TEXT_EXTS.has(ext)) textFiles.push(e.relativePath);
-        }
-      }
-    }
-  }
-  if (includeContent && matches.length < maxResults) {
-    // Bounded concurrency: 16 parallel reads keeps large trees responsive.
-    const CONCURRENCY = 16;
-    for (let i = 0; i < textFiles.length && matches.length < maxResults; i += CONCURRENCY) {
-      const batch = textFiles.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(
-        batch.map(async (rel) => {
-          try {
-            const file = (await sup.request("file.read", { relativePath: rel })) as { content: string };
-            return { rel, content: file.content };
-          } catch {
-            return null;
-          }
-        }),
-      );
-      for (const r of results) {
-        if (!r || matches.length >= maxResults) continue;
-        const lines = r.content.split("\n");
-        for (let n = 0; n < lines.length; n++) {
-          const col = lines[n]!.toLowerCase().indexOf(needle);
-          if (col >= 0) {
-            matches.push({ relativePath: r.rel, line: n + 1, column: col + 1, preview: lines[n]!.slice(0, 200) });
-            break; // one match per file keeps results bounded
-          }
-        }
-      }
-    }
-  }
-  return matches.slice(0, maxResults);
 }
 
 /** Canonicalize a renderer-supplied path for a resolved workspace (native
@@ -584,49 +503,9 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     return { ok: true, result: null };
   });
 
-  ipcMain.handle("search:files", async (event, workspaceId: unknown, query: unknown) => {
-    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
-    const wid = validateWorkspaceId(workspaceId);
-    if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = workspaces.get(wid.workspaceId);
-    if (!reg || typeof query !== "string") {
-      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid search request." } };
-    }
-    if (!isNativeWorkspace(reg)) {
-      const sup = supervisor;
-      if (!sup?.getSession()) return helperDisconnected();
-      try {
-        const matches = await searchWslWorkspace(sup, { query, includeFilenames: true, includeContent: false, maxResults: 200 });
-        return { ok: true, result: matches };
-      } catch (err) {
-        return { ok: false, error: toHelperError(err) };
-      }
-    }
-    const matches = await searchWorkspace(reg.root, { query, includeFilenames: true, includeContent: false, maxResults: 200 });
-    return { ok: true, result: matches };
-  });
-
-  ipcMain.handle("search:content", async (event, workspaceId: unknown, query: unknown) => {
-    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
-    const wid = validateWorkspaceId(workspaceId);
-    if ("error" in wid) return { ok: false, error: wid.error };
-    const reg = workspaces.get(wid.workspaceId);
-    if (!reg || typeof query !== "string") {
-      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid search request." } };
-    }
-    if (!isNativeWorkspace(reg)) {
-      const sup = supervisor;
-      if (!sup?.getSession()) return helperDisconnected();
-      try {
-        const matches = await searchWslWorkspace(sup, { query, includeFilenames: false, includeContent: true, maxResults: 1000 });
-        return { ok: true, result: matches };
-      } catch (err) {
-        return { ok: false, error: toHelperError(err) };
-      }
-    }
-    const matches = await searchWorkspace(reg.root, { query, includeFilenames: false, includeContent: true, maxResults: 1000 });
-    return { ok: true, result: matches };
-  });
+  // Search V1 (P1-08) runs renderer-side over the P1-07 in-memory index —
+  // no filesystem walk per query. The old `search:*` scan handlers were
+  // removed with the scan module, not kept in parallel.
 
   ipcMain.handle("app:version", () => ({ ok: true, result: app.getVersion() }));
 

@@ -5,7 +5,6 @@ import type {
   FileRevision,
   IpcResult,
   PlatformReport,
-  SearchMatch,
   UpdateCheckResult,
   UpdateProgress,
   WorkspaceInfo,
@@ -50,10 +49,6 @@ export type TakeNotesApi = {
       hadBom: boolean;
     }): Promise<IpcResult<FileRevision>>;
     create(workspaceId: string, relativePath: string): Promise<IpcResult<FileRevision>>;
-  };
-  search: {
-    files(workspaceId: string, query: string): Promise<IpcResult<SearchMatch[]>>;
-    content(workspaceId: string, query: string): Promise<IpcResult<SearchMatch[]>>;
   };
   shell: {
     reveal(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
@@ -109,10 +104,6 @@ const api: TakeNotesApi = {
     trash: (workspaceId, relativePath) => ipcRenderer.invoke("file:trash", workspaceId, relativePath),
     write: (args) => ipcRenderer.invoke("file:write", args),
     create: (workspaceId, relativePath) => ipcRenderer.invoke("file:create", workspaceId, relativePath),
-  },
-  search: {
-    files: (workspaceId, query) => ipcRenderer.invoke("search:files", workspaceId, query),
-    content: (workspaceId, query) => ipcRenderer.invoke("search:content", workspaceId, query),
   },
   shell: {
     reveal: (workspaceId, relativePath) => ipcRenderer.invoke("shell:reveal", workspaceId, relativePath),

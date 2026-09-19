@@ -76,6 +76,9 @@ export type DocumentIndexEntry = {
   tasks: IndexTask[];
   /** Title + aliases + headings + tags + body (frontmatter excluded). */
   searchableText: string;
+  /** 1-based file line where the body begins (after frontmatter; 1 when
+   * absent). Lets consumers map body matches to honest file lines. */
+  bodyStartLine: number;
 };
 
 const MAX_FRONTMATTER_SCAN_LINES = 500;
@@ -339,6 +342,7 @@ export function parseDocument(
     workspaceId,
     relativePath,
     revision,
+    bodyStartLine: bodyStart + 1,
     frontmatter,
     ...(title === undefined ? {} : { title }),
     aliases,

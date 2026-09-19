@@ -36,10 +36,15 @@ export type IndexApi = {
 };
 
 export type IndexBuildResult =
-  | { ok: true; indexed: number; skipped: number }
+  | { ok: true; indexed: number; skipped: number; truncated: boolean }
   | { ok: false; error: AppError };
 
-/** Bulk build cap mirrors the Quick-open listing cap: bounded either way. */
+/** Non-note directories never enter the index (mirrors the old filesystem
+ * scan's exclusion list, so Search keeps its existing coverage). */
+const EXCLUDED_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".cache"]);
+
+/** Safety bound on bulk builds. Hitting it reports `truncated: true` — the
+ * index never silently omits eligible files (P1-08 precondition). */
 const MAX_LISTED_FILES = 2000;
 
 /** Full (re)build from filesystem bytes. Returns counts; workspace-level
@@ -52,12 +57,17 @@ export async function buildWorkspaceIndex(
   const wid = workspace.workspaceId;
   const out: DirectoryEntry[] = [];
   const queue = [""];
-  for (let i = 0; i < queue.length && out.length < MAX_LISTED_FILES; i++) {
+  let truncated = false;
+  for (let i = 0; i < queue.length; i++) {
     const res = await api.directory.list(wid, queue[i]!);
     if (!res.ok) return { ok: false, error: res.error };
     for (const e of res.result) {
-      if (e.kind === "directory") queue.push(e.relativePath);
-      else if (e.fileClass === "markdown" || e.fileClass === "text") out.push(e);
+      if (e.kind === "directory") {
+        if (!EXCLUDED_DIRS.has(e.name)) queue.push(e.relativePath);
+      } else if (e.fileClass === "markdown" || e.fileClass === "text") {
+        if (out.length >= MAX_LISTED_FILES) truncated = true;
+        else out.push(e);
+      }
     }
   }
 
@@ -87,5 +97,5 @@ export async function buildWorkspaceIndex(
     inputs.push({ workspaceId: wid, relativePath: e.relativePath, content: read.result.content, revision: read.result.revision });
   }
   store.rebuild(wid, inputs);
-  return { ok: true, indexed: inputs.length, skipped };
+  return { ok: true, indexed: inputs.length, skipped, truncated };
 }

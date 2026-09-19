@@ -6,6 +6,7 @@ export function SearchPanel({
   query,
   onQuery,
   searching,
+  searchError,
   filenameHits,
   contentHits,
   onOpen,
@@ -13,6 +14,7 @@ export function SearchPanel({
   query: string;
   onQuery: (q: string) => void;
   searching: boolean;
+  searchError: string | null;
   filenameHits: SearchMatch[];
   contentHits: SearchMatch[];
   onOpen: (rel: string, line?: number) => void;
@@ -30,7 +32,8 @@ export function SearchPanel({
         />
       </div>
       {searching && <div className="panel-title">Searching…</div>}
-      {!searching && query.trim() === "" && (
+      {searchError && <div className="panel-title" role="alert">{searchError}</div>}
+      {!searching && !searchError && query.trim() === "" && (
         <div className="panel-title">Type to search file names and contents.</div>
       )}
       {filenameHits.length > 0 && (
@@ -49,7 +52,7 @@ export function SearchPanel({
           ))}
         </>
       )}
-      {!searching && query.trim() !== "" && filenameHits.length === 0 && contentHits.length === 0 && (
+      {!searching && !searchError && query.trim() !== "" && filenameHits.length === 0 && contentHits.length === 0 && (
         <div className="panel-title">No matches for “{query.trim()}”.</div>
       )}
     </div>
