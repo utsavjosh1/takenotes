@@ -6,6 +6,9 @@ import type {
   FileRevision,
   IpcResult,
   PlatformReport,
+  RecoveryRestoreResult,
+  RecoverySnapshotMeta,
+  RecoverySnapshotRead,
   UpdateCheckResult,
   UpdateProgress,
   WorkspaceInfo,
@@ -21,6 +24,25 @@ export type TakeNotesApi = {
     put(args: { workspaceId: string; relativePath: string; baseRevisionHash: string; content: string }): Promise<IpcResult<null>>;
     get(workspaceId: string, relativePath: string): Promise<IpcResult<DraftSummary | null>>;
     clear(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
+  };
+  recovery: {
+    captureChanged(args: {
+      workspaceId: string;
+      relativePath: string;
+      content: string;
+      reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
+    }): Promise<IpcResult<RecoverySnapshotMeta | null>>;
+    list(workspaceId: string, relativePath: string): Promise<IpcResult<RecoverySnapshotMeta[]>>;
+    read(snapshotId: string): Promise<IpcResult<RecoverySnapshotRead>>;
+    restore(args: {
+      workspaceId: string;
+      relativePath: string;
+      snapshotId: string;
+      currentContent: string;
+      expectedHash: string;
+      newlineStyle: "lf" | "crlf";
+      hadBom: boolean;
+    }): Promise<IpcResult<RecoveryRestoreResult>>;
   };
   workspace: {
     openLocal(): Promise<IpcResult<WorkspaceInfo | null>>;
@@ -87,6 +109,12 @@ const api: TakeNotesApi = {
     put: (args) => ipcRenderer.invoke("draft:put", args),
     get: (workspaceId, relativePath) => ipcRenderer.invoke("draft:get", workspaceId, relativePath),
     clear: (workspaceId, relativePath) => ipcRenderer.invoke("draft:clear", workspaceId, relativePath),
+  },
+  recovery: {
+    captureChanged: (args) => ipcRenderer.invoke("recovery:captureChanged", args),
+    list: (workspaceId, relativePath) => ipcRenderer.invoke("recovery:list", workspaceId, relativePath),
+    read: (snapshotId) => ipcRenderer.invoke("recovery:read", snapshotId),
+    restore: (args) => ipcRenderer.invoke("recovery:restore", args),
   },
   workspace: {
     openLocal: () => ipcRenderer.invoke("workspace:openLocal"),

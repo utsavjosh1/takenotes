@@ -87,6 +87,26 @@ export type SearchMatch = {
   preview: string;
 };
 
+export type RecoverySnapshotMeta = {
+  snapshotId: string;
+  workspaceId: string;
+  relativePath: string;
+  createdAt: number;
+  contentHash: string;
+  byteLength: number;
+  reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
+};
+
+export type RecoverySnapshotRead = RecoverySnapshotMeta & {
+  content: string;
+};
+
+export type RecoveryRestoreResult = {
+  revision: FileRevision;
+  content: string;
+  preRestoreSnapshot: RecoverySnapshotMeta | null;
+};
+
 export type CommandListResult = CommandDefinition[];
 
 export type PlatformReport = {

@@ -11,6 +11,7 @@ import { validatePosixRelativePath, validateWindowsRelativePath } from "../works
 import { validateWorkspaceId } from "../workspace/path-security.js";
 import type { WorkspaceKind } from "../../shared/platform/types.js";
 import { clearDraft, isDraftStale, loadDraft, MAX_DRAFT_BYTES, saveDraft } from "../workspace/drafts.js";
+import { RecoveryStore } from "../workspace/recovery.js";
 import { HelperSupervisor } from "../wsl/helper-supervisor.js";
 import { isValidDistroId, isValidLinuxUser } from "../wsl/launch-security.js";
 import { listWslUsers } from "../wsl/user-discovery.js";
@@ -51,6 +52,7 @@ let supervisor: HelperSupervisor | null = null;
 let broadcastEvent: ((kind: string, payload: unknown) => void) | null = null;
 // NoteService dispatches by workspace kind: native → FileAdapter, WSL → helper.
 let notes: NoteService | null = null;
+let recoveryStore: RecoveryStore | null = null;
 
 function getNotes(): NoteService {
   if (!notes) {
@@ -122,6 +124,11 @@ function senderIsOurs(event: Electron.IpcMainInvokeEvent): boolean {
 /** Draft storage root: outside every note workspace, under the Electron profile. */
 function draftsBaseDir(): string {
   return app.getPath("userData");
+}
+
+function recovery(): RecoveryStore {
+  recoveryStore ??= new RecoveryStore(app.getPath("userData"));
+  return recoveryStore;
 }
 
 /** Runtime validation for draft payloads (privileged IPC: sender + shape checked). */
@@ -447,6 +454,82 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     const out = await getNotes().writeFile(wid.workspaceId, rel, a.content, a.expectedHash, a.newlineStyle === "crlf" ? "crlf" : "lf", a.hadBom === true);
     if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: out.revision };
+  });
+
+  ipcMain.handle("recovery:captureChanged", async (event, args: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const a = args as { workspaceId?: unknown; relativePath?: unknown; content?: unknown; reason?: unknown };
+    const wid = validateWorkspaceId(a?.workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg || typeof a?.relativePath !== "string" || typeof a?.content !== "string") {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid recovery snapshot request." } };
+    }
+    const prep = handlerRel(reg, a.relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const reason =
+      a.reason === "save" || a.reason === "close" || a.reason === "shutdown" || a.reason === "restore-before" ? a.reason : "edit";
+    return recovery().captureChanged({ workspaceId: wid.workspaceId, relativePath: prep.rel, content: a.content, reason });
+  });
+
+  ipcMain.handle("recovery:list", async (event, workspaceId: unknown, relativePath: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const wid = validateWorkspaceId(workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg || typeof relativePath !== "string") {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid recovery history request." } };
+    }
+    const prep = handlerRel(reg, relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    return recovery().list(wid.workspaceId, prep.rel);
+  });
+
+  ipcMain.handle("recovery:read", async (event, snapshotId: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    if (typeof snapshotId !== "string") {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid recovery snapshot id." } };
+    }
+    return recovery().read(snapshotId);
+  });
+
+  ipcMain.handle("recovery:restore", async (event, args: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const a = args as {
+      workspaceId?: unknown;
+      relativePath?: unknown;
+      snapshotId?: unknown;
+      currentContent?: unknown;
+      expectedHash?: unknown;
+      newlineStyle?: unknown;
+      hadBom?: unknown;
+    };
+    const wid = validateWorkspaceId(a?.workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    const reg = workspaces.get(wid.workspaceId);
+    if (
+      !reg ||
+      typeof a?.relativePath !== "string" ||
+      typeof a?.snapshotId !== "string" ||
+      typeof a?.currentContent !== "string" ||
+      typeof a?.expectedHash !== "string"
+    ) {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid recovery restore request." } };
+    }
+    const prep = handlerRel(reg, a.relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    return recovery().restore(
+      {
+        workspaceId: wid.workspaceId,
+        relativePath: prep.rel,
+        snapshotId: a.snapshotId,
+        currentContent: a.currentContent,
+        expectedHash: a.expectedHash,
+        newlineStyle: a.newlineStyle === "crlf" ? "crlf" : "lf",
+        hadBom: a.hadBom === true,
+      },
+      (content, expectedHash, newlineStyle, hadBom) => getNotes().writeFile(wid.workspaceId, prep.rel, content, expectedHash, newlineStyle, hadBom),
+    );
   });
 
   ipcMain.handle("file:create", async (event, workspaceId: unknown, relativePath: unknown) => {

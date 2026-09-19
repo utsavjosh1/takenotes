@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import type { CommandListResult, DirectoryEntry, SearchMatch, WorkspaceInfo, WslDistribution, WslLinuxUser } from "../shared/contracts/ipc";
+import type { CommandListResult, DirectoryEntry, RecoverySnapshotMeta, SearchMatch, WorkspaceInfo, WslDistribution, WslLinuxUser } from "../shared/contracts/ipc";
 import { usePlatform } from "./hooks/use-platform";
 import { isWslKind, moveToTrashLabel, revealLabel, trashName } from "../shared/platform/filesystem";
 import { COMMAND_DEFINITIONS, type CommandId } from "../shared/commands/registry";
@@ -80,6 +80,22 @@ function safeDraftClear(workspaceId: string, relativePath: string): void {
   }
 }
 
+async function safeRecoveryCapture(args: {
+  workspaceId: string;
+  relativePath: string;
+  content: string;
+  reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
+}): Promise<void> {
+  try {
+    const bridge = window.takenotes.recovery;
+    if (!bridge || typeof bridge.captureChanged !== "function") return;
+    const res = await bridge.captureChanged(args);
+    if (!res.ok) console.error("[recovery] snapshot failed", { code: res.error.code, message: res.error.message });
+  } catch (err) {
+    console.error("[recovery] snapshot failed", err);
+  }
+}
+
 function loadSettings(): Settings {
   try {
     return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem("takenotes.settings") ?? "{}") };
@@ -122,6 +138,8 @@ export default function App(): JSX.Element {
   // This is RECOVERY data only: `Saved` is shown exclusively for bytes that
   // reached the note file. A persisted draft never flips the save indicator.
   const [recovery, setRecovery] = useState<Record<string, { content: string; updatedAt: number; stale: boolean; diskChanged: boolean }>>({});
+  const [historyDialog, setHistoryDialog] = useState<{ docKey: string; loading: boolean; error: string | null; snapshots: RecoverySnapshotMeta[] } | null>(null);
+  const recoveryLastEditCapture = useRef<Record<string, number>>({});
   const [wslDialog, setWslDialog] = useState<{
     distros: WslDistribution[]; distro: string;
     users: WslLinuxUser[]; linuxUser: string;
@@ -419,7 +437,15 @@ export default function App(): JSX.Element {
   // same shared doc, so either pane's keystrokes dirty both views at once.
   const onEdit = useCallback((docKey: string, content: string) => {
     setLayout((l) => updateDocContent(l, docKey, content));
-  }, []);
+    const doc = layout.docs[docKey];
+    if (!workspace || !doc || doc.loadError) return;
+    const now = Date.now();
+    const last = recoveryLastEditCapture.current[docKey] ?? 0;
+    if (last === 0 || now - last >= 5 * 60 * 1000) {
+      recoveryLastEditCapture.current[docKey] = now;
+      void safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: doc.relativePath, content, reason: "edit" });
+    }
+  }, [workspace, layout]);
 
   // Save names its document explicitly (default: the active pane's active
   // doc). Only the target doc's dirty/conflict/baseline change — neighbors
@@ -429,6 +455,8 @@ export default function App(): JSX.Element {
     const target = docKey ? layout.docs[docKey] : activeDoc(layout);
     if (!target || target.loadError) return;
     const key = target.key;
+    await safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: target.relativePath, content: target.content, reason: "save" });
+    recoveryLastEditCapture.current[key] = Date.now();
     setLayout((l) => markSaving(l, key, true));
     const res = await window.takenotes.file.write({
       workspaceId: workspace.workspaceId,
@@ -510,6 +538,7 @@ export default function App(): JSX.Element {
     // drafts: a quit-with-dirty followed by restart must offer recovery.
     const doc = layout.docs[key];
     if (workspace && doc && doc.dirty && !doc.loadError && doc.revisionHash) {
+      void safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: doc.relativePath, content: doc.content, reason: "close" });
       safeDraftPut({
         workspaceId: workspace.workspaceId,
         relativePath: doc.relativePath,
@@ -555,18 +584,23 @@ export default function App(): JSX.Element {
         clearTimeout(draftTimer.current);
         draftTimer.current = null;
       }
-      if (workspace && activeTab?.dirty && !activeTab.loadError && activeTab.revisionHash) {
-        safeDraftPut({
-          workspaceId: workspace.workspaceId,
-          relativePath: activeTab.relativePath,
-          baseRevisionHash: activeTab.revisionHash,
-          content: activeTab.content,
-        });
+      if (workspace) {
+        for (const doc of Object.values(layout.docs)) {
+          if (doc.dirty && !doc.loadError && doc.revisionHash) {
+            void safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: doc.relativePath, content: doc.content, reason: "shutdown" });
+            safeDraftPut({
+              workspaceId: workspace.workspaceId,
+              relativePath: doc.relativePath,
+              baseRevisionHash: doc.revisionHash,
+              content: doc.content,
+            });
+          }
+        }
       }
     };
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
-  }, [workspace, activeTab]);
+  }, [workspace, layout]);
 
   const restoreDraft = useCallback((key: string) => {
     const rec = recovery[key];
@@ -584,6 +618,63 @@ export default function App(): JSX.Element {
       return next;
     });
   }, [workspace, layout]);
+
+  const openHistory = useCallback(async (docKey?: string) => {
+    if (!workspace) return;
+    const doc = docKey ? layout.docs[docKey] : activeDoc(layout);
+    if (!doc) return;
+    setHistoryDialog({ docKey: doc.key, loading: true, error: null, snapshots: [] });
+    try {
+      const res = await window.takenotes.recovery.list(workspace.workspaceId, doc.relativePath);
+      if (!res.ok) {
+        setHistoryDialog({ docKey: doc.key, loading: false, error: res.error.message, snapshots: [] });
+        return;
+      }
+      setHistoryDialog({ docKey: doc.key, loading: false, error: null, snapshots: res.result });
+    } catch (err) {
+      setHistoryDialog({ docKey: doc.key, loading: false, error: String(err), snapshots: [] });
+    }
+  }, [workspace, layout]);
+
+  const copyRecoverySnapshot = useCallback(async (snapshotId: string) => {
+    const res = await window.takenotes.recovery.read(snapshotId);
+    if (!res.ok) { errToast(res.error, "Couldn't copy recovery snapshot"); return; }
+    await navigator.clipboard.writeText(res.result.content);
+    toast("Copied recovery snapshot contents.");
+  }, [errToast, toast]);
+
+  const restoreRecoverySnapshot = useCallback(async (snapshotId: string) => {
+    if (!workspace || !historyDialog) return;
+    const doc = layout.docs[historyDialog.docKey];
+    if (!doc || doc.loadError) return;
+    if (!window.confirm(`Restore this recovery snapshot over ${fileName(doc.relativePath)}? The current editor content will be snapshotted first.`)) return;
+    const res = await window.takenotes.recovery.restore({
+      workspaceId: workspace.workspaceId,
+      relativePath: doc.relativePath,
+      snapshotId,
+      currentContent: doc.content,
+      expectedHash: doc.revisionHash,
+      newlineStyle: doc.newlineStyle,
+      hadBom: doc.hadBom,
+    });
+    if (!res.ok) {
+      if (res.error.code === "CONFLICT") setLayout((l) => markConflict(l, doc.key));
+      errToast(res.error, "Couldn't restore recovery snapshot");
+      return;
+    }
+    setLayout((l) => resolveDoc(l, doc.key, res.result.content, res.result.revision.hash));
+    workspaceIndex.upsert(workspace.workspaceId, doc.relativePath, res.result.content, res.result.revision);
+    setIndexVersion((v) => v + 1);
+    safeDraftClear(workspace.workspaceId, doc.relativePath);
+    setRecovery((p) => {
+      if (!(doc.key in p)) return p;
+      const next = { ...p };
+      delete next[doc.key];
+      return next;
+    });
+    await openHistory(doc.key);
+    toast("Restored recovery snapshot. The previous current content was snapshotted first.");
+  }, [workspace, historyDialog, layout, errToast, toast, openHistory]);
 
   /* ---------- tree ops ---------- */
   const toggleDir = useCallback(async (dir: string) => {
@@ -1215,6 +1306,7 @@ export default function App(): JSX.Element {
                     <div className="pane-bar">
                       {layout.panes.length > 1 && <span className="pane-title">Pane {pi + 1}</span>}
                       <span className="pane-actions">
+                        {doc && <button className="link" title="Open recovery history" aria-label={`Open recovery history for pane ${pi + 1}`} onClick={() => void openHistory(doc.key)}>History</button>}
                         <button className="link" title="Split editor right" aria-label={`Split pane ${pi + 1} right`} onClick={() => splitActive("vertical")}>Split right</button>
                         <button className="link" title="Split editor below" aria-label={`Split pane ${pi + 1} down`} onClick={() => splitActive("horizontal")}>Split down</button>
                         {layout.panes.length > 1 && (
@@ -1320,6 +1412,36 @@ export default function App(): JSX.Element {
       )}
       {settingsOpen && (
         <SettingsDialog settings={settings} onChange={setSettings} version={version} platform={platform} updatesEnabled={platform.capabilities.updates} onCheckUpdates={() => void checkForUpdates(true)} onClose={() => setSettingsOpen(false)} />
+      )}
+      {historyDialog && (
+        <div className="dialog-wrap" onMouseDown={() => setHistoryDialog(null)}>
+          <div className="dialog" role="dialog" aria-label="Recovery history" style={{ width: 460 }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="dialog-head"><span style={{ flex: 1 }}>History</span>
+              <button className="icon-btn" onClick={() => setHistoryDialog(null)} aria-label="Close"><Icon name="x" /></button>
+            </div>
+            <div className="dialog-content" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>Recovery is not backup. Snapshots are local to this app profile and retained for 7 days.</p>
+              {historyDialog.loading && <p style={{ fontSize: 13 }}>Loading recovery history…</p>}
+              {historyDialog.error && <p className="inline-error" role="alert">{historyDialog.error}</p>}
+              {!historyDialog.loading && !historyDialog.error && historyDialog.snapshots.length === 0 && (
+                <p style={{ fontSize: 13 }}>No recovery snapshots for this note yet.</p>
+              )}
+              {!historyDialog.loading && historyDialog.snapshots.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {historyDialog.snapshots.map((s) => (
+                    <div key={s.snapshotId} className="tree-row" style={{ padding: "8px 0", display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ flex: 1, fontSize: 13 }}>
+                        {new Date(s.createdAt).toLocaleString()} · {s.reason === "restore-before" ? "before restore" : s.reason} · {s.byteLength} bytes
+                      </span>
+                      <button className="btn" onClick={() => void restoreRecoverySnapshot(s.snapshotId)}>Restore</button>
+                      <button className="btn" onClick={() => void copyRecoverySnapshot(s.snapshotId)}>Copy</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
       {wslDialog && <WslDialog dialog={wslDialog} onChange={setWslDialog} onDistro={(d) => void fetchWslUsers(d, wslDialog)} onConnect={connectWsl} onClose={() => setWslDialog(null)} />}
       {updateDlg && (
