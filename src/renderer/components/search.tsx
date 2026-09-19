@@ -10,6 +10,7 @@ export function SearchPanel({
   filenameHits,
   contentHits,
   onOpen,
+  notice,
 }: {
   query: string;
   onQuery: (q: string) => void;
@@ -18,6 +19,9 @@ export function SearchPanel({
   filenameHits: SearchMatch[];
   contentHits: SearchMatch[];
   onOpen: (rel: string, line?: number) => void;
+  /** Workspace-index completeness notice (H-04): shown whenever safety
+   * bounds (file-count cap, oversized skips) may have omitted notes. */
+  notice: string | null;
 }): JSX.Element {
   return (
     <div>
@@ -33,6 +37,7 @@ export function SearchPanel({
       </div>
       {searching && <div className="panel-title">Searching…</div>}
       {searchError && <div className="panel-title" role="alert">{searchError}</div>}
+      {!searching && !searchError && notice && <div className="panel-title" role="note">{notice}</div>}
       {!searching && !searchError && query.trim() === "" && (
         <div className="panel-title">Type to search file names and contents.</div>
       )}

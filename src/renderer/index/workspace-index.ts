@@ -45,7 +45,33 @@ const EXCLUDED_DIRS = new Set([".git", "node_modules", "dist", "build", "coverag
 
 /** Safety bound on bulk builds. Hitting it reports `truncated: true` — the
  * index never silently omits eligible files (P1-08 precondition). */
-const MAX_LISTED_FILES = 2000;
+export const MAX_LISTED_FILES = 2000;
+
+export type IndexBuildSummary = { indexed: number; skipped: number; truncated: boolean };
+
+/**
+ * User-visible completeness notice for an index build (H-04).
+ *
+ * Pure function (no React) so the visibility rule itself is unit-tested:
+ * - complete index → `null` (no warning)
+ * - file-count cap hit → partial-index warning (listing truncated)
+ * - oversized/unreadable files skipped → incomplete-search indication
+ *
+ * The two bounds are reported distinctly: a truncated LISTING (cap) is not
+ * the same as a skipped FILE (>1 MiB), and the message says which.
+ */
+export function indexStatusMessage(summary: IndexBuildSummary): string | null {
+  if (summary.truncated && summary.skipped > 0) {
+    return `Partial index · ${summary.indexed} files (over ${MAX_LISTED_FILES} files, ${summary.skipped} skipped) — Search may be incomplete`;
+  }
+  if (summary.truncated) {
+    return `Partial index · ${summary.indexed} files (over ${MAX_LISTED_FILES} files) — Search may be incomplete`;
+  }
+  if (summary.skipped > 0) {
+    return `Search may be incomplete · ${summary.skipped} file${summary.skipped === 1 ? "" : "s"} skipped (too large or unreadable)`;
+  }
+  return null;
+}
 
 /** Full (re)build from filesystem bytes. Returns counts; workspace-level
  * failures come back as `{ ok: false }` for the caller to surface. */
