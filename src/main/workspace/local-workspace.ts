@@ -233,6 +233,12 @@ export async function writeTextFile(
   if (currentHash !== expectedHash) {
     return { error: appError("CONFLICT", "The file changed on disk. Reload before saving.") };
   }
+  // Guarantee (P1-05, honest, no false CAS claim): the expected-hash check
+  // and the atomic rename below are two separate steps. A change landing
+  // BEFORE the check yields CONFLICT with the file untouched; a change
+  // landing BETWEEN the check and the rename wins last-writer-wins — but
+  // the replace itself is always an atomic rename, so the file is never
+  // torn or truncated. Same guarantee as the helper `file.write`.
   const bytes = encodeUtf8(content, newlineStyle, hadBom, false);
   if (bytes.length > MAX_FILE_BYTES) {
     return { error: appError("TOO_LARGE", "This file is too large to edit safely.") };

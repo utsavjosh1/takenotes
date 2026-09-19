@@ -111,6 +111,9 @@ export class NoteService {
           content,
           expectedHash,
           newlineStyle,
+          // P1-05: BOM must reach the helper or WSL writes silently drop
+          // it while native writes preserve it (parity).
+          hadBom,
         },
         this.identity(r),
       )) as FileRevision;

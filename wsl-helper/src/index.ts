@@ -330,7 +330,24 @@ async function handle(operation: string, payload: unknown, sessionId: string): P
     if (createHash("sha256").update(current).digest("hex") !== expectedHash) {
       throw err("CONFLICT", "The file changed on disk. Reload before saving.");
     }
-    const bytes = Buffer.from((content as string).replace(/\r\n|\n/g, p["newlineStyle"] === "crlf" ? "\r\n" : "\n"), "utf8");
+    // Guarantee (P1-05, honest, no false CAS claim): the expected-hash
+    // check and the atomic rename below are two separate steps. A change
+    // landing BEFORE the check yields CONFLICT with the file untouched; a
+    // change landing BETWEEN the check and the rename wins
+    // last-writer-wins — but the replace itself is always an atomic rename,
+    // so the file is never torn or truncated. Same guarantee as the native
+    // path in local-workspace.ts.
+    let text = content as string;
+    if (p["newlineStyle"] === "crlf") {
+      text = text.replace(/\r\n|\n/g, "\r\n");
+    } else {
+      text = text.replace(/\r\n/g, "\n");
+    }
+    let bytes = Buffer.from(text, "utf8");
+    // BOM parity with native writes (P1-05): the payload carries the read's
+    // hadBom; without this WSL saves silently strip the BOM.
+    if (p["hadBom"] === true) bytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), bytes]);
+    if (bytes.length > 10 * 1024 * 1024) throw err("TOO_LARGE", "This file is too large to edit safely.");
     const tmp = `${abs}.tmp-${process.pid}-${Date.now()}`;
     try {
       await fs.writeFile(tmp, bytes, { flag: "wx" });
