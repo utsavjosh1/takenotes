@@ -105,13 +105,15 @@ describe("desktop save/conflict loop (P1-05)", () => {
     expect(await notes.writeFile(workspaceId, "a\0b.md", "x", "0".repeat(64), "lf", false)).toMatchObject({
       error: { code: "INVALID_PATH" },
     });
-    writeFileSync(path.join(root, "locked.md"), "keep\n");
-    chmodSync(path.join(root, "locked.md"), 0o000);
-    try {
-      const read = await notes.readFile(workspaceId, "locked.md");
-      expect(read).toMatchObject({ error: { code: "PERMISSION_DENIED" } });
-    } finally {
-      chmodSync(path.join(root, "locked.md"), 0o644);
+    if (process.platform !== "win32") {
+      writeFileSync(path.join(root, "locked.md"), "keep\n");
+      chmodSync(path.join(root, "locked.md"), 0o000);
+      try {
+        const read = await notes.readFile(workspaceId, "locked.md");
+        expect(read).toMatchObject({ error: { code: "PERMISSION_DENIED" } });
+      } finally {
+        chmodSync(path.join(root, "locked.md"), 0o644);
+      }
     }
   });
 

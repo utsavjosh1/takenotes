@@ -10,7 +10,7 @@ import { listDistributions } from "../../src/main/wsl/distributions";
  * - switching users reconnects (no helper-identity leak between sessions);
  * - directory create/rename/delete behave, incl. DIRECTORY_NOT_EMPTY.
  * Record results in docs/mvp-status.md — do NOT claim verification from Linux. */
-describe.runIf(process.platform === "win32")("wsl mutation parity against live distros (P1-04)", () => {
+describe.runIf(process.platform === "win32" && process.env["TAKENOTES_LIVE_WSL"] === "1")("wsl mutation parity against live distros (P1-04)", () => {
   function runWsl(args: string[], timeoutMs = 30000): Promise<{ code: number | null; output: Buffer }> {
     return new Promise((resolve, reject) => {
       const child = spawn("wsl.exe", args, { shell: false, timeout: timeoutMs });

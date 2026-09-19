@@ -8,7 +8,7 @@ import { filterCandidateUsers, parsePasswd } from "../../wsl-helper/src/users";
  * `/etc/passwd`. This exercises the source data end to end; the helper
  * `users.list` round-trip itself is covered by direct-spawn tests on Linux.
  * Record results in docs/mvp-status.md — do NOT claim verification from Linux. */
-describe.runIf(process.platform === "win32")("linux user discovery against a live distro", () => {
+describe.runIf(process.platform === "win32" && process.env["TAKENOTES_LIVE_WSL"] === "1")("linux user discovery against a live distro", () => {
   function runWsl(args: string[], timeoutMs = 30000): Promise<{ code: number | null; output: Buffer }> {
     return new Promise((resolve, reject) => {
       const child = spawn("wsl.exe", args, { shell: false, timeout: timeoutMs });

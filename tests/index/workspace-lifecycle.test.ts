@@ -7,10 +7,12 @@ import { NativeFileAdapter } from "../../src/main/workspace/file-adapter";
 import { NoteService } from "../../src/main/services/note-service";
 import { WorkspaceService } from "../../src/main/services/workspace-service";
 import { WorkspaceIndex } from "../../src/shared/index/store";
+import type { WorkspaceKind } from "../../src/shared/platform/types";
 
 /** P1-07 acceptance 2 through the production desktop seam: index entries
  * track real filesystem mutations; rebuild-after-drop matches the disk. */
 describe("index tracks filesystem lifecycle (P1-07)", () => {
+  const workspaceKind: WorkspaceKind = process.platform === "win32" ? "windows-local" : "linux-local";
   let root: string;
   let notes: NoteService;
   let workspaceId: string;
@@ -26,7 +28,7 @@ describe("index tracks filesystem lifecycle (P1-07)", () => {
       },
       hasWslSession: () => false,
     });
-    workspaceId = workspaces.registerLocal("Notes", root, "linux-local").id;
+    workspaceId = workspaces.registerLocal("Notes", root, workspaceKind).id;
     idx = new WorkspaceIndex();
   });
 

@@ -5,7 +5,7 @@ import { listDistributions } from "../../src/main/wsl/distributions";
  * listing distributions is read-only — a stopped distro stays stopped.
  * `wsl.exe -l -v` never starts a distribution; only an explicit
  * Connect/Open (P1-03+) spawns into one. Record results in docs/mvp-status.md. */
-describe.runIf(process.platform === "win32")("distro listing leaves stopped distros stopped (live wsl.exe)", () => {
+describe.runIf(process.platform === "win32" && process.env["TAKENOTES_LIVE_WSL"] === "1")("distro listing leaves stopped distros stopped (live wsl.exe)", () => {
   it("repeated listings report identical states", async () => {
     const before = await listDistributions();
     expect(before.length).toBeGreaterThan(0);

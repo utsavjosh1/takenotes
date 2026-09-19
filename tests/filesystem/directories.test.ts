@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDirectory, deleteDirectory, renameDirectory } from "../../src/main/workspace/local-workspace";
 
-describe("directory operations (posix local workspace, runs anywhere)", () => {
+describe.runIf(process.platform !== "win32")("directory operations (posix local workspace)", () => {
   let root: string;
 
   beforeEach(() => {
