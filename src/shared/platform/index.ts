@@ -19,7 +19,7 @@ export {
   normalizeAccelerator,
   RESERVED_SHORTCUTS,
 } from "./keymap.js";
-export type { CommandId, PlatformAccelerators, CommandDefinition, ShortcutCollision } from "./keymap.js";
+export type { CommandId, PlatformAccelerators, KeymapCommandDefinition, ShortcutCollision } from "./keymap.js";
 export { formatAccelerator, formatShortcut, shortcutLabelsFor } from "./shortcut-labels.js";
 export {
   localWorkspaceKind,

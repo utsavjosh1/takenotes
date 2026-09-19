@@ -19,6 +19,7 @@ import { currentDesktopPlatform } from "../../shared/platform/platform.js";
 import { getCapabilities } from "../../shared/platform/capabilities.js";
 import { localWorkspaceKind, toCanonicalRel } from "../../shared/platform/filesystem.js";
 import { shortcutLabelsFor } from "../../shared/platform/shortcut-labels.js";
+import { commandService } from "../services/command-service.js";
 import { detectWayland } from "../platform/linux.js";
 import type { PlatformReport, WslLinuxUser } from "../../shared/contracts/ipc.js";
 import type { AppError } from "../../shared/errors.js";
@@ -194,6 +195,11 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       shortcuts: shortcutLabelsFor(platform),
     };
     return { ok: true, result: report };
+  });
+
+  ipcMain.handle("commands:list", (event) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    return { ok: true, result: commandService.list() };
   });
 
   ipcMain.handle("workspace:openLocal", async (event) => {

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import type { DirectoryEntry, SearchMatch, WorkspaceInfo, WslDistribution, WslLinuxUser } from "../shared/contracts/ipc";
+import type { CommandListResult, DirectoryEntry, SearchMatch, WorkspaceInfo, WslDistribution, WslLinuxUser } from "../shared/contracts/ipc";
 import { usePlatform } from "./hooks/use-platform";
 import { isWslKind, moveToTrashLabel, revealLabel, trashName } from "../shared/platform/filesystem";
-import type { CommandId } from "../shared/platform/keymap";
+import { COMMAND_DEFINITIONS, type CommandId } from "../shared/commands/registry";
 import { TitleBar, ActivityRail, StatusBar } from "./components/chrome";
 import { PaneView } from "./components/pane-view";
 import { buildWorkspaceIndex, workspaceIndex } from "./index/workspace-index";
+import { commandForKeyEvent } from "../shared/commands/hotkeys";
+import { indexedEntryToQuickOpenItem } from "../shared/commands/palette";
 import { parseSearchQuery } from "../shared/search/query";
 import { searchContent, searchFilenames } from "../shared/search/search";
 import { FileTree, type TreeState } from "./components/tree";
 import { SearchPanel, useDebouncedValue } from "./components/search";
 import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
-import { CommandMenu, type CommandItem, type PaletteMode } from "./components/palette";
+import { CommandMenu, type CommandItem } from "./components/palette";
 import { SettingsDialog } from "./components/settings";
 import { Icon } from "./components/icons";
 import stackedDarkUrl from "./assets/brand/takenotes-stacked-dark.svg";
@@ -98,7 +100,7 @@ export default function App(): JSX.Element {
   const [view, setView] = useState<"files" | "search">("files");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem("takenotes.sidebarWidth") ?? 240) || 240);
-  const [palette, setPalette] = useState<PaletteMode | null>(null);
+  const [palette, setPalette] = useState<{ initialQuery: string } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -113,6 +115,8 @@ export default function App(): JSX.Element {
   const [recents, setRecents] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("takenotes.recents") ?? "[]"); } catch { return []; } });
   const [recentWorkspaces, setRecentWorkspaces] = useState<{ name: string; kind: string }[]>(() => { try { return JSON.parse(localStorage.getItem("takenotes.recentWs") ?? "[]"); } catch { return []; } });
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
+  const [commandDefinitions, setCommandDefinitions] = useState<CommandListResult>([...COMMAND_DEFINITIONS]);
+  const [indexVersion, setIndexVersion] = useState(0);
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
   // Crash-recovery drafts (userData store, main process). Keyed by tab key.
   // This is RECOVERY data only: `Saved` is shown exclusively for bytes that
@@ -169,6 +173,12 @@ export default function App(): JSX.Element {
     const text = friendlyError(error.code, error.message);
     toast(prefix ? `${prefix} — ${text}` : text, "error");
   }, [toast]);
+
+  useEffect(() => {
+    void window.takenotes.commands.list().then((res) => {
+      if (res.ok) setCommandDefinitions(res.result);
+    }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("takenotes.settings", JSON.stringify(settings));
@@ -237,7 +247,9 @@ export default function App(): JSX.Element {
     if (!res.ok) {
       if (isWslKind(ws.type)) setWslError(res.error.message);
       else errToast(res.error, "Couldn't build the search index");
+      return;
     }
+    setIndexVersion((v) => v + 1);
   }, [errToast]);
 
   const openWorkspace = useCallback(async (ws: WorkspaceInfo) => {
@@ -439,6 +451,7 @@ export default function App(): JSX.Element {
     // File changed → replace exactly this index entry (content + the
     // authoritative post-write revision: zero extra reads).
     workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res.result);
+    setIndexVersion((v) => v + 1);
     // The file now holds the truth: the recovery draft is obsolete.
     setRecovery((p) => {
       if (!(key in p)) return p;
@@ -487,6 +500,7 @@ export default function App(): JSX.Element {
     setLayout((l) => markSaved(l, target.key, res2.result.hash, new Date().toLocaleTimeString()));
     // Conflict resolved by overwrite: the file changed → re-parse it.
     workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res2.result);
+    setIndexVersion((v) => v + 1);
   }, [workspace, layout, toast, errToast]);
 
   const closeTab = useCallback((paneId: string, key: string) => {
@@ -622,6 +636,7 @@ export default function App(): JSX.Element {
     if (!res.ok) { errToast(res.error, `Couldn't create "${target}"`); return; }
     // Created files are empty: index the blank entry with its revision.
     workspaceIndex.upsert(workspace.workspaceId, target, "", res.result);
+    setIndexVersion((v) => v + 1);
     setCreating(null); setCreateName("");
     if (creating.dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, creating.dir);
@@ -646,6 +661,7 @@ export default function App(): JSX.Element {
     // Rename moves the index entry without re-parsing (bytes unchanged).
     if (entry.kind === "directory") workspaceIndex.movePrefix(workspace.workspaceId, entry.relativePath, newRel);
     else workspaceIndex.move(workspace.workspaceId, entry.relativePath, newRel);
+    setIndexVersion((v) => v + 1);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
       if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
@@ -674,6 +690,7 @@ export default function App(): JSX.Element {
     setLayout((l) => removeDocsForEntry(l, workspace.workspaceId, entry.relativePath));
     // Folder delete drops the whole index prefix (exact + everything under).
     workspaceIndex.removePrefix(workspace.workspaceId, entry.relativePath);
+    setIndexVersion((v) => v + 1);
     const dir = parentDir(entry.relativePath);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
@@ -693,6 +710,7 @@ export default function App(): JSX.Element {
     if (!res.ok) { errToast(res.error, wsl ? `Couldn't delete "${entry.name}"` : undefined); return; }
     setLayout((l) => removeDocsForEntry(l, workspace.workspaceId, entry.relativePath));
     workspaceIndex.removePrefix(workspace.workspaceId, entry.relativePath);
+    setIndexVersion((v) => v + 1);
     const dir = parentDir(entry.relativePath);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
@@ -733,21 +751,19 @@ export default function App(): JSX.Element {
   }, [debouncedQuery, workspace, layout]);
 
   /* ---------- commands ---------- */
-  const runCommand = useCallback((id: string) => {
+  const rememberCommand = useCallback((id: CommandId) => {
     setRecentCommands((p) => [id, ...p.filter((c) => c !== id)].slice(0, 10));
   }, []);
 
   const newNote = useCallback(() => {
-    runCommand("new-note");
     if (!workspace) { void openLocal(); return; }
     const sel = tree.selected;
     const dir = sel && entries.concat(...tree.children.values()).some((e) => e.relativePath === sel && e.kind === "directory") ? sel : "";
     setView("files"); setSidebarOpen(true);
     setCreating({ dir, folder: false }); setCreateName("");
-  }, [workspace, openLocal, tree.selected, tree.children, entries, runCommand]);
+  }, [workspace, openLocal, tree.selected, tree.children, entries]);
 
-  // Split helpers (declared before the command table that references
-  // them): two-pane model, window-local, never persisted.
+  // Split helpers: two-pane model, window-local, never persisted.
   const splitActive = useCallback((orientation: "horizontal" | "vertical") => {
     setLayout((l) => splitPane(l, l.activePaneId, orientation));
     setCursor({ line: 1, col: 1 });
@@ -760,6 +776,7 @@ export default function App(): JSX.Element {
 
   const focusOtherPane = useCallback(() => {
     setLayout((l) => {
+      if (l.panes.length < 2) return l;
       const i = l.panes.findIndex((p) => p.id === l.activePaneId);
       const next = l.panes[(i + 1) % l.panes.length]!;
       return activatePane(l, next.id);
@@ -767,57 +784,57 @@ export default function App(): JSX.Element {
     setCursor({ line: 1, col: 1 });
   }, []);
 
-  /* Semantic command table. Shortcut labels come from the platform registry
-   * (§117–§119): never hardcode `Ctrl+P` in shared components. WSL entries
-   * only exist where the capability exists (§185). */
-  const commands: CommandItem[] = useMemo(() => {
-    const items: CommandItem[] = [
-      { id: "file.new", title: "Create new note", shortcut: sc("file.new"), run: () => newNote() },
-      { id: "file.save", title: "Save current file", shortcut: sc("file.save"), run: () => void save() },
-      { id: "file.quickOpen", title: "Quick open…", shortcut: sc("file.quickOpen"), run: () => setPalette({ kind: "quick" }) },
-      { id: "workspace.openLocal", title: "Open folder…", run: () => void openLocal() },
-      { id: "view.toggleSidebar", title: "Toggle sidebar", shortcut: sc("view.toggleSidebar"), run: () => setSidebarOpen((v) => !v) },
-      { id: "view.toggleFocus", title: "Toggle focus mode", shortcut: sc("view.toggleFocus"), run: () => setFocusMode((v) => !v) },
-      { id: "view.fullWidth", title: "Toggle full-width editor", run: () => setSettings((s) => ({ ...s, fullWidth: !s.fullWidth })) },
-      { id: "file.closeTab", title: "Close current tab", shortcut: sc("file.closeTab"), run: () => { const a = activeDoc(layout); if (a) closeTab(layout.activePaneId, a.key); } },
-      { id: "view.splitRight", title: "Split editor right", run: () => splitActive("vertical") },
-      { id: "view.splitDown", title: "Split editor down", run: () => splitActive("horizontal") },
-      { id: "view.closeSplit", title: "Close split pane", run: () => closeActivePane() },
-      { id: "view.focusOtherPane", title: "Focus other pane", run: () => focusOtherPane() },
-      { id: "workspace.refresh", title: "Refresh file tree", run: () => { if (workspace) { void refreshTree(workspace); void rebuildAllFiles(workspace); void refreshWorkspaceIndex(workspace); } } },
-      { id: "settings.open", title: "Open settings", shortcut: sc("settings.open"), run: () => setSettingsOpen(true) },
-    ];
-    if (platform.capabilities.updates) {
-      items.push({ id: "app.checkForUpdates", title: "Check for updates…", run: () => void checkForUpdates(true) });
-    }
-    if (platform.capabilities.wsl) {
-      items.splice(4, 0, { id: "workspace.openWsl", title: "Open WSL folder…", run: () => void openWslDialog() });
-    }
-    return items;
-  }, [newNote, save, openLocal, openWslDialog, checkForUpdates, layout, closeTab, splitActive, closeActivePane, focusOtherPane, workspace, refreshTree, rebuildAllFiles, refreshWorkspaceIndex, sc, platform.capabilities.wsl, platform.capabilities.updates]);
+  const commandHandlers = useMemo<Partial<Record<CommandId, () => void>>>(() => ({
+    "note.new": () => newNote(),
+    "note.open": () => setPalette({ initialQuery: "" }),
+    "note.close": () => { const a = activeDoc(layout); if (a) closeTab(layout.activePaneId, a.key); },
+    "workspace.open": () => { void openLocal(); },
+    "workspace.openWsl": () => { void openWslDialog(); },
+    "workspace.close": () => { if (workspace) { void window.takenotes.workspace.close(workspace.workspaceId); setWorkspace(null); setLayout(createLayout()); } },
+    "workspace.refresh": () => { if (workspace) { void refreshTree(workspace); void rebuildAllFiles(workspace); void refreshWorkspaceIndex(workspace); } },
+    "editor.save": () => { void save(); },
+    "search.open": () => { setView("search"); setSidebarOpen(true); },
+    "quickOpen.open": () => setPalette({ initialQuery: "" }),
+    "palette.open": () => setPalette({ initialQuery: ">" }),
+    "view.toggleSidebar": () => setSidebarOpen((v) => !v),
+    "view.toggleFocus": () => setFocusMode((v) => !v),
+    "pane.splitVertical": () => splitActive("vertical"),
+    "pane.splitHorizontal": () => splitActive("horizontal"),
+    "pane.close": () => closeActivePane(),
+    "pane.focusNext": () => focusOtherPane(),
+    "settings.open": () => setSettingsOpen(true),
+    "app.checkForUpdates": () => { void checkForUpdates(true); },
+    "app.closeWindow": () => window.close(),
+    "editor.find": () => undefined,
+  }), [newNote, layout, closeTab, openLocal, openWslDialog, workspace, refreshTree, rebuildAllFiles, refreshWorkspaceIndex, save, splitActive, closeActivePane, focusOtherPane, checkForUpdates]);
+
+  const commandEnabled = useCallback((id: CommandId): boolean => {
+    if (id === "editor.save" || id === "note.close") return activeDoc(layout) !== null;
+    if (id === "pane.close" || id === "pane.focusNext") return layout.panes.length > 1;
+    if (id === "workspace.refresh" || id === "workspace.close" || id === "search.open") return workspace !== null;
+    if (id === "workspace.openWsl") return platform.capabilities.wsl;
+    if (id === "app.checkForUpdates") return platform.capabilities.updates;
+    if (id === "workspace.switch") return false;
+    return commandHandlers[id] !== undefined;
+  }, [layout, workspace, platform.capabilities.wsl, platform.capabilities.updates, commandHandlers]);
+
+  const executeCommand = useCallback((id: CommandId) => {
+    const run = commandHandlers[id];
+    if (!run || !commandEnabled(id)) return;
+    rememberCommand(id);
+    run();
+  }, [commandHandlers, commandEnabled, rememberCommand]);
+
+  const commands: CommandItem[] = useMemo(() => commandDefinitions.map((definition) => ({
+    ...definition,
+    shortcut: sc(definition.id),
+    enabled: commandEnabled(definition.id),
+    run: () => executeCommand(definition.id),
+  })), [commandDefinitions, sc, commandEnabled, executeCommand]);
 
   /* Native menu → same command dispatch (§59). Menu accelerators and the
    * palette forward CommandIds here; mouse and keyboard share one path. */
-  useEffect(() => {
-    const off = window.takenotes.events.onCommand((id: CommandId) => {
-      switch (id) {
-        case "file.new": newNote(); break;
-        case "file.save": void save(); break;
-        case "file.quickOpen": setPalette({ kind: "quick" }); break;
-        case "file.closeTab": { const a = activeDoc(layout); if (a) closeTab(layout.activePaneId, a.key); break; }
-        case "commandPalette.open": setPalette({ kind: "commands" }); break;
-        case "workspace.search": setView("search"); setSidebarOpen(true); break;
-        case "editor.find": break; // CodeMirror search keymap owns editor find (§58)
-        case "settings.open": setSettingsOpen(true); break;
-        case "app.checkForUpdates": void checkForUpdates(true); break;
-        case "view.toggleSidebar": setSidebarOpen((v) => !v); break;
-        case "view.toggleFocus": setFocusMode((v) => !v); break;
-        case "file.closeWindow": window.close(); break;
-        default: break;
-      }
-    });
-    return off;
-  }, [newNote, save, layout, closeTab, checkForUpdates]);
+  useEffect(() => window.takenotes.events.onCommand((id: CommandId) => executeCommand(id)), [executeCommand]);
 
   /* ---------- global keyboard ---------- */
   useEffect(() => {
@@ -833,15 +850,26 @@ export default function App(): JSX.Element {
       // Modal owns the keyboard while open (§54): palette capture-handlers
       // deal with Arrows/Enter/Escape; app shortcuts stay out of the way.
       // Save still works so a quick-open detour never blocks persisting.
+      const keyCommand = commandForKeyEvent(platform.platform, e);
       if (palette) {
-        if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); void save(); }
+        if (keyCommand === "editor.save") { e.preventDefault(); executeCommand("editor.save"); }
         return;
       }
-      if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); void save(); return; }
-      if (mod && e.key.toLowerCase() === "p" && e.shiftKey) { e.preventDefault(); setPalette({ kind: "commands" }); return; }
-      if (mod && e.key.toLowerCase() === "p") { e.preventDefault(); setPalette({ kind: "quick" }); return; }
-      if (mod && e.key.toLowerCase() === "n") { e.preventDefault(); newNote(); return; }
-      if (mod && e.key.toLowerCase() === "w") { e.preventDefault(); const a = activeDoc(layout); if (a) closeTab(layout.activePaneId, a.key); return; }
+      if (
+        keyCommand === "editor.save" ||
+        keyCommand === "palette.open" ||
+        keyCommand === "quickOpen.open" ||
+        keyCommand === "note.new" ||
+        keyCommand === "note.close" ||
+        keyCommand === "search.open" ||
+        keyCommand === "view.toggleSidebar" ||
+        keyCommand === "view.toggleFocus" ||
+        keyCommand === "settings.open"
+      ) {
+        e.preventDefault();
+        executeCommand(keyCommand);
+        return;
+      }
       // Pane focus without stealing editor focus: Alt+1 / Alt+2 selects the
       // pane; the editor keeps whatever focus it had (no jump on switch).
       if (e.altKey && !mod && (e.key === "1" || e.key === "2")) {
@@ -853,9 +881,6 @@ export default function App(): JSX.Element {
         }
         return;
       }
-      if (mod && e.key === "\\") { e.preventDefault(); setSidebarOpen((v) => !v); return; }
-      if (mod && e.key.toLowerCase() === ",") { e.preventDefault(); setSettingsOpen(true); return; }
-      if (mod && e.key === ".") { e.preventDefault(); setFocusMode((v) => !v); return; }
       if (mod && e.key === "Tab") {
         // Tab cycling stays inside the active pane.
         e.preventDefault();
@@ -894,7 +919,7 @@ export default function App(): JSX.Element {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [save, newNote, layout, closeTab, tree.selected, tree.children, entries, removeEntry, palette, platform.platform]);
+  }, [executeCommand, layout, tree.selected, tree.children, entries, removeEntry, palette, platform.platform]);
 
   /* tree arrow navigation */
   const visibleRows = useMemo(() => {
@@ -973,7 +998,7 @@ export default function App(): JSX.Element {
     setMenu({
       x: e.clientX, y: e.clientY,
       items: [
-        { label: "Close", shortcut: sc("file.closeTab"), run: () => closeTab(paneId, key) },
+        { label: "Close", shortcut: sc("note.close"), run: () => closeTab(paneId, key) },
         {
           label: "Close others",
           run: () => {
@@ -1002,6 +1027,11 @@ export default function App(): JSX.Element {
     const c = activeTab?.content.trim() ?? "";
     return c ? c.split(/\s+/).length : 0;
   }, [activeTab?.content]);
+
+  const quickOpenFiles = useMemo(
+    () => (workspace ? workspaceIndex.list(workspace.workspaceId).map(indexedEntryToQuickOpenItem) : []),
+    [workspace?.workspaceId, indexVersion],
+  );
 
   /* ---------- render ---------- */
   if (!workspace) {
@@ -1044,7 +1074,7 @@ export default function App(): JSX.Element {
   return (
     <div className="app">
       {!focusMode && (
-        <TitleBar workspace={workspace} platform={platform} onQuickOpen={() => setPalette({ kind: "quick" })} onOpenWindows={() => void openLocal()} onOpenWsl={() => void openWslDialog()} />
+        <TitleBar workspace={workspace} platform={platform} onQuickOpen={() => executeCommand("quickOpen.open")} onOpenWindows={() => void openLocal()} onOpenWsl={() => void openWslDialog()} />
       )}
       <div className="body">
         {!focusMode && (
@@ -1057,13 +1087,13 @@ export default function App(): JSX.Element {
                 <span className="name">{workspace.displayName}
                   {isWslKind(workspace.type) && <span className="sub">WSL{workspace.linuxUser ? ` · ${workspace.linuxUser}` : ""}</span>}
                 </span>
-                <button className="icon-btn" title={`New note (${sc("file.new")})`} aria-label="New note" onClick={newNote}><Icon name="plus" /></button>
+                <button className="icon-btn" title={`New note (${sc("note.new")})`} aria-label="New note" onClick={() => executeCommand("note.new")}><Icon name="plus" /></button>
                 <button
                   className="icon-btn" title="More actions" aria-label="More actions"
                   onClick={(e) => setMenu({
                     x: e.clientX, y: e.clientY,
                     items: [
-                      { label: "New note", shortcut: sc("file.new"), run: () => newNote() },
+                      { label: "New note", shortcut: sc("note.new"), run: () => executeCommand("note.new") },
                       { label: "New folder…", run: () => { setCreating({ dir: "", folder: true }); setCreateName(""); } },
                       { label: "---", run: () => undefined },
                       { label: "Refresh file tree", run: () => { void refreshTree(workspace); void rebuildAllFiles(workspace); } },
@@ -1234,7 +1264,7 @@ export default function App(): JSX.Element {
                   {!doc ? (
                     <div className="empty">
                       <h2>No note open</h2>
-                      <p className="hint"><kbd className="k">{sc("file.quickOpen")}</kbd> Quick open · <kbd className="k">{sc("file.new")}</kbd> New note</p>
+                      <p className="hint"><kbd className="k">{sc("quickOpen.open")}</kbd> Quick open · <kbd className="k">{sc("note.new")}</kbd> New note</p>
                       {entries.length === 0 && !sidebarLoading && (
                         <div className="actions"><button className="btn primary" onClick={newNote}>New note</button></div>
                       )}
@@ -1279,12 +1309,12 @@ export default function App(): JSX.Element {
       {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
       {palette && (
         <CommandMenu
-          mode={palette}
-          files={allFiles}
+          initialQuery={palette.initialQuery}
+          files={quickOpenFiles}
           recents={recents}
           commands={commands}
           recentCommands={recentCommands}
-          onOpenFile={(rel) => { runCommand("quick-open"); void openFile(rel); }}
+          onOpenFile={(rel) => { rememberCommand("quickOpen.open"); void openFile(rel); }}
           onClose={() => setPalette(null)}
         />
       )}

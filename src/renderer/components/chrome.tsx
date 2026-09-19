@@ -20,7 +20,7 @@ export function TitleBar({
   onOpenWindows: () => void;
   onOpenWsl: () => void;
 }): JSX.Element {
-  const quickOpen = platform.shortcutLabel("file.quickOpen");
+  const quickOpen = platform.shortcutLabel("quickOpen.open");
   return (
     <header className="titlebar" role="banner">
       <img src={appMarkUrl} className="app-mark" alt="" aria-hidden="true" draggable={false} />
@@ -66,7 +66,7 @@ export function ActivityRail({
   onView: (v: "files" | "search") => void;
   onSettings: () => void;
 }): JSX.Element {
-  const searchLabel = platform.shortcutLabel("workspace.search");
+  const searchLabel = platform.shortcutLabel("search.open");
   const settingsLabel = platform.shortcutLabel("settings.open");
   return (
     <nav className="rail" aria-label="Activity">

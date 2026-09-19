@@ -1,4 +1,5 @@
 import type { AppError } from "../errors.js";
+import type { CommandDefinition } from "../commands/registry.js";
 import type { WorkspaceKind } from "../platform/types.js";
 
 /** Workspace kinds (§11). Legacy `"windows"` means `"windows-local"` and
@@ -85,6 +86,8 @@ export type SearchMatch = {
   column: number;
   preview: string;
 };
+
+export type CommandListResult = CommandDefinition[];
 
 export type PlatformReport = {
   platform: "windows" | "macos" | "linux";

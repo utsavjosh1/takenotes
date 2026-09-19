@@ -24,7 +24,7 @@ try {
 import { currentDesktopPlatform } from "../shared/platform/platform.js";
 import { shouldQuitOnAllWindowsClosed } from "../shared/platform/window.js";
 import { installAppMenu } from "./platform/menus.js";
-import type { CommandId } from "../shared/platform/keymap.js";
+import type { CommandId } from "../shared/commands/registry.js";
 
 /** Startup diagnostics: failures before first window used to quit silently
  *  on Windows (double-click → nothing). Log to userData + show a dialog

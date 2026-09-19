@@ -9,7 +9,9 @@
  * command (§155).
  */
 import { Menu, type MenuItemConstructorOptions } from "electron";
-import { acceleratorFor, type CommandId } from "../../shared/platform/keymap.js";
+import type { CommandId } from "../../shared/commands/registry.js";
+import { acceleratorFor } from "../../shared/platform/keymap.js";
+import { commandService } from "../services/command-service.js";
 import type { DesktopPlatform } from "../../shared/platform/types.js";
 
 export type MenuAction =
@@ -30,16 +32,16 @@ export function buildMenuTemplate(
   const mnemonic = (label: string): string => (platform === "macos" ? label : label);
 
   const fileSubmenu: MenuItemConstructorOptions[] = [
-    cmd("file.new", mnemonic("&New Note")),
+    cmd("note.new", mnemonic("&New Note")),
     // Save is an editor-scope command but stays discoverable here (§155);
     // the renderer + CodeMirror own dispatch so there is one logical path (§58).
-    cmd("file.save", mnemonic("&Save")),
+    cmd("editor.save", mnemonic("&Save")),
     { type: "separator" },
-    cmd("file.quickOpen", mnemonic("&Quick Open…")),
-    cmd("workspace.search", mnemonic("&Search in Workspace…")),
+    cmd("quickOpen.open", mnemonic("&Quick Open…")),
+    cmd("search.open", mnemonic("&Search in Workspace…")),
     { type: "separator" },
-    cmd("file.closeTab", mnemonic("&Close Tab")),
-    cmd("file.closeWindow", mnemonic("Close &Window")),
+    cmd("note.close", mnemonic("&Close Tab")),
+    cmd("app.closeWindow", mnemonic("Close &Window")),
   ];
   if (platform !== "macos") {
     // Windows/Linux quit lives under File; macOS quits from the app menu (§60).
@@ -62,7 +64,7 @@ export function buildMenuTemplate(
   ];
 
   const viewSubmenu: MenuItemConstructorOptions[] = [
-    cmd("commandPalette.open", mnemonic("&Command Palette…")),
+    cmd("palette.open", mnemonic("&Command Palette…")),
     cmd("view.toggleSidebar", mnemonic("Toggle &Sidebar")),
     cmd("view.toggleFocus", mnemonic("Toggle &Focus Mode")),
     { type: "separator" },
@@ -120,50 +122,7 @@ export function buildMenuTemplate(
 }
 
 function commandTitle(id: CommandId): string {
-  switch (id) {
-    case "file.new":
-      return "New Note";
-    case "file.save":
-      return "Save";
-    case "file.closeTab":
-      return "Close Tab";
-    case "file.quickOpen":
-      return "Quick Open…";
-    case "file.closeWindow":
-      return "Close Window";
-    case "workspace.search":
-      return "Search in Workspace…";
-    case "commandPalette.open":
-      return "Command Palette…";
-    case "editor.find":
-      return "Find in Note…";
-    case "settings.open":
-      return "Settings…";
-    case "app.checkForUpdates":
-      return "Check for Updates…";
-    case "view.toggleSidebar":
-      return "Toggle Sidebar";
-    case "view.toggleFocus":
-      return "Toggle Focus Mode";
-    case "view.nextTab":
-      return "Next Tab";
-    case "view.prevTab":
-      return "Previous Tab";
-    case "tree.rename":
-      return "Rename";
-    case "tree.trash":
-      return "Move to Trash";
-    case "app.quit":
-      return "Quit";
-    case "app.toggleFullscreen":
-      return "Toggle Full Screen";
-    case "app.zoomIn":
-      return "Zoom In";
-    case "app.zoomOut":
-      return "Zoom Out";
-    case "app.zoomReset":
-      return "Actual Size";
-  }
+  return commandService.get(id)?.title ?? id;
 }
 
 /** Install the platform-correct application menu. Menu clicks forward to the

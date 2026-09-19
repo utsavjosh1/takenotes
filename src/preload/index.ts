@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  CommandListResult,
   DirectoryEntry,
   FileReadResult,
   FileRevision,
@@ -11,7 +12,7 @@ import type {
   WslDistribution,
   WslLinuxUser,
 } from "../shared/contracts/ipc.js";
-import type { CommandId } from "../shared/platform/keymap.js";
+import type { CommandId } from "../shared/commands/registry.js";
 
 /** Narrow typed preload bridge. No generic channel invocation is exposed. */
 export type TakeNotesApi = {
@@ -52,6 +53,9 @@ export type TakeNotesApi = {
   };
   shell: {
     reveal(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
+  };
+  commands: {
+    list(): Promise<IpcResult<CommandListResult>>;
   };
   app: {
     version(): Promise<IpcResult<string>>;
@@ -107,6 +111,9 @@ const api: TakeNotesApi = {
   },
   shell: {
     reveal: (workspaceId, relativePath) => ipcRenderer.invoke("shell:reveal", workspaceId, relativePath),
+  },
+  commands: {
+    list: () => ipcRenderer.invoke("commands:list"),
   },
   app: {
     version: () => ipcRenderer.invoke("app:version"),
