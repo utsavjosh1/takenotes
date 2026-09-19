@@ -14,6 +14,7 @@ import { Icon } from "./components/icons";
 import stackedDarkUrl from "./assets/brand/takenotes-stacked-dark.svg";
 import stackedLightUrl from "./assets/brand/takenotes-stacked-light.svg";
 import { DEFAULT_SETTINGS, displayPath, fileName, joinRel, parentDir, type CtxMenu, type Settings, type TabState, type Toast } from "./components/types";
+import { friendlyError } from "./error-text";
 
 let toastId = 1;
 
@@ -125,6 +126,14 @@ export default function App(): JSX.Element {
     if (kind === "info") setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 5000);
   }, []);
 
+  /** Distinct error toasts (P1-04): the headline names the failure kind so
+   * PERMISSION_DENIED never reads as NOT_FOUND. Takes the structured
+   * `{ code, message }` every IPC result carries. */
+  const errToast = useCallback((error: { code: string; message: string }, prefix?: string) => {
+    const text = friendlyError(error.code, error.message);
+    toast(prefix ? `${prefix} — ${text}` : text, "error");
+  }, [toast]);
+
   useEffect(() => {
     localStorage.setItem("takenotes.settings", JSON.stringify(settings));
     const t = settings.theme;
@@ -164,9 +173,9 @@ export default function App(): JSX.Element {
       setTree((p) => ({ ...p, children: new Map(), expanded: new Set(), renaming: null }));
     } else {
       if (isWslKind(ws.type)) setWslError(res.error.message);
-      else toast(res.error.message, "error");
+      else errToast(res.error);
     }
-  }, [toast]);
+  }, [toast, errToast]);
 
   const rebuildAllFiles = useCallback(async (ws: WorkspaceInfo) => {
     // Quick-open index builds from directory.list, which is helper-backed
@@ -318,7 +327,7 @@ export default function App(): JSX.Element {
       if (res.error.code === "TOO_LARGE" || res.error.code === "UNSUPPORTED_ENCODING") {
         setTabs((p) => [...p, { key, relativePath, content: "", dirty: false, revisionHash: "", newlineStyle: "lf", hadBom: false, conflict: false, loadError: res.error.message }]);
         setActiveKey(key);
-      } else toast(res.error.message, "error");
+      } else errToast(res.error, `Couldn't open ${fileName(relativePath)}`);
       return;
     }
     const file = res.result;
@@ -344,7 +353,7 @@ export default function App(): JSX.Element {
       localStorage.setItem("takenotes.recents", JSON.stringify(next));
       return next;
     });
-  }, [workspace, tabs, toast]);
+  }, [workspace, tabs, toast, errToast]);
 
   const onEdit = useCallback((content: string) => {
     if (!activeKey) return;
@@ -369,7 +378,7 @@ export default function App(): JSX.Element {
         setSaveState("conflict");
       } else {
         setSaveState("error");
-        toast(`Couldn't save ${fileName(activeTab.relativePath)} — ${res.error.message} Your edits are still safe.`, "error");
+        errToast(res.error, `Couldn't save ${fileName(activeTab.relativePath)}. Your edits are still safe`);
       }
       return;
     }
@@ -385,7 +394,7 @@ export default function App(): JSX.Element {
     });
     safeDraftClear(workspace.workspaceId, activeTab.relativePath);
     void rebuildAllFiles(workspace);
-  }, [workspace, activeTab, toast, rebuildAllFiles]);
+  }, [workspace, activeTab, toast, errToast, rebuildAllFiles]);
 
   const reloadFromDisk = useCallback(async () => {
     if (!workspace || !activeTab) return;
@@ -403,24 +412,24 @@ export default function App(): JSX.Element {
         code: res.error.code,
         message: res.error.message,
       });
-      toast(res.error.message, "error"); return; }
+      errToast(res.error, "Couldn't reload from disk"); return; }
     setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, content: res.result.content, dirty: false, conflict: false, revisionHash: res.result.revision.hash } : t)));
     setSaveState("clean");
-  }, [workspace, activeTab, toast]);
+  }, [workspace, activeTab, toast, errToast]);
 
   const keepMyVersion = useCallback(async () => {
     if (!workspace || !activeTab) return;
     const res = await window.takenotes.file.read(workspace.workspaceId, activeTab.relativePath);
-    if (!res.ok) { toast(res.error.message, "error"); return; }
+    if (!res.ok) { errToast(res.error); return; }
     const diskHash = res.result.revision.hash;
     const res2 = await window.takenotes.file.write({
       workspaceId: workspace.workspaceId, relativePath: activeTab.relativePath, content: activeTab.content,
       expectedHash: diskHash, newlineStyle: activeTab.newlineStyle, hadBom: activeTab.hadBom,
     });
-    if (!res2.ok) { toast(res2.error.message, "error"); return; }
+    if (!res2.ok) { errToast(res2.error); return; }
     setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, dirty: false, conflict: false, revisionHash: res2.result.hash } : t)));
     setSaveState("saved");
-  }, [workspace, activeTab, toast]);
+  }, [workspace, activeTab, toast, errToast]);
 
   const closeTab = useCallback((key: string) => {
     // Closing a tab does NOT delete its recovery draft: a quit-with-dirty
@@ -524,12 +533,12 @@ export default function App(): JSX.Element {
       } else {
         expanded.delete(dir);
         setTree((p) => ({ ...p, expanded, loading: loading2 }));
-        toast(res.error.message, "error");
+        errToast(res.error);
       }
       return;
     }
     setTree((p) => ({ ...p, expanded }));
-  }, [workspace, tree, toast]);
+  }, [workspace, tree, toast, errToast]);
 
   const commitCreate = useCallback(async () => {
     if (!workspace || !creating || !createName.trim()) return;
@@ -539,7 +548,7 @@ export default function App(): JSX.Element {
     if (creating.folder) {
       const rel = joinRel(creating.dir, name);
       const res = await window.takenotes.directory.create(workspace.workspaceId, rel);
-      if (!res.ok) { toast(res.error.message, "error"); return; }
+      if (!res.ok) { errToast(res.error, `Couldn't create folder "${name}"`); return; }
       setCreating(null); setCreateName("");
       if (creating.dir) {
         const res2 = await window.takenotes.directory.list(workspace.workspaceId, creating.dir);
@@ -551,7 +560,7 @@ export default function App(): JSX.Element {
     const rel = joinRel(creating.dir, name);
     const target = (/\.md$/i.test(rel) ? rel : `${rel}.md`);
     const res = await window.takenotes.file.create(workspace.workspaceId, target);
-    if (!res.ok) { toast(res.error.message, "error"); return; }
+    if (!res.ok) { errToast(res.error, `Couldn't create "${target}"`); return; }
     setCreating(null); setCreateName("");
     if (creating.dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, creating.dir);
@@ -559,7 +568,7 @@ export default function App(): JSX.Element {
     } else await refreshTree(workspace);
     await rebuildAllFiles(workspace);
     await openFile(target);
-  }, [workspace, creating, createName, toast, refreshTree, rebuildAllFiles, openFile]);
+  }, [workspace, creating, createName, toast, errToast, refreshTree, rebuildAllFiles, openFile]);
 
   const commitRename = useCallback(async (entry: DirectoryEntry, newName: string) => {
     if (!workspace) return;
@@ -570,7 +579,7 @@ export default function App(): JSX.Element {
       ? await window.takenotes.directory.rename(workspace.workspaceId, entry.relativePath, newRel)
       : await window.takenotes.file.rename(workspace.workspaceId, entry.relativePath, newRel);
     setTree((p) => ({ ...p, renaming: null }));
-    if (!res.ok) { toast(res.error.message, "error"); return; }
+    if (!res.ok) { errToast(res.error, "Couldn't rename"); return; }
     setTabs((p) => p.map((t) => {
       if (t.relativePath !== entry.relativePath && !t.relativePath.startsWith(`${entry.relativePath}/`)) return t;
       const suffix = t.relativePath.slice(entry.relativePath.length);
@@ -582,20 +591,23 @@ export default function App(): JSX.Element {
       if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
     } else await refreshTree(workspace);
     await rebuildAllFiles(workspace);
-  }, [workspace, toast, refreshTree, rebuildAllFiles]);
+  }, [workspace, toast, errToast, refreshTree, rebuildAllFiles]);
 
   const deleteDirectory = useCallback(async (entry: DirectoryEntry) => {
     if (!workspace) return;
-    if (settings.confirmTrash && !window.confirm(`Delete folder "${entry.name}"?`)) return;
+    // WSL folders delete permanently in P1 (helper `directory.delete`):
+    // label it honestly, never as Recycle Bin trash.
+    const wslDel = isWslKind(workspace.type);
+    if (settings.confirmTrash && !window.confirm(wslDel ? `Permanently delete folder "${entry.name}"? This cannot be undone.` : `Delete folder "${entry.name}"?`)) return;
     const res = await window.takenotes.directory.delete(workspace.workspaceId, entry.relativePath);
     if (!res.ok) {
       // Non-empty folders need an explicit recursive confirm (no silent wipe).
       if (res.error.code === "DIRECTORY_NOT_EMPTY") {
         if (!window.confirm(`"${entry.name}" is not empty. Delete it and everything inside?`)) return;
         const res2 = await window.takenotes.directory.delete(workspace.workspaceId, entry.relativePath, true);
-        if (!res2.ok) { toast(res2.error.message, "error"); return; }
+        if (!res2.ok) { errToast(res2.error, `Couldn't delete folder "${entry.name}"`); return; }
       } else {
-        toast(res.error.message, "error");
+        errToast(res.error, `Couldn't delete folder "${entry.name}"`);
         return;
       }
     }
@@ -607,13 +619,16 @@ export default function App(): JSX.Element {
     } else await refreshTree(workspace);
     await rebuildAllFiles(workspace);
     toast(`Deleted folder "${entry.name}".`);
-  }, [workspace, settings.confirmTrash, toast, refreshTree, rebuildAllFiles]);
+  }, [workspace, settings.confirmTrash, toast, errToast, refreshTree, rebuildAllFiles]);
 
   const trashEntry = useCallback(async (entry: DirectoryEntry) => {
     if (!workspace) return;
-    if (settings.confirmTrash && !window.confirm(`Move "${entry.name}" to trash?`)) return;
+    // WSL delete is permanent-delete in P1 (helper `file.delete`): label it
+    // honestly — never "Move to trash" / Recycle Bin for WSL workspaces.
+    const wsl = isWslKind(workspace.type);
+    if (settings.confirmTrash && !window.confirm(wsl ? `Permanently delete "${entry.name}"? This cannot be undone.` : `Move "${entry.name}" to trash?`)) return;
     const res = await window.takenotes.file.trash(workspace.workspaceId, entry.relativePath);
-    if (!res.ok) { toast(res.error.message, "error"); return; }
+    if (!res.ok) { errToast(res.error, wsl ? `Couldn't delete "${entry.name}"` : undefined); return; }
     setTabs((p) => p.filter((t) => t.relativePath !== entry.relativePath && !t.relativePath.startsWith(`${entry.relativePath}/`)));
     const dir = parentDir(entry.relativePath);
     if (dir) {
@@ -621,8 +636,9 @@ export default function App(): JSX.Element {
       if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
     } else await refreshTree(workspace);
     await rebuildAllFiles(workspace);
-    toast(`Moved "${entry.name}" to trash. Recoverable from ${trashName(platform.platform)} — ${moveToTrashLabel(platform.platform)}.`);
-  }, [workspace, settings.confirmTrash, toast, refreshTree, rebuildAllFiles]);
+    if (isWslKind(workspace.type)) toast(`Permanently deleted "${entry.name}". This cannot be undone — WSL workspaces don't use the ${trashName(platform.platform)}.`);
+    else toast(`Moved "${entry.name}" to trash. Recoverable from ${trashName(platform.platform)} — ${moveToTrashLabel(platform.platform)}.`);
+  }, [workspace, settings.confirmTrash, toast, errToast, refreshTree, rebuildAllFiles, platform.platform]);
 
   const removeEntry = useCallback(async (entry: DirectoryEntry) => {
     // Folders delete through directory.delete; files move to OS trash.
@@ -844,7 +860,7 @@ export default function App(): JSX.Element {
         { label: "Copy relative path", run: () => void navigator.clipboard.writeText(displayPath(entry.relativePath)) },
         { label: revealLabel(platform.platform), run: () => void window.takenotes.shell.reveal(workspace!.workspaceId, entry.relativePath) },
         { label: "---", run: () => undefined },
-        { label: moveToTrashLabel(platform.platform), shortcut: sc("tree.trash"), danger: true, run: () => void trashEntry(entry) },
+        { label: workspace && isWslKind(workspace.type) ? "Delete permanently…" : moveToTrashLabel(platform.platform), shortcut: sc("tree.trash"), danger: true, run: () => void trashEntry(entry) },
       ],
     });
   };

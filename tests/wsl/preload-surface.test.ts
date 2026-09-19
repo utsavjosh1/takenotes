@@ -19,4 +19,12 @@ describe("preload surface (no arbitrary process spawning)", () => {
   it("has no generic invoke channel", () => {
     expect(source).not.toMatch(/invoke\s*\(\s*channel|invoke\s*\(\s*name/);
   });
+
+  it("exposes no arbitrary Linux command surface (P1-04: structured ops only)", () => {
+    // Mutations travel as validated structured payloads (file.rename,
+    // file.delete, directory.create/rename/delete) — the renderer can
+    // never issue raw commands, spawn shells, or pick a different user.
+    expect(source).not.toMatch(/wsl\.exec|\.shell\(|\.spawn\(|shell\.exec|command\.run/i);
+    expect(source).not.toMatch(/exec\s*:\s*\(|spawn\s*:\s*\(/);
+  });
 });

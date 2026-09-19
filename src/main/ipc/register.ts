@@ -23,6 +23,7 @@ import { shortcutLabelsFor } from "../../shared/platform/shortcut-labels.js";
 import { detectWayland } from "../platform/linux.js";
 import type { DirectoryEntry, PlatformReport, SearchMatch, WslLinuxUser } from "../../shared/contracts/ipc.js";
 import type { AppError } from "../../shared/errors.js";
+import { toHelperError } from "./helper-errors.js";
 
 const workspaces = new WorkspaceService(
   new WorkspaceRegistry(),
@@ -55,9 +56,25 @@ function getNotes(): NoteService {
   if (!notes) {
     notes = new NoteService(workspaces, {
       native: nativeAdapter,
-      wslRequest: (operation, params) => {
+      wslRequest: (operation, params, identity) => {
         const sup = supervisor;
-        if (!sup?.getSession()) throw { code: "DISCONNECTED", message: "WSL helper is not connected." };
+        if (!sup) throw { code: "DISCONNECTED", message: "WSL helper is not connected." };
+        const active = sup.getSession();
+        if (!active) throw { code: "DISCONNECTED", message: "WSL helper is not connected." };
+        // Session identity guard (P1-04, ADR-0007): the helper is keyed by
+        // distro + linuxUser, never distro alone. A mutation for
+        // Ubuntu/work must never execute on an Ubuntu/utsav session — fail
+        // closed with DISCONNECTED (reconnect as the right user) instead of
+        // running as the wrong Linux user. No sudo, no retry-as-other-user.
+        if (
+          (identity.distro !== undefined && active.distro !== identity.distro) ||
+          (identity.linuxUser !== undefined && active.linuxUser !== identity.linuxUser)
+        ) {
+          throw {
+            code: "DISCONNECTED",
+            message: `WSL session is connected as ${active.distro}/${active.linuxUser}, not as ${identity.distro ?? "?"}/${identity.linuxUser ?? "?"}. Reconnect the workspace.`,
+          };
+        }
         return sup.request(operation, params) as Promise<unknown>;
       },
       hasWslSession: () => supervisor?.getSession() != null,
@@ -100,16 +117,6 @@ function validateNativeRel(kind: WorkspaceKind, input: string): { relativePath: 
 function senderIsOurs(event: Electron.IpcMainInvokeEvent): boolean {
   const win = BrowserWindow.fromWebContents(event.sender);
   return win !== null && !win.isDestroyed();
-}
-
-/** Preserve structured helper errors (NOT_FOUND, CONFLICT, INVALID_PATH, …)
- * across the IPC boundary; unexpected failures become INTERNAL_ERROR. */
-function toHelperError(err: unknown): AppError {
-  if (err && typeof err === "object" && typeof (err as { code?: unknown }).code === "string") {
-    const e = err as AppError;
-    return e.detail === undefined ? { code: e.code, message: e.message } : { code: e.code, message: e.message, detail: e.detail };
-  }
-  return { code: "INTERNAL_ERROR", message: "WSL operation failed.", detail: String(err) };
 }
 
 function helperDisconnected(): { ok: false; error: AppError } {
@@ -544,7 +551,11 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     const reg = workspaces.get(wid.workspaceId);
     if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
     if (!isNativeWorkspace(reg)) {
-      const out = await getNotes().renamePath(wid.workspaceId, oldPath, newPath);
+      const vOld = normalizeWslRel(oldPath, false);
+      if ("error" in vOld) return { ok: false, error: vOld.error };
+      const vNew = normalizeWslRel(newPath, false);
+      if ("error" in vNew) return { ok: false, error: vNew.error };
+      const out = await getNotes().renamePath(wid.workspaceId, vOld.rel, vNew.rel);
       if ("error" in out) return { ok: false, error: out.error };
       return { ok: true, result: null };
     }
@@ -562,7 +573,12 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     }
     const reg = workspaces.get(wid.workspaceId);
     if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
-    const rel = isNativeWorkspace(reg) ? toCanonicalRel(relativePath) : relativePath;
+    // WSL trash is permanent-delete in P1 (helper `file.delete`): the wire
+    // shape is validated exactly like every other WSL mutation — main
+    // validates the shape only, confinement lives in the helper.
+    const prep = handlerRel(reg, relativePath, false);
+    if ("error" in prep) return { ok: false, error: prep.error };
+    const rel = isNativeWorkspace(reg) ? toCanonicalRel(prep.rel) : prep.rel;
     const out = await getNotes().trashPath(wid.workspaceId, rel);
     if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: null };

@@ -28,17 +28,24 @@ export type HandshakeResult = {
   home: string;
 };
 
-/** Operations the helper actually implements today.
- * Planned (not yet implemented, must NOT be sent): file.rename, file.trash,
- * file.restore, search.start, search.cancel, watch.subscribe, watch.unsubscribe. */
+/** Operations the helper actually implements today (P1-04 adds the WSL
+ * mutation set). Planned (not yet implemented, must NOT be sent):
+ * file.trash (WSL delete is permanent-delete in P1 — see `file.delete`),
+ * file.restore, search.start, search.cancel, watch.subscribe,
+ * watch.unsubscribe. */
 export const HELPER_OPERATIONS = [
   "hello",
   "workspace.open",
   "workspace.close",
   "directory.list",
+  "directory.create",
+  "directory.rename",
+  "directory.delete",
   "file.read",
   "file.write",
   "file.create",
+  "file.rename",
+  "file.delete",
   "users.list",
 ] as const;
 

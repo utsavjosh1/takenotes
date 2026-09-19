@@ -60,7 +60,9 @@ describe("NoteService seam", () => {
     const reg = workspaces.registerWsl("Ubuntu:~/Notes", "/home/u/Notes", "Ubuntu");
 
     await notes.listTree(reg.id, "");
-    expect(wslRequest).toHaveBeenCalledWith("directory.list", { relativePath: "" });
+    // P1-04: every helper call carries distro+linuxUser identity (undefined
+    // user here — this registration predates user selection).
+    expect(wslRequest).toHaveBeenCalledWith("directory.list", { relativePath: "" }, { distro: "Ubuntu", linuxUser: undefined });
     expect(native.list).not.toHaveBeenCalled();
   });
 

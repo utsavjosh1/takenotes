@@ -6,8 +6,23 @@ import type { FileAdapter } from "../workspace/file-adapter.js";
 import type { ReadResult } from "../workspace/local-workspace.js";
 import type { FileRevision } from "../workspace/revisions.js";
 import type { WorkspaceService } from "./workspace-service.js";
+import { toHelperError as toWslError } from "../ipc/helper-errors.js";
 
-export type WslRequest = (operation: string, params: Record<string, unknown>) => Promise<unknown>;
+/** WSL session identity carried on every helper call (P1-04). The
+ * main-process transport compares this against the active helper session
+ * (`distro + linuxUser`, never distro alone) and fails closed with
+ * DISCONNECTED on mismatch — Ubuntu/work mutations must never execute on
+ * an Ubuntu/utsav helper, even for the same physical path string. */
+export type WslIdentity = {
+  distro?: string;
+  linuxUser?: string;
+};
+
+export type WslRequest = (
+  operation: string,
+  params: Record<string, unknown>,
+  identity: WslIdentity,
+) => Promise<unknown>;
 
 export type NoteServiceDeps = {
   native: FileAdapter;
@@ -28,13 +43,20 @@ export class NoteService {
   ) {}
 
   private resolve(id: string):
-    | { root: string; kind: "native" | "wsl"; type: WorkspaceKind; distro?: string }
+    | { root: string; kind: "native" | "wsl"; type: WorkspaceKind; distro?: string; linuxUser?: string }
     | { error: AppError } {
     const reg = this.workspaces.get(id);
     if (!reg) return { error: appError("INVALID_REQUEST", "Unknown workspace.") };
     return isNativeWorkspace(reg)
       ? { root: reg.root, kind: "native" as const, type: reg.type }
-      : { root: reg.root, kind: "wsl" as const, type: reg.type, distro: reg.distro };
+      : { root: reg.root, kind: "wsl" as const, type: reg.type, distro: reg.distro, linuxUser: reg.linuxUser };
+  }
+
+  /** Identity accompanying every WSL helper call: distro + selected Linux
+   * user (ADR-0007). The transport refuses to run when the connected helper
+   * session belongs to a different identity. */
+  private identity(r: { distro?: string; linuxUser?: string }): WslIdentity {
+    return { distro: r.distro, linuxUser: r.linuxUser };
   }
 
   private wslOnline(): boolean {
@@ -47,7 +69,7 @@ export class NoteService {
     if (r.kind === "native") return this.deps.native.list(r.root, r.type, relativePath);
     if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
     try {
-      const entries = (await this.deps.wslRequest("directory.list", { relativePath })) as DirectoryEntry[];
+      const entries = (await this.deps.wslRequest("directory.list", { relativePath }, this.identity(r))) as DirectoryEntry[];
       return { entries };
     } catch (err) {
       return { error: toWslError(err) };
@@ -60,7 +82,7 @@ export class NoteService {
     if (r.kind === "native") return this.deps.native.read(r.root, r.type, relativePath);
     if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
     try {
-      const result = (await this.deps.wslRequest("file.read", { relativePath })) as ReadResult;
+      const result = (await this.deps.wslRequest("file.read", { relativePath }, this.identity(r))) as ReadResult;
       return { result };
     } catch (err) {
       return { error: toWslError(err) };
@@ -82,12 +104,16 @@ export class NoteService {
     }
     if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
     try {
-      const revision = (await this.deps.wslRequest("file.write", {
-        relativePath,
-        content,
-        expectedHash,
-        newlineStyle,
-      })) as FileRevision;
+      const revision = (await this.deps.wslRequest(
+        "file.write",
+        {
+          relativePath,
+          content,
+          expectedHash,
+          newlineStyle,
+        },
+        this.identity(r),
+      )) as FileRevision;
       return { revision };
     } catch (err) {
       return { error: toWslError(err) };
@@ -100,7 +126,7 @@ export class NoteService {
     if (r.kind === "native") return this.deps.native.createFile(r.root, r.type, relativePath);
     if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
     try {
-      const revision = (await this.deps.wslRequest("file.create", { relativePath })) as FileRevision;
+      const revision = (await this.deps.wslRequest("file.create", { relativePath }, this.identity(r))) as FileRevision;
       return { revision };
     } catch (err) {
       return { error: toWslError(err) };
@@ -111,22 +137,42 @@ export class NoteService {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
     if (r.kind === "native") return this.deps.native.rename(r.root, r.type, oldPath, newPath);
-    return { error: appError("INVALID_REQUEST", "Rename is not supported in WSL workspaces in this version.") };
+    if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
+    try {
+      await this.deps.wslRequest("file.rename", { oldPath, newPath }, this.identity(r));
+      return { ok: true };
+    } catch (err) {
+      return { error: toWslError(err) };
+    }
   }
 
   async trashPath(workspaceId: string, relativePath: string): Promise<{ ok: true } | { error: AppError }> {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
     if (r.kind === "native") return this.deps.native.trash(r.root, r.type, relativePath);
-    return { error: appError("INVALID_REQUEST", "Trash is not supported in WSL workspaces in this version.") };
+    // P1 permanent-delete (no OS-trash mislabeling): the helper unlinks the
+    // file outright. The renderer confirms explicitly ("Delete
+    // permanently?") and never calls this the Recycle Bin.
+    if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
+    try {
+      await this.deps.wslRequest("file.delete", { relativePath }, this.identity(r));
+      return { ok: true };
+    } catch (err) {
+      return { error: toWslError(err) };
+    }
   }
 
   async createDirectory(workspaceId: string, relativePath: string): Promise<{ ok: true } | { error: AppError }> {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
     if (r.kind === "native") return this.deps.native.createDirectory(r.root, r.type, relativePath);
-    // WSL directory mutations land with P1-04; precise error, never generic.
-    return { error: appError("INVALID_REQUEST", "Directory operations are not supported in WSL workspaces in this version.") };
+    if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
+    try {
+      await this.deps.wslRequest("directory.create", { relativePath }, this.identity(r));
+      return { ok: true };
+    } catch (err) {
+      return { error: toWslError(err) };
+    }
   }
 
   async deleteDirectory(
@@ -137,7 +183,16 @@ export class NoteService {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
     if (r.kind === "native") return this.deps.native.deleteDirectory(r.root, r.type, relativePath, recursive);
-    return { error: appError("INVALID_REQUEST", "Directory operations are not supported in WSL workspaces in this version.") };
+    // Native parity (P1-01): non-empty + recursive=false refuses with
+    // DIRECTORY_NOT_EMPTY inside the helper; only the explicit recursive
+    // path (after the UI confirm) removes.
+    if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
+    try {
+      await this.deps.wslRequest("directory.delete", { relativePath, recursive }, this.identity(r));
+      return { ok: true };
+    } catch (err) {
+      return { error: toWslError(err) };
+    }
   }
 
   async renameDirectory(
@@ -148,18 +203,14 @@ export class NoteService {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
     if (r.kind === "native") return this.deps.native.renameDirectory(r.root, r.type, oldPath, newPath);
-    return { error: appError("INVALID_REQUEST", "Directory operations are not supported in WSL workspaces in this version.") };
+    if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
+    try {
+      await this.deps.wslRequest("directory.rename", { oldPath, newPath }, this.identity(r));
+      return { ok: true };
+    } catch (err) {
+      return { error: toWslError(err) };
+    }
   }
 }
 
-/** Preserve structured helper errors (NOT_FOUND, CONFLICT, INVALID_PATH, …)
- * across the seam; unexpected failures become INTERNAL_ERROR. */
-function toWslError(err: unknown): AppError {
-  if (err && typeof err === "object" && typeof (err as { code?: unknown }).code === "string") {
-    const e = err as AppError;
-    return e.detail === undefined
-      ? { code: e.code, message: e.message }
-      : { code: e.code, message: e.message, detail: e.detail };
-  }
-  return { code: "INTERNAL_ERROR", message: "WSL operation failed.", detail: String(err) };
-}
+
