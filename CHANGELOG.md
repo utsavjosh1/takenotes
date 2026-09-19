@@ -4,6 +4,17 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-09-19
+
+### Added
+
+- Phase 1 foundation stack through Recovery: service-layer filesystem operations, WSL distro/user discovery, WSL mutation parity, atomic save/conflict handling, split panes/status, parse-once index, Search V1, command registry/Quick Open, and app-data recovery snapshots.
+- Recovery History UI with Restore and Copy actions. Recovery snapshots are local app-data state keyed by `workspaceId + relativePath`, throttled during editing, retained for 7 days, and never stored inside workspaces.
+
+### Fixed
+
+- Windows CI fixtures now avoid assuming live WSL distros on generic runners and normalize rebuilt index paths across Windows/POSIX separators.
+
 ## [0.0.7] - 2026-09-18
 
 ### Fixed
