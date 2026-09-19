@@ -39,7 +39,12 @@ export type IpcResult<T> = { ok: true; result: T } | { ok: false; error: AppErro
 
 export type WslDistribution = {
   name: string;
+  /** Running|Stopped… — absent on the quiet fallback path (names only). */
   state?: string;
+  /** WSL version ("2"…); absent on the quiet fallback path. */
+  version?: string;
+  /** True for the `*` default distro in `wsl -l -v`. */
+  isDefault?: boolean;
 };
 
 export type UpdateCheckResult = {

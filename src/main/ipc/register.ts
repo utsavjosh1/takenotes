@@ -12,7 +12,6 @@ import { validateWorkspaceId } from "../workspace/path-security.js";
 import type { WorkspaceKind } from "../../shared/platform/types.js";
 import { searchWorkspace } from "../search/search.js";
 import { clearDraft, isDraftStale, loadDraft, MAX_DRAFT_BYTES, saveDraft } from "../workspace/drafts.js";
-import { listDistributions } from "../wsl/distributions.js";
 import { HelperSupervisor } from "../wsl/helper-supervisor.js";
 import { checkForUpdates, downloadAndInstall } from "../update/updater.js";
 import { currentDesktopPlatform } from "../../shared/platform/platform.js";
@@ -280,8 +279,9 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const gate = requireWslCapable();
     if (!gate.ok) return gate;
+    // Validate sender + platform, then delegate to the WorkspaceService seam.
     try {
-      const distros = await listDistributions();
+      const distros = await workspaces.listDistributions();
       return { ok: true, result: distros };
     } catch (err) {
       return { ok: false, error: { code: "INTERNAL_ERROR", message: "WSL is not available.", detail: String(err) } };

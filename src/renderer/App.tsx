@@ -1153,6 +1153,15 @@ export default function App(): JSX.Element {
   );
 }
 
+/** Picker label: `Name · Running|Stopped · WSL2` (+ default marker).
+ * State/version are absent on the quiet fallback path — show honestly. */
+function distroLabel(d: WslDistribution): string {
+  const state = d.state ?? "Unknown";
+  const version = d.version ? `WSL ${d.version}` : "WSL";
+  const def = d.isDefault ? " (default)" : "";
+  return `${d.name} · ${state} · ${version}${def}`;
+}
+
 function WslDialog({
   dialog,
   onChange,
@@ -1179,7 +1188,7 @@ function WslDialog({
                   className="input" style={{ marginTop: 4 }}
                   value={dialog.distro} onChange={(e) => onChange({ ...dialog, distro: e.target.value })}
                 >
-                  {dialog.distros.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
+                  {dialog.distros.map((d) => <option key={d.name} value={d.name}>{distroLabel(d)}</option>)}
                 </select>
               </label>
               <label style={{ fontSize: 13 }}>Folder in {dialog.distro || "WSL"}

@@ -164,6 +164,19 @@ Blocked on: Windows 11 host with WSL2 + Ubuntu. All code paths implemented
 (`distributions.ts`, `runtime-installer.ts`, `helper-supervisor.ts`, IPC
 `wsl:connect`); execution NOT performed here.
 
+### P1-02 — Distro discovery update (2026-09-19, Linux-verified only)
+
+Implemented: `wsl.exe -l -v` verbose-first discovery with `--list --quiet`
+fallback, parsed to `{ name, state, version, isDefault }` records and served
+through the `WorkspaceService` seam (`workspace:listWsl`); the "Open WSL
+folder…" picker shows `Name · Running|Stopped · WSL2` (+ default marker).
+Listing spawns list-only argv (`-l -v`, `--list --quiet`) and never starts a
+distro. Logic tests (`tests/wsl/distro-discovery.test.ts`, parser +
+orchestration with injected runner) and preload-surface guards pass on Linux;
+the live list-while-stopped check (`tests/wsl/distro-list.windows.test.ts`)
+is Windows-gated and NOT yet executed — still needs a Windows 11 host with
+two distros (one stopped) to record before/after states here.
+
 ## Stages 7–10
 
 Status: blocked (same environmental blocker).
