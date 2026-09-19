@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WorkspaceRegistry } from "../../src/main/workspace/registry";
+import { WorkspaceRegistry, toWorkspaceInfo } from "../../src/main/workspace/registry";
 import { workspaceKeyFor } from "../../src/main/workspace/drafts";
 
 describe("WSL per-user workspace identity (acceptance 3)", () => {
@@ -14,6 +14,15 @@ describe("WSL per-user workspace identity (acceptance 3)", () => {
     registry.close(a.id);
     expect(registry.get(a.id)).toBeUndefined();
     expect(registry.get(b.id)?.id).toBe(b.id);
+  });
+
+  it("toWorkspaceInfo carries distro+linuxUser explicitly (P1-06 status strip never parses names)", () => {
+    const registry = new WorkspaceRegistry();
+    const wsl = registry.register("windows-wsl", "Ubuntu:work:~/Notes", "/home/work/Notes", "Ubuntu", "work");
+    expect(toWorkspaceInfo(wsl)).toMatchObject({ distro: "Ubuntu", linuxUser: "work" });
+    const local = registry.register("windows-local", "Notes", "C:\\notes");
+    expect(toWorkspaceInfo(local)).not.toHaveProperty("distro");
+    expect(toWorkspaceInfo(local)).not.toHaveProperty("linuxUser");
   });
 
   it("workspaceKeyFor differs across Linux users", () => {

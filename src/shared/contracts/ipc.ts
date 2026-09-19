@@ -10,6 +10,9 @@ export type WorkspaceInfo = {
   displayName: string;
   type: WorkspaceType;
   connection: "connected" | "disconnected" | "reconnecting" | "failed";
+  /** WSL distro (P1-06): explicit identity for the status strip — the
+   * renderer never parses it out of display text. */
+  distro?: string;
   /** WSL Linux user (P1-03). Never a raw root — main resolves those. */
   linuxUser?: string;
 };

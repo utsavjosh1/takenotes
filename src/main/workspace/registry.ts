@@ -17,17 +17,21 @@ export type WorkspaceRegistration = {
   linuxUser?: string;
 };
 
-/** Renderer-safe projection (no absolute roots). */
+/** Renderer-safe projection (no absolute roots). Distro + Linux user ride
+ * along explicitly so the status strip (P1-06) never infers identity from
+ * display text. */
 export function toWorkspaceInfo(reg: WorkspaceRegistration): {
   workspaceId: string;
   displayName: string;
   type: WorkspaceType;
+  distro?: string;
   linuxUser?: string;
 } {
   return {
     workspaceId: reg.id,
     displayName: reg.displayName,
     type: reg.type,
+    ...(reg.distro === undefined ? {} : { distro: reg.distro }),
     ...(reg.linuxUser === undefined ? {} : { linuxUser: reg.linuxUser }),
   };
 }

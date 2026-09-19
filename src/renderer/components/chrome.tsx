@@ -3,6 +3,7 @@ import { Icon } from "./icons";
 import appMarkUrl from "../assets/brand/takenotes-app-icon.svg";
 import type { WorkspaceInfo } from "../../shared/contracts/ipc";
 import { isWslKind } from "../../shared/platform/filesystem";
+import { statusSegments } from "../status";
 import type { PlatformState } from "../hooks/use-platform";
 
 /* ---------- title bar ---------- */
@@ -96,35 +97,63 @@ export function ActivityRail({
 }
 
 /* ---------- status bar ---------- */
+/** Identity strip (P1-06): `Workspace name · Windows|WSL [distro · user] ·
+ * Saved|Dirty|Conflict · connection · index (n files)`. Distro/user come
+ * from the explicit WorkspaceInfo identity (P1-03) — never parsed. */
 export function StatusBar({
   workspace,
   words,
   line,
   col,
-  saveState,
+  doc,
+  savedAt,
+  connection,
+  fileCount,
 }: {
   workspace: WorkspaceInfo | null;
   words: number;
   line: number;
   col: number;
-  saveState: string;
+  doc: "clean" | "dirty" | "saving" | "saved" | "conflict" | "error";
+  savedAt: string;
+  connection: "connected" | "disconnected" | "reconnecting" | "failed";
+  fileCount: number;
 }): JSX.Element {
-  const conn = workspace
-    ? isWslKind(workspace.type)
-      ? `${workspace.displayName.split(":")[0]} · WSL`
-      : workspace.displayName
-    : "No workspace";
+  if (!workspace) {
+    return (
+      <footer className="statusbar" role="status" aria-live="polite">
+        <span>No workspace</span>
+        <span className="right">
+          <span>{words} words</span>
+          <span>Ln {line}, Col {col}</span>
+        </span>
+      </footer>
+    );
+  }
+  const seg = statusSegments({
+    displayName: workspace.displayName,
+    kind: workspace.type,
+    distro: workspace.distro,
+    linuxUser: workspace.linuxUser,
+    connection,
+    doc,
+    savedAt,
+    fileCount,
+  });
+  const badSave = doc === "conflict" || doc === "error";
+  const badConn = connection === "disconnected" || connection === "failed";
   return (
     <footer className="statusbar" role="status" aria-live="polite">
-      <span className={workspace ? "conn-ok" : ""} title={workspace ? `Workspace: ${workspace.displayName}` : undefined}>
-        {conn}
-      </span>
+      <span className="conn-ok" title={`Workspace: ${workspace.displayName}`}>{seg.workspace}</span>
+      <span title={isWslKind(workspace.type) ? "WSL connection identity" : "Platform"}>{seg.platform}</span>
+      {seg.save && (
+        <span className={badSave ? "conn-bad" : "save-dot"}>
+          {doc === "dirty" ? `● ${seg.save}` : seg.save}
+        </span>
+      )}
+      <span className={badConn ? "conn-bad" : "conn-ok"}>{seg.connection}</span>
+      <span title="Notes in the Quick-open index">{seg.files}</span>
       <span className="right">
-        {saveState !== "clean" && (
-          <span className={saveState === "conflict" || saveState === "error" ? "conn-bad" : "save-dot"}>
-            {saveState === "dirty" ? "● Unsaved" : saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState}
-          </span>
-        )}
         <span>{words} words</span>
         <span>Ln {line}, Col {col}</span>
       </span>

@@ -3,8 +3,8 @@ import type { DirectoryEntry, SearchMatch, WorkspaceInfo, WslDistribution, WslLi
 import { usePlatform } from "./hooks/use-platform";
 import { isWslKind, moveToTrashLabel, revealLabel, trashName } from "../shared/platform/filesystem";
 import type { CommandId } from "../shared/platform/keymap";
-import { useCodeMirrorEditor } from "./hooks/use-editor";
 import { TitleBar, ActivityRail, StatusBar } from "./components/chrome";
+import { PaneView } from "./components/pane-view";
 import { FileTree, type TreeState } from "./components/tree";
 import { SearchPanel, useDebouncedValue } from "./components/search";
 import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
@@ -13,8 +13,26 @@ import { SettingsDialog } from "./components/settings";
 import { Icon } from "./components/icons";
 import stackedDarkUrl from "./assets/brand/takenotes-stacked-dark.svg";
 import stackedLightUrl from "./assets/brand/takenotes-stacked-light.svg";
-import { DEFAULT_SETTINGS, displayPath, fileName, joinRel, parentDir, type CtxMenu, type Settings, type TabState, type Toast } from "./components/types";
+import { DEFAULT_SETTINGS, displayPath, fileName, joinRel, parentDir, type CtxMenu, type Settings, type Toast } from "./components/types";
 import { friendlyError } from "./error-text";
+import {
+  activateDoc,
+  activatePane,
+  activeDoc,
+  applyRename,
+  closeDocInPane,
+  closePane,
+  createLayout,
+  markConflict,
+  markSaved,
+  markSaving,
+  openDocInPane,
+  paneDocs,
+  removeDocsForEntry,
+  resolveDoc,
+  splitPane,
+  updateDocContent,
+} from "./panes";
 
 let toastId = 1;
 
@@ -69,8 +87,11 @@ export default function App(): JSX.Element {
   const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null);
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
   const [tree, setTree] = useState<TreeState>({ expanded: new Set(), children: new Map(), loading: new Set(), renaming: null, selected: null });
-  const [tabs, setTabs] = useState<TabState[]>([]);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+  // Pane layout (P1-06): shared open docs + explicit active pane. Dirty,
+  // revision baselines, conflict, and save progress live per DOCUMENT —
+  // saving one tab never alters another's state. Layout is window-local,
+  // never persisted.
+  const [layout, setLayout] = useState(() => createLayout());
   const [view, setView] = useState<"files" | "search">("files");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem("takenotes.sidebarWidth") ?? 240) || 240);
@@ -89,8 +110,6 @@ export default function App(): JSX.Element {
   const [recentWorkspaces, setRecentWorkspaces] = useState<{ name: string; kind: string }[]>(() => { try { return JSON.parse(localStorage.getItem("takenotes.recentWs") ?? "[]"); } catch { return []; } });
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
-  const [saveState, setSaveState] = useState<"clean" | "dirty" | "saving" | "saved" | "conflict" | "error">("clean");
-  const [savedAt, setSavedAt] = useState<string>("");
   // Crash-recovery drafts (userData store, main process). Keyed by tab key.
   // This is RECOVERY data only: `Saved` is shown exclusively for bytes that
   // reached the note file. A persisted draft never flips the save indicator.
@@ -116,7 +135,20 @@ export default function App(): JSX.Element {
   const platform = usePlatform();
   const sc = (id: CommandId): string => platform.shortcutLabel(id);
 
-  const activeTab = tabs.find((t) => t.key === activeKey) ?? null;
+  const activeTab = activeDoc(layout);
+  // Status save segment derives from the ACTIVE document (P1-06): a
+  // conflict elsewhere never poisons this indicator.
+  const docSaveView = !activeTab
+    ? ("clean" as const)
+    : activeTab.conflict
+      ? ("conflict" as const)
+      : activeTab.saving
+        ? ("saving" as const)
+        : activeTab.dirty
+          ? ("dirty" as const)
+          : activeTab.savedAt
+            ? ("saved" as const)
+            : ("clean" as const);
   const dragResize = useRef<{ startX: number; startW: number } | null>(null);
 
   /* ---------- helpers ---------- */
@@ -196,7 +228,7 @@ export default function App(): JSX.Element {
 
   const openWorkspace = useCallback(async (ws: WorkspaceInfo) => {
     setWorkspace(ws);
-    setTabs([]); setActiveKey(null); setSaveState("clean");
+    setLayout(createLayout()); setCursor({ line: 1, col: 1 });
     setRecentWorkspaces((p) => {
       const next = [{ name: ws.displayName, kind: ws.type }, ...p.filter((r) => r.name !== ws.displayName)].slice(0, 8);
       localStorage.setItem("takenotes.recentWs", JSON.stringify(next));
@@ -289,13 +321,17 @@ export default function App(): JSX.Element {
     }
   }, []);
 
-  const openFile = useCallback(async (relativePath: string) => {
+  // Every opener names its pane explicitly (default: the active pane) so
+  // tree/search/palette actions always land in a known place.
+  const openFile = useCallback(async (relativePath: string, paneId?: string) => {
     if (!workspace) return;
+    const targetPane = paneId ?? layout.activePaneId;
     const key = `${workspace.workspaceId}:${relativePath}`;
-    const existing = tabs.find((t) => t.key === key);
-    if (existing) {
-      setActiveKey(key);
-      setSaveState(existing.conflict ? "conflict" : existing.dirty ? "dirty" : "clean");
+    if (layout.docs[key]) {
+      // Already open: reveal it. State (dirty/conflict/baseline) is kept —
+      // reopening never resets revision baselines.
+      setLayout((l) => activateDoc(l, targetPane, key));
+      setCursor({ line: 1, col: 1 });
       return;
     }
     // Recovery draft check runs alongside the read (paths only, never contents, in logs).
@@ -317,23 +353,19 @@ export default function App(): JSX.Element {
       if ((res.error.code === "NOT_FOUND" || res.error.code === "INVALID_PATH") && draft && draft.content) {
         // File deleted/moved externally: retain the draft as an unsaved tab.
         // The note file is untouched (it is already gone); nothing is written.
-        setTabs((p) => [...p, { key, relativePath, content: draft.content, dirty: true, revisionHash: "", newlineStyle: "lf", hadBom: false, conflict: false, loadError: null }]);
-        setActiveKey(key);
-        setSaveState("dirty");
+        setLayout((l) => openDocInPane(l, targetPane, { key, relativePath, content: draft.content, dirty: true, revisionHash: "", newlineStyle: "lf", hadBom: false, conflict: false, loadError: null, saving: false, savedAt: "" }));
+        setCursor({ line: 1, col: 1 });
         setRecovery((p) => ({ ...p, [key]: { content: draft.content, updatedAt: draft.updatedAt, stale: draft.stale, diskChanged: true } }));
         toast("The original file is gone. Your unsaved draft was retained — save it to keep it.", "error");
         return;
       }
       if (res.error.code === "TOO_LARGE" || res.error.code === "UNSUPPORTED_ENCODING") {
-        setTabs((p) => [...p, { key, relativePath, content: "", dirty: false, revisionHash: "", newlineStyle: "lf", hadBom: false, conflict: false, loadError: res.error.message }]);
-        setActiveKey(key);
+        setLayout((l) => openDocInPane(l, targetPane, { key, relativePath, content: "", dirty: false, revisionHash: "", newlineStyle: "lf", hadBom: false, conflict: false, loadError: res.error.message, saving: false, savedAt: "" }));
       } else errToast(res.error, `Couldn't open ${fileName(relativePath)}`);
       return;
     }
     const file = res.result;
-    setTabs((p) => [...p, { key, relativePath, content: file.content, dirty: false, revisionHash: file.revision.hash, newlineStyle: file.newlineStyle, hadBom: file.hadBom, conflict: false, loadError: null }]);
-    setActiveKey(key);
-    setSaveState("clean");
+    setLayout((l) => openDocInPane(l, targetPane, { key, relativePath, content: file.content, dirty: false, revisionHash: file.revision.hash, newlineStyle: file.newlineStyle, hadBom: file.hadBom, conflict: false, loadError: null, saving: false, savedAt: "" }));
     setCursor({ line: 1, col: 1 });
     if (draft && draft.content !== file.content) {
       // A recovery draft exists and differs from disk: never auto-apply.
@@ -353,99 +385,106 @@ export default function App(): JSX.Element {
       localStorage.setItem("takenotes.recents", JSON.stringify(next));
       return next;
     });
-  }, [workspace, tabs, toast, errToast]);
+  }, [workspace, layout, toast, errToast]);
 
-  const onEdit = useCallback((content: string) => {
-    if (!activeKey) return;
-    setTabs((p) => p.map((t) => (t.key === activeKey ? { ...t, content, dirty: true } : t)));
-    setSaveState("dirty");
-  }, [activeKey]);
+  // Edits name their document: with two panes on one file, both render the
+  // same shared doc, so either pane's keystrokes dirty both views at once.
+  const onEdit = useCallback((docKey: string, content: string) => {
+    setLayout((l) => updateDocContent(l, docKey, content));
+  }, []);
 
-  const save = useCallback(async () => {
-    if (!workspace || !activeTab || activeTab.loadError) return;
-    setSaveState("saving");
+  // Save names its document explicitly (default: the active pane's active
+  // doc). Only the target doc's dirty/conflict/baseline change — neighbors
+  // are untouched. No save/conflict semantics change (P1-05 owns those).
+  const save = useCallback(async (docKey?: string) => {
+    if (!workspace) return;
+    const target = docKey ? layout.docs[docKey] : activeDoc(layout);
+    if (!target || target.loadError) return;
+    const key = target.key;
+    setLayout((l) => markSaving(l, key, true));
     const res = await window.takenotes.file.write({
       workspaceId: workspace.workspaceId,
-      relativePath: activeTab.relativePath,
-      content: activeTab.content,
-      expectedHash: activeTab.revisionHash,
-      newlineStyle: activeTab.newlineStyle,
-      hadBom: activeTab.hadBom,
+      relativePath: target.relativePath,
+      content: target.content,
+      expectedHash: target.revisionHash,
+      newlineStyle: target.newlineStyle,
+      hadBom: target.hadBom,
     });
     if (!res.ok) {
       if (res.error.code === "CONFLICT") {
-        setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, conflict: true } : t)));
-        setSaveState("conflict");
+        setLayout((l) => markConflict(l, key));
       } else {
-        setSaveState("error");
-        errToast(res.error, `Couldn't save ${fileName(activeTab.relativePath)}. Your edits are still safe`);
+        setLayout((l) => markSaving(l, key, false));
+        errToast(res.error, `Couldn't save ${fileName(target.relativePath)}. Your edits are still safe`);
       }
       return;
     }
-    setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, dirty: false, conflict: false, revisionHash: res.result.hash } : t)));
-    setSaveState("saved");
-    setSavedAt(new Date().toLocaleTimeString());
+    setLayout((l) => markSaved(l, key, res.result.hash, new Date().toLocaleTimeString()));
     // The file now holds the truth: the recovery draft is obsolete.
     setRecovery((p) => {
-      if (!(activeTab.key in p)) return p;
+      if (!(key in p)) return p;
       const next = { ...p };
-      delete next[activeTab.key];
+      delete next[key];
       return next;
     });
-    safeDraftClear(workspace.workspaceId, activeTab.relativePath);
+    safeDraftClear(workspace.workspaceId, target.relativePath);
     void rebuildAllFiles(workspace);
-  }, [workspace, activeTab, toast, errToast, rebuildAllFiles]);
+  }, [workspace, layout, toast, errToast, rebuildAllFiles]);
 
-  const reloadFromDisk = useCallback(async () => {
-    if (!workspace || !activeTab) return;
+  const reloadFromDisk = useCallback(async (docKey?: string) => {
+    if (!workspace) return;
+    const target = docKey ? layout.docs[docKey] : activeDoc(layout);
+    if (!target) return;
     console.error("[file-read] reload request", {
       workspaceId: workspace.workspaceId,
       workspaceType: workspace.type,
-      relativePath: activeTab.relativePath,
+      relativePath: target.relativePath,
     });
-    const res = await window.takenotes.file.read(workspace.workspaceId, activeTab.relativePath);
+    const res = await window.takenotes.file.read(workspace.workspaceId, target.relativePath);
     if (!res.ok) {
       console.error("[file-read] reload failed", {
         workspaceId: workspace.workspaceId,
         workspaceType: workspace.type,
-        relativePath: activeTab.relativePath,
+        relativePath: target.relativePath,
         code: res.error.code,
         message: res.error.message,
       });
       errToast(res.error, "Couldn't reload from disk"); return; }
-    setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, content: res.result.content, dirty: false, conflict: false, revisionHash: res.result.revision.hash } : t)));
-    setSaveState("clean");
-  }, [workspace, activeTab, toast, errToast]);
+    setLayout((l) => resolveDoc(l, target.key, res.result.content, res.result.revision.hash));
+  }, [workspace, layout, toast, errToast]);
 
-  const keepMyVersion = useCallback(async () => {
-    if (!workspace || !activeTab) return;
-    const res = await window.takenotes.file.read(workspace.workspaceId, activeTab.relativePath);
+  const keepMyVersion = useCallback(async (docKey?: string) => {
+    if (!workspace) return;
+    const target = docKey ? layout.docs[docKey] : activeDoc(layout);
+    if (!target) return;
+    const res = await window.takenotes.file.read(workspace.workspaceId, target.relativePath);
     if (!res.ok) { errToast(res.error); return; }
     const diskHash = res.result.revision.hash;
     const res2 = await window.takenotes.file.write({
-      workspaceId: workspace.workspaceId, relativePath: activeTab.relativePath, content: activeTab.content,
-      expectedHash: diskHash, newlineStyle: activeTab.newlineStyle, hadBom: activeTab.hadBom,
+      workspaceId: workspace.workspaceId, relativePath: target.relativePath, content: target.content,
+      expectedHash: diskHash, newlineStyle: target.newlineStyle, hadBom: target.hadBom,
     });
     if (!res2.ok) { errToast(res2.error); return; }
-    setTabs((p) => p.map((t) => (t.key === activeTab.key ? { ...t, dirty: false, conflict: false, revisionHash: res2.result.hash } : t)));
-    setSaveState("saved");
-  }, [workspace, activeTab, toast, errToast]);
+    setLayout((l) => markSaved(l, target.key, res2.result.hash, new Date().toLocaleTimeString()));
+  }, [workspace, layout, toast, errToast]);
 
-  const closeTab = useCallback((key: string) => {
-    // Closing a tab does NOT delete its recovery draft: a quit-with-dirty
-    // followed by a restart must still offer recovery. Drafts die on save
-    // (draft:clear) or explicit Discard in the recovery banner.
-    setTabs((p) => {
-      const i = p.findIndex((t) => t.key === key);
-      const next = p.filter((t) => t.key !== key);
-      if (key === activeKey) {
-        const nb = next[Math.min(i, next.length - 1)];
-        setActiveKey(nb ? nb.key : null);
-        setSaveState(nb ? (nb.conflict ? "conflict" : nb.dirty ? "dirty" : "clean") : "clean");
-      }
-      return next;
-    });
-  }, [activeKey]);
+  const closeTab = useCallback((paneId: string, key: string) => {
+    // Dirty tabs are never silently discarded: flush the dirty buffer into
+    // the EXISTING draft store first (P1-10 owns recovery; this only feeds
+    // it — no second unsaved-content system). Closing still does NOT delete
+    // drafts: a quit-with-dirty followed by restart must offer recovery.
+    const doc = layout.docs[key];
+    if (workspace && doc && doc.dirty && !doc.loadError && doc.revisionHash) {
+      safeDraftPut({
+        workspaceId: workspace.workspaceId,
+        relativePath: doc.relativePath,
+        baseRevisionHash: doc.revisionHash,
+        content: doc.content,
+      });
+    }
+    setLayout((l) => closeDocInPane(l, paneId, key).layout);
+    setCursor({ line: 1, col: 1 });
+  }, [workspace, layout]);
 
   /* ---------- crash-recovery drafts ---------- */
   // Debounced (750 ms): keystroke bursts collapse into one main-process
@@ -497,20 +536,19 @@ export default function App(): JSX.Element {
   const restoreDraft = useCallback((key: string) => {
     const rec = recovery[key];
     if (!rec) return;
-    setTabs((tabs) => tabs.map((t) => (t.key === key ? { ...t, content: rec.content, dirty: true } : t)));
-    setSaveState("dirty");
+    setLayout((l) => updateDocContent(l, key, rec.content));
   }, [recovery]);
 
   const discardDraft = useCallback((key: string) => {
     if (!workspace) return;
-    const tab = tabs.find((t) => t.key === key);
-    if (tab) safeDraftClear(workspace.workspaceId, tab.relativePath);
+    const doc = layout.docs[key];
+    if (doc) safeDraftClear(workspace.workspaceId, doc.relativePath);
     setRecovery((p) => {
       const next = { ...p };
       delete next[key];
       return next;
     });
-  }, [workspace, tabs]);
+  }, [workspace, layout]);
 
   /* ---------- tree ops ---------- */
   const toggleDir = useCallback(async (dir: string) => {
@@ -580,12 +618,8 @@ export default function App(): JSX.Element {
       : await window.takenotes.file.rename(workspace.workspaceId, entry.relativePath, newRel);
     setTree((p) => ({ ...p, renaming: null }));
     if (!res.ok) { errToast(res.error, "Couldn't rename"); return; }
-    setTabs((p) => p.map((t) => {
-      if (t.relativePath !== entry.relativePath && !t.relativePath.startsWith(`${entry.relativePath}/`)) return t;
-      const suffix = t.relativePath.slice(entry.relativePath.length);
-      const nr = newRel + suffix;
-      return { ...t, key: `${workspace.workspaceId}:${nr}`, relativePath: nr };
-    }));
+    // Rename remaps open keys in place: baselines survive the rename.
+    setLayout((l) => applyRename(l, workspace.workspaceId, entry.relativePath, newRel));
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
       if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
@@ -611,7 +645,7 @@ export default function App(): JSX.Element {
         return;
       }
     }
-    setTabs((p) => p.filter((t) => t.relativePath !== entry.relativePath && !t.relativePath.startsWith(`${entry.relativePath}/`)));
+    setLayout((l) => removeDocsForEntry(l, workspace.workspaceId, entry.relativePath));
     const dir = parentDir(entry.relativePath);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
@@ -629,7 +663,7 @@ export default function App(): JSX.Element {
     if (settings.confirmTrash && !window.confirm(wsl ? `Permanently delete "${entry.name}"? This cannot be undone.` : `Move "${entry.name}" to trash?`)) return;
     const res = await window.takenotes.file.trash(workspace.workspaceId, entry.relativePath);
     if (!res.ok) { errToast(res.error, wsl ? `Couldn't delete "${entry.name}"` : undefined); return; }
-    setTabs((p) => p.filter((t) => t.relativePath !== entry.relativePath && !t.relativePath.startsWith(`${entry.relativePath}/`)));
+    setLayout((l) => removeDocsForEntry(l, workspace.workspaceId, entry.relativePath));
     const dir = parentDir(entry.relativePath);
     if (dir) {
       const res2 = await window.takenotes.directory.list(workspace.workspaceId, dir);
@@ -683,6 +717,27 @@ export default function App(): JSX.Element {
     setCreating({ dir, folder: false }); setCreateName("");
   }, [workspace, openLocal, tree.selected, tree.children, entries, runCommand]);
 
+  // Split helpers (declared before the command table that references
+  // them): two-pane model, window-local, never persisted.
+  const splitActive = useCallback((orientation: "horizontal" | "vertical") => {
+    setLayout((l) => splitPane(l, l.activePaneId, orientation));
+    setCursor({ line: 1, col: 1 });
+  }, []);
+
+  const closeActivePane = useCallback(() => {
+    setLayout((l) => closePane(l, l.activePaneId));
+    setCursor({ line: 1, col: 1 });
+  }, []);
+
+  const focusOtherPane = useCallback(() => {
+    setLayout((l) => {
+      const i = l.panes.findIndex((p) => p.id === l.activePaneId);
+      const next = l.panes[(i + 1) % l.panes.length]!;
+      return activatePane(l, next.id);
+    });
+    setCursor({ line: 1, col: 1 });
+  }, []);
+
   /* Semantic command table. Shortcut labels come from the platform registry
    * (§117–§119): never hardcode `Ctrl+P` in shared components. WSL entries
    * only exist where the capability exists (§185). */
@@ -695,7 +750,11 @@ export default function App(): JSX.Element {
       { id: "view.toggleSidebar", title: "Toggle sidebar", shortcut: sc("view.toggleSidebar"), run: () => setSidebarOpen((v) => !v) },
       { id: "view.toggleFocus", title: "Toggle focus mode", shortcut: sc("view.toggleFocus"), run: () => setFocusMode((v) => !v) },
       { id: "view.fullWidth", title: "Toggle full-width editor", run: () => setSettings((s) => ({ ...s, fullWidth: !s.fullWidth })) },
-      { id: "file.closeTab", title: "Close current tab", shortcut: sc("file.closeTab"), run: () => { if (activeKey) closeTab(activeKey); } },
+      { id: "file.closeTab", title: "Close current tab", shortcut: sc("file.closeTab"), run: () => { const a = activeDoc(layout); if (a) closeTab(layout.activePaneId, a.key); } },
+      { id: "view.splitRight", title: "Split editor right", run: () => splitActive("vertical") },
+      { id: "view.splitDown", title: "Split editor down", run: () => splitActive("horizontal") },
+      { id: "view.closeSplit", title: "Close split pane", run: () => closeActivePane() },
+      { id: "view.focusOtherPane", title: "Focus other pane", run: () => focusOtherPane() },
       { id: "workspace.refresh", title: "Refresh file tree", run: () => { if (workspace) { void refreshTree(workspace); void rebuildAllFiles(workspace); } } },
       { id: "settings.open", title: "Open settings", shortcut: sc("settings.open"), run: () => setSettingsOpen(true) },
     ];
@@ -706,7 +765,7 @@ export default function App(): JSX.Element {
       items.splice(4, 0, { id: "workspace.openWsl", title: "Open WSL folder…", run: () => void openWslDialog() });
     }
     return items;
-  }, [newNote, save, openLocal, openWslDialog, checkForUpdates, activeKey, closeTab, workspace, refreshTree, rebuildAllFiles, sc, platform.capabilities.wsl, platform.capabilities.updates]);
+  }, [newNote, save, openLocal, openWslDialog, checkForUpdates, layout, closeTab, splitActive, closeActivePane, focusOtherPane, workspace, refreshTree, rebuildAllFiles, sc, platform.capabilities.wsl, platform.capabilities.updates]);
 
   /* Native menu → same command dispatch (§59). Menu accelerators and the
    * palette forward CommandIds here; mouse and keyboard share one path. */
@@ -716,7 +775,7 @@ export default function App(): JSX.Element {
         case "file.new": newNote(); break;
         case "file.save": void save(); break;
         case "file.quickOpen": setPalette({ kind: "quick" }); break;
-        case "file.closeTab": if (activeKey) closeTab(activeKey); break;
+        case "file.closeTab": { const a = activeDoc(layout); if (a) closeTab(layout.activePaneId, a.key); break; }
         case "commandPalette.open": setPalette({ kind: "commands" }); break;
         case "workspace.search": setView("search"); setSidebarOpen(true); break;
         case "editor.find": break; // CodeMirror search keymap owns editor find (§58)
@@ -729,7 +788,7 @@ export default function App(): JSX.Element {
       }
     });
     return off;
-  }, [newNote, save, activeKey, closeTab, checkForUpdates]);
+  }, [newNote, save, layout, closeTab, checkForUpdates]);
 
   /* ---------- global keyboard ---------- */
   useEffect(() => {
@@ -753,19 +812,32 @@ export default function App(): JSX.Element {
       if (mod && e.key.toLowerCase() === "p" && e.shiftKey) { e.preventDefault(); setPalette({ kind: "commands" }); return; }
       if (mod && e.key.toLowerCase() === "p") { e.preventDefault(); setPalette({ kind: "quick" }); return; }
       if (mod && e.key.toLowerCase() === "n") { e.preventDefault(); newNote(); return; }
-      if (mod && e.key.toLowerCase() === "w") { e.preventDefault(); if (activeKey) closeTab(activeKey); return; }
+      if (mod && e.key.toLowerCase() === "w") { e.preventDefault(); const a = activeDoc(layout); if (a) closeTab(layout.activePaneId, a.key); return; }
+      // Pane focus without stealing editor focus: Alt+1 / Alt+2 selects the
+      // pane; the editor keeps whatever focus it had (no jump on switch).
+      if (e.altKey && !mod && (e.key === "1" || e.key === "2")) {
+        const target = layout.panes[Number(e.key) - 1];
+        if (target && target.id !== layout.activePaneId) {
+          e.preventDefault();
+          setLayout((l) => activatePane(l, target.id));
+          setCursor({ line: 1, col: 1 });
+        }
+        return;
+      }
       if (mod && e.key === "\\") { e.preventDefault(); setSidebarOpen((v) => !v); return; }
       if (mod && e.key.toLowerCase() === ",") { e.preventDefault(); setSettingsOpen(true); return; }
       if (mod && e.key === ".") { e.preventDefault(); setFocusMode((v) => !v); return; }
       if (mod && e.key === "Tab") {
+        // Tab cycling stays inside the active pane.
         e.preventDefault();
-        setTabs((p) => {
-          if (p.length < 2 || !activeKey) return p;
-          const i = p.findIndex((t) => t.key === activeKey);
-          const n = p[(i + (e.shiftKey ? p.length - 1 : 1)) % p.length]!;
-          setActiveKey(n.key);
-          return p;
-        });
+        const keys = paneDocs(layout, layout.activePaneId).map((d) => d.key);
+        const cur = activeDoc(layout)?.key;
+        if (keys.length >= 2 && cur) {
+          const i = keys.indexOf(cur);
+          const n = keys[(i + (e.shiftKey ? keys.length - 1 : 1)) % keys.length]!;
+          setLayout((l) => activateDoc(l, layout.activePaneId, n));
+          setCursor({ line: 1, col: 1 });
+        }
         return;
       }
       // Tree rename/trash follow platform convention (§43–§44): F2 + Delete
@@ -793,7 +865,7 @@ export default function App(): JSX.Element {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [save, newNote, activeKey, closeTab, tree.selected, tree.children, entries, removeEntry, palette, platform.platform]);
+  }, [save, newNote, layout, closeTab, tree.selected, tree.children, entries, removeEntry, palette, platform.platform]);
 
   /* tree arrow navigation */
   const visibleRows = useMemo(() => {
@@ -865,38 +937,42 @@ export default function App(): JSX.Element {
     });
   };
 
-  const tabMenu = (e: React.MouseEvent, key: string): void => {
+  // Tab context actions stay inside their own pane; sibling panes are
+  // untouched (each close still flushes dirty buffers to drafts first).
+  const tabMenu = (paneId: string, key: string, e: React.MouseEvent): void => {
     e.preventDefault();
     setMenu({
       x: e.clientX, y: e.clientY,
       items: [
-        { label: "Close", shortcut: sc("file.closeTab"), run: () => closeTab(key) },
-        { label: "Close others", run: () => { setTabs((p) => p.filter((t) => t.key === key)); setActiveKey(key); } },
-        { label: "Close to the right", run: () => {
-          setTabs((p) => { const i = p.findIndex((t) => t.key === key); return p.filter((_, j) => j <= i); });
-          if (activeKey && !tabs.slice(0, tabs.findIndex((t) => t.key === key) + 1).some((t) => t.key === activeKey)) setActiveKey(key);
-        } },
+        { label: "Close", shortcut: sc("file.closeTab"), run: () => closeTab(paneId, key) },
+        {
+          label: "Close others",
+          run: () => {
+            for (const k of paneDocs(layout, paneId).map((d) => d.key).filter((k) => k !== key)) closeTab(paneId, k);
+          },
+        },
+        {
+          label: "Close to the right",
+          run: () => {
+            const keys = paneDocs(layout, paneId).map((d) => d.key);
+            for (const k of keys.slice(keys.indexOf(key) + 1)) closeTab(paneId, k);
+          },
+        },
       ],
     });
   };
 
   /* ---------- editor ---------- */
-  const sessionKey = activeTab ? `${activeTab.key}|ln${settings.lineNumbers ? 1 : 0}|ww${settings.wordWrap ? 1 : 0}` : "none";
-  const contentRef = useRef("");
-  contentRef.current = activeTab?.content ?? "";
-  const editorRef = useCodeMirrorEditor(sessionKey, contentRef.current, {
-    lineNumbers: settings.lineNumbers,
-    wordWrap: settings.wordWrap,
-    onChange: onEdit,
-    onCursor: (line, col) => setCursor((p) => (p.line === line && p.col === col ? p : { line, col })),
-  });
+  // Cursor reports come from the active pane's editor only (PaneView gates
+  // with reportCursor); switching panes never steals keyboard focus.
+  const onCursor = useCallback((line: number, col: number) => {
+    setCursor((p) => (p.line === line && p.col === col ? p : { line, col }));
+  }, []);
 
   const words = useMemo(() => {
     const c = activeTab?.content.trim() ?? "";
     return c ? c.split(/\s+/).length : 0;
   }, [activeTab?.content]);
-
-  const saveLabel = saveState === "saved" ? `Saved${savedAt ? ` ${savedAt}` : ""}` : saveState;
 
   /* ---------- render ---------- */
   if (!workspace) {
@@ -1052,78 +1128,123 @@ export default function App(): JSX.Element {
           </>
         )}
         <main className="main">
-          {!focusMode && (
-            <TabStrip
-              tabs={tabs}
-              activeKey={activeKey}
-              onActivate={(k) => {
-                setActiveKey(k);
-                const t = tabs.find((x) => x.key === k);
-                setSaveState(t ? (t.conflict ? "conflict" : t.dirty ? "dirty" : "clean") : "clean");
-              }}
-              onClose={closeTab}
-              onContext={tabMenu}
-              onReorder={(from, to) => setTabs((p) => {
-                const a = p.findIndex((t) => t.key === from);
-                const b = p.findIndex((t) => t.key === to);
-                if (a < 0 || b < 0) return p;
-                const next = [...p];
-                const [mv] = next.splice(a, 1);
-                next.splice(b, 0, mv!);
-                return next;
-              })}
-            />
-          )}
           {wslError && (
             <div className="wsl-banner" role="alert">
               <span style={{ flex: 1 }}>Workspace unavailable — {wslError}</span>
               <button className="btn" onClick={() => void refreshTree(workspace)}>Reconnect</button>
             </div>
           )}
-          {activeTab && recovery[activeTab.key] && (
-            <div className="conflict-bar" role="alert" style={{ background: "var(--banner-recovery, #4a3800)", borderColor: "var(--border)" }}>
-              <span style={{ flex: 1 }}>
-                {recovery[activeTab.key]!.diskChanged
-                  ? `${fileName(activeTab.relativePath)} changed since this unsaved draft was kept. Both versions are safe — choose one.`
-                  : `Unsaved draft recovered from ${new Date(recovery[activeTab.key]!.updatedAt).toLocaleString()}. Not saved to file.`}
-                {recovery[activeTab.key]!.stale ? " This draft is over 30 days old." : ""}
-              </span>
-              <button className="btn" onClick={() => restoreDraft(activeTab.key)}>Restore draft</button>
-              <button className="btn" onClick={() => void discardDraft(activeTab.key)}>Discard draft</button>
-            </div>
-          )}
-          {activeTab?.conflict && (
-            <div className="conflict-bar" role="alert">
-              <span style={{ flex: 1 }}>{fileName(activeTab.relativePath)} changed outside Desktop Notes. Your edits are still safe.</span>
-              <button className="btn" onClick={() => void reloadFromDisk()}>Reload from disk</button>
-              <button className="btn" onClick={() => void keepMyVersion()}>Keep my version</button>
-            </div>
-          )}
-          {!activeTab ? (
-            <div className="empty">
-              <h2>No note open</h2>
-              <p className="hint"><kbd className="k">{sc("file.quickOpen")}</kbd> Quick open · <kbd className="k">{sc("file.new")}</kbd> New note</p>
-              {entries.length === 0 && !sidebarLoading && (
-                <div className="actions"><button className="btn primary" onClick={newNote}>New note</button></div>
-              )}
-            </div>
-          ) : activeTab.loadError ? (
-            <div className="empty">
-              <h2>Couldn&apos;t open {fileName(activeTab.relativePath)}</h2>
-              <p>{activeTab.loadError} Your file is untouched.</p>
-              <div className="actions"><button className="btn" onClick={() => closeTab(activeTab.key)}>Close tab</button></div>
-            </div>
-          ) : (
-            <div className="editor-scroll">
-              <div className={`editor-col${settings.fullWidth ? " full-width" : ""}`}>
-                <div key={activeTab.key} ref={editorRef} aria-label={`Editing ${displayPath(activeTab.relativePath)}`} />
-              </div>
-            </div>
-          )}
+          {/* Split panes (P1-06): at most two, side-by-side or stacked.
+              Each pane owns its tab order and active tab; documents are
+              shared, so two panes on one file always agree. Banners bind to
+              the pane's own doc — a conflict elsewhere never leaks in. */}
+          <div className={`split-wrap ${layout.orientation}`} role="group" aria-label="Editor panes">
+            {layout.panes.map((p, pi) => {
+              const docs = paneDocs(layout, p.id);
+              const doc = p.activeKey ? layout.docs[p.activeKey] ?? null : null;
+              const isActive = p.id === layout.activePaneId;
+              const rec = doc ? recovery[doc.key] : undefined;
+              return (
+                <section
+                  key={p.id}
+                  className={`pane${isActive ? " active" : ""}`}
+                  aria-label={`Editor pane ${pi + 1}${isActive ? ", active" : ""}`}
+                  onMouseDown={() => { if (!isActive) setLayout((l) => activatePane(l, p.id)); }}
+                >
+                  {!focusMode && (
+                    <div className="pane-bar">
+                      {layout.panes.length > 1 && <span className="pane-title">Pane {pi + 1}</span>}
+                      <span className="pane-actions">
+                        <button className="link" title="Split editor right" aria-label={`Split pane ${pi + 1} right`} onClick={() => splitActive("vertical")}>Split right</button>
+                        <button className="link" title="Split editor below" aria-label={`Split pane ${pi + 1} down`} onClick={() => splitActive("horizontal")}>Split down</button>
+                        {layout.panes.length > 1 && (
+                          <button className="link" title="Close this split pane" aria-label={`Close pane ${pi + 1}`} onClick={() => closeActivePane()}>Close pane</button>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {!focusMode && (
+                    <TabStrip
+                      tabs={docs}
+                      activeKey={p.activeKey}
+                      onActivate={(k) => { setLayout((l) => activateDoc(l, p.id, k)); setCursor({ line: 1, col: 1 }); }}
+                      onClose={(k) => closeTab(p.id, k)}
+                      onContext={(e, k) => tabMenu(p.id, k, e)}
+                      onReorder={(from, to) => setLayout((l) => {
+                        const pp = l.panes.find((x) => x.id === p.id)!;
+                        const a = pp.openKeys.indexOf(from);
+                        const b = pp.openKeys.indexOf(to);
+                        if (a < 0 || b < 0) return l;
+                        const openKeys = [...pp.openKeys];
+                        const [mv] = openKeys.splice(a, 1);
+                        openKeys.splice(b, 0, mv!);
+                        return { ...l, panes: l.panes.map((x) => (x.id === p.id ? { ...x, openKeys } : x)) };
+                      })}
+                    />
+                  )}
+                  {doc && rec && (
+                    <div className="conflict-bar" role="alert" style={{ background: "var(--banner-recovery, #4a3800)", borderColor: "var(--border)" }}>
+                      <span style={{ flex: 1 }}>
+                        {rec.diskChanged
+                          ? `${fileName(doc.relativePath)} changed since this unsaved draft was kept. Both versions are safe — choose one.`
+                          : `Unsaved draft recovered from ${new Date(rec.updatedAt).toLocaleString()}. Not saved to file.`}
+                        {rec.stale ? " This draft is over 30 days old." : ""}
+                      </span>
+                      <button className="btn" onClick={() => restoreDraft(doc.key)}>Restore draft</button>
+                      <button className="btn" onClick={() => void discardDraft(doc.key)}>Discard draft</button>
+                    </div>
+                  )}
+                  {doc?.conflict && (
+                    <div className="conflict-bar" role="alert">
+                      <span style={{ flex: 1 }}>{fileName(doc.relativePath)} changed outside Desktop Notes. Your edits are still safe.</span>
+                      <button className="btn" onClick={() => void reloadFromDisk(doc.key)}>Reload from disk</button>
+                      <button className="btn" onClick={() => void keepMyVersion(doc.key)}>Keep my version</button>
+                    </div>
+                  )}
+                  {!doc ? (
+                    <div className="empty">
+                      <h2>No note open</h2>
+                      <p className="hint"><kbd className="k">{sc("file.quickOpen")}</kbd> Quick open · <kbd className="k">{sc("file.new")}</kbd> New note</p>
+                      {entries.length === 0 && !sidebarLoading && (
+                        <div className="actions"><button className="btn primary" onClick={newNote}>New note</button></div>
+                      )}
+                    </div>
+                  ) : doc.loadError ? (
+                    <div className="empty">
+                      <h2>Couldn&apos;t open {fileName(doc.relativePath)}</h2>
+                      <p>{doc.loadError} Your file is untouched.</p>
+                      <div className="actions"><button className="btn" onClick={() => closeTab(p.id, doc.key)}>Close tab</button></div>
+                    </div>
+                  ) : (
+                    <PaneView
+                      docKey={doc.key}
+                      content={doc.content}
+                      relativePath={doc.relativePath}
+                      lineNumbers={settings.lineNumbers}
+                      wordWrap={settings.wordWrap}
+                      fullWidth={settings.fullWidth}
+                      reportCursor={isActive}
+                      onEdit={onEdit}
+                      onCursor={onCursor}
+                    />
+                  )}
+                </section>
+              );
+            })}
+          </div>
         </main>
       </div>
       {!focusMode && (
-        <StatusBar workspace={workspace} words={words} line={cursor.line} col={cursor.col} saveState={saveLabel} />
+        <StatusBar
+          workspace={workspace}
+          words={words}
+          line={cursor.line}
+          col={cursor.col}
+          doc={docSaveView}
+          savedAt={activeTab?.savedAt ?? ""}
+          connection={wslError ? "disconnected" : workspace.connection}
+          fileCount={allFiles.length}
+        />
       )}
       {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
       {palette && (
