@@ -104,7 +104,7 @@ describe("index tracks filesystem lifecycle (P1-07)", () => {
         else if (e.fileClass === "markdown") {
           const read = await notes.readFile(workspaceId, e.relativePath);
           if (!("result" in read)) throw new Error(`reread ${e.relativePath}`);
-          rebuilt.push({ workspaceId, relativePath: e.relativePath, content: read.result.content, revision: read.result.revision });
+          rebuilt.push({ workspaceId, relativePath: e.relativePath.replace(/\\/g, "/"), content: read.result.content, revision: read.result.revision });
         }
       }
     }
