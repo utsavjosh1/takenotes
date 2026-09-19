@@ -103,8 +103,8 @@ describe("recovery snapshots", () => {
     expect(a.ok && a.result.map((s) => s.snapshotId)).toEqual(["utsav"]);
     expect(b.ok && b.result.map((s) => s.snapshotId)).toEqual(["work"]);
 
-    const utsav = await store.read("utsav");
-    const work = await store.read("work");
+    const utsav = await store.read("ubuntu-utsav", "utsav");
+    const work = await store.read("ubuntu-work", "work");
     expect(utsav.ok && utsav.result.content).toBe("personal");
     expect(work.ok && work.result.content).toBe("company");
   });
@@ -137,7 +137,7 @@ describe("recovery snapshots", () => {
 
     const history = await store.list("workspace-1", "README.md");
     expect(history.ok && history.result.map((s) => s.snapshotId)).toEqual(["current-c", "old-a"]);
-    const currentSnapshot = await store.read("current-c");
+    const currentSnapshot = await store.read("workspace-1", "current-c");
     expect(currentSnapshot.ok && currentSnapshot.result.content).toBe("C");
   });
 
@@ -164,8 +164,8 @@ describe("recovery snapshots", () => {
     expect(restored.ok).toBe(false);
     expect(!restored.ok && restored.error.code).toBe("CONFLICT");
     expect(externalFile).toBe("D");
-    const oldStillExists = await store.read("old-a");
-    const currentWasSnapshotted = await store.read("current-c");
+    const oldStillExists = await store.read("workspace-1", "old-a");
+    const currentWasSnapshotted = await store.read("workspace-1", "current-c");
     expect(oldStillExists.ok).toBe(true);
     expect(currentWasSnapshotted.ok && currentWasSnapshotted.result.content).toBe("C");
   });
@@ -173,7 +173,7 @@ describe("recovery snapshots", () => {
   it("copies snapshot contents without touching the source writer", async () => {
     const store = new RecoveryStore(await tmpDir(), { now: () => 1_000, id: ids("snap") });
     await store.captureChanged({ workspaceId: "workspace-1", relativePath: "copy.md", content: "copy me", reason: "save" });
-    const copied = await store.read("snap");
+    const copied = await store.read("workspace-1", "snap");
     expect(copied.ok && copied.result.content).toBe("copy me");
   });
 
@@ -183,7 +183,7 @@ describe("recovery snapshots", () => {
 
     expect((await store.captureChanged({ workspaceId: "../x", relativePath: "a.md", content: "x", reason: "save" })).ok).toBe(false);
     expect((await store.captureChanged({ workspaceId: "workspace-1", relativePath: "../secret.md", content: "x", reason: "save" })).ok).toBe(false);
-    expect((await store.read("../../secret")).ok).toBe(false);
+    expect((await store.read("workspace-1", "../../secret")).ok).toBe(false);
 
     await fs.mkdir(path.join(base, "outside"), { recursive: true });
     expect(await fs.readdir(path.join(base, "outside"))).toEqual([]);
@@ -198,6 +198,6 @@ describe("recovery snapshots", () => {
 
     const listed = await store.list("workspace-1", "a.md");
     expect(listed.ok && listed.result.map((s) => s.snapshotId)).toEqual(["snap"]);
-    expect((await store.read("partial")).ok).toBe(false);
+    expect((await store.read("workspace-1", "partial")).ok).toBe(false);
   });
 });

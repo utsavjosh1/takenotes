@@ -11,7 +11,7 @@ import { validatePosixRelativePath, validateWindowsRelativePath } from "../works
 import { validateWorkspaceId } from "../workspace/path-security.js";
 import type { WorkspaceKind } from "../../shared/platform/types.js";
 import { clearDraft, isDraftStale, loadDraft, MAX_DRAFT_BYTES, saveDraft } from "../workspace/drafts.js";
-import { RecoveryStore } from "../workspace/recovery.js";
+import { RecoveryStore, recoveryKeyForWorkspace } from "../workspace/recovery.js";
 import { HelperSupervisor } from "../wsl/helper-supervisor.js";
 import { isValidDistroId, isValidLinuxUser } from "../wsl/launch-security.js";
 import { listWslUsers } from "../wsl/user-discovery.js";
@@ -25,6 +25,7 @@ import { detectWayland } from "../platform/linux.js";
 import type { PlatformReport, WslLinuxUser } from "../../shared/contracts/ipc.js";
 import type { AppError } from "../../shared/errors.js";
 import { toHelperError } from "./helper-errors.js";
+import { isTrustedWindow } from "./guard.js";
 
 const workspaces = new WorkspaceService(
   new WorkspaceRegistry(),
@@ -118,7 +119,7 @@ function validateNativeRel(kind: WorkspaceKind, input: string): { relativePath: 
 
 function senderIsOurs(event: Electron.IpcMainInvokeEvent): boolean {
   const win = BrowserWindow.fromWebContents(event.sender);
-  return win !== null && !win.isDestroyed();
+  return isTrustedWindow(win);
 }
 
 /** Draft storage root: outside every note workspace, under the Electron profile. */
@@ -129,6 +130,14 @@ function draftsBaseDir(): string {
 function recovery(): RecoveryStore {
   recoveryStore ??= new RecoveryStore(app.getPath("userData"));
   return recoveryStore;
+}
+
+/** Resolve a renderer-supplied workspaceId to its stable recovery namespace
+ * (H-01). The runtime id is random per open; the namespace (`kind + root +
+ * distro + linuxUser`) survives restarts, so history follows the Workspace
+ * instead of the ephemeral id. */
+function recoveryNamespace(reg: WorkspaceRegistration): string {
+  return recoveryKeyForWorkspace({ type: reg.type, root: reg.root, distro: reg.distro, linuxUser: reg.linuxUser });
 }
 
 /** Runtime validation for draft payloads (privileged IPC: sender + shape checked). */
@@ -186,7 +195,8 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
   broadcastEvent = broadcast;
   // Platform report for the renderer hook + `npm run test:platform` (§210).
   // Uses app.getPath — never hardcoded platform paths (§19–§20, §100–§102).
-  ipcMain.handle("app:platform", () => {
+  ipcMain.handle("app:platform", (event) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const platform = currentDesktopPlatform();
     const report: PlatformReport = {
       platform,
@@ -469,7 +479,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if ("error" in prep) return { ok: false, error: prep.error };
     const reason =
       a.reason === "save" || a.reason === "close" || a.reason === "shutdown" || a.reason === "restore-before" ? a.reason : "edit";
-    return recovery().captureChanged({ workspaceId: wid.workspaceId, relativePath: prep.rel, content: a.content, reason });
+    return recovery().captureChanged({ workspaceId: recoveryNamespace(reg), relativePath: prep.rel, content: a.content, reason });
   });
 
   ipcMain.handle("recovery:list", async (event, workspaceId: unknown, relativePath: unknown) => {
@@ -482,15 +492,21 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     }
     const prep = handlerRel(reg, relativePath, false);
     if ("error" in prep) return { ok: false, error: prep.error };
-    return recovery().list(wid.workspaceId, prep.rel);
+    return recovery().list(recoveryNamespace(reg), prep.rel);
   });
 
-  ipcMain.handle("recovery:read", async (event, snapshotId: unknown) => {
+  ipcMain.handle("recovery:read", async (event, workspaceId: unknown, snapshotId: unknown) => {
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const wid = validateWorkspaceId(workspaceId);
+    if ("error" in wid) return { ok: false, error: wid.error };
+    const reg = workspaces.get(wid.workspaceId);
+    if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
     if (typeof snapshotId !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid recovery snapshot id." } };
     }
-    return recovery().read(snapshotId);
+    // Scoped read (M-01): the snapshot must belong to THIS workspace's
+    // stable namespace — no global snapshot lookup reaches the renderer.
+    return recovery().read(recoveryNamespace(reg), snapshotId);
   });
 
   ipcMain.handle("recovery:restore", async (event, args: unknown) => {
@@ -518,9 +534,10 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     }
     const prep = handlerRel(reg, a.relativePath, false);
     if ("error" in prep) return { ok: false, error: prep.error };
+    const namespace = recoveryNamespace(reg);
     return recovery().restore(
       {
-        workspaceId: wid.workspaceId,
+        workspaceId: namespace,
         relativePath: prep.rel,
         snapshotId: a.snapshotId,
         currentContent: a.currentContent,
@@ -596,7 +613,10 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
   // no filesystem walk per query. The old `search:*` scan handlers were
   // removed with the scan module, not kept in parallel.
 
-  ipcMain.handle("app:version", () => ({ ok: true, result: app.getVersion() }));
+  ipcMain.handle("app:version", (event) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    return { ok: true, result: app.getVersion() };
+  });
 
   // In-app software updates, Windows-only (ADR-0006). Parked platforms get
   // a precise NOT SUPPORTED-style error, never a generic failure.

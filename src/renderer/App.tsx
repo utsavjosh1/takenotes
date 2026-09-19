@@ -637,11 +637,12 @@ export default function App(): JSX.Element {
   }, [workspace, layout]);
 
   const copyRecoverySnapshot = useCallback(async (snapshotId: string) => {
-    const res = await window.takenotes.recovery.read(snapshotId);
+    if (!workspace) return;
+    const res = await window.takenotes.recovery.read(workspace.workspaceId, snapshotId);
     if (!res.ok) { errToast(res.error, "Couldn't copy recovery snapshot"); return; }
     await navigator.clipboard.writeText(res.result.content);
     toast("Copied recovery snapshot contents.");
-  }, [errToast, toast]);
+  }, [workspace, errToast, toast]);
 
   const restoreRecoverySnapshot = useCallback(async (snapshotId: string) => {
     if (!workspace || !historyDialog) return;
