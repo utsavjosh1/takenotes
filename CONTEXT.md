@@ -1,45 +1,78 @@
-# CONTEXT.md — takenotes (Windows-first)
+# takenotes
 
-Glossary only. No implementation details.
+Filesystem-first local Markdown notebook for Windows with WSL awareness. User Markdown files stay ordinary files.
 
-## Terms
+## Language
 
-- **update-check**: fetch the latest stable release tag and compare SemVer
-  with the running version. Pure logic, unit-tested, silent when offline.
-- **update-download / update-install**: fetch the `.exe` + `SHA256SUMS.txt`,
-  verify SHA-256 (mandatory gate), launch the installer, quit the app.
-- **release channel**: `stable` (`vX.Y.Z`, offered by the updater) vs
-  `prerelease` (`-beta`/`-rc`, never auto-offered).
+### Workspaces and connections
 
-- **windows-local workspace**: Markdown folder on NTFS/ReFS opened via the
-  native Explorer picker. Works with no WSL installed. The default.
-- **wsl-remote workspace**: Linux folder inside a WSL2 distro, accessed as
-  `<distro>:<absolute-posix-path>` (e.g. `Ubuntu-24.04:/home/u/notes`)
-  through `wsl.exe` → app-owned Linux Node → `helper.cjs`. Opened via the
-  **distro picker** (list distros → type Linux path → connect).
-- **distro picker**: The "Open WSL folder…" dialog: distro dropdown +
-  Linux path field + connect. Reports precise errors
-  (`WSL not available`, `distro stopped`, `path not found`), never a
-  generic failure.
-- **launch-failure**: Installer runs but no window opens after double-click
-  (distinct from install-failure and connect-failure).
-- **install-failure**: Installer itself is blocked or aborts (SmartScreen
-  publisher-warning, browser block, NSIS error) — app files never land
-  on disk.
-- **publisher-warning**: Windows SmartScreen "Unknown publisher" on an
-  unsigned build. Expected until Authenticode signing lands; bypass via
-  More info → Run anyway. _Avoid_: publisher error.
-- **download-failure**: Browser/GitHub fetch blocked or hash mismatch —
-  distinct from install-failure (blocked at run) and launch-failure
-  (installed but no window).
-- **logic test**: Pure protocol/filesystem test that runs on any OS with no
-  real Windows/WSL desktop: framing, handshake, path validation,
-  helper direct round-trip, search, drafts.
-- **parked**: Code stays in the repo but is not a priority and never blocks
-  Windows work (macOS/Linux adapters, their installers, non-logic tests).
+**Workspace**:
+The named identity the user opens and works inside: a location plus settings and grants.
+_Avoid_: Vault
 
-## Decisions
+**Connection**:
+How the app reaches a Linux environment: distro plus Linux user plus status. One connection can expose many workspaces.
 
-- Windows 11 x64 + WSL2 Ubuntu is the only priority target.
-- The app must open with WSL absent (dormant WSL, no startup errors).
-- Uninstall never deletes user Markdown.
+**Distro picker**:
+The "Open WSL folder…" dialog: distro plus Linux user plus Linux path plus connect. Reports precise errors, never a generic failure.
+
+### Knowledge and productivity
+
+**Collection**:
+A saved structured query over workspace metadata with multiple presentations. Definitions travel with the workspace as YAML; machine state stays local.
+_Avoid_: Base
+
+**View**:
+One presentation of a Collection: table, list, cards, board, or calendar.
+
+**Daily Note**:
+The calendar-dated note at `Daily/YYYY/MM/YYYY-MM-DD.md` with `type: daily, date: YYYY-MM-DD`. Created explicitly, never silently.
+
+**Today**:
+The aggregated productivity view combining scheduled items, overdue and due-today tasks, the Daily Note, recent notes, and quick actions. Not the Daily Note itself.
+
+**Event note**:
+An ordinary Markdown note with `type: event` and required `start` (optional `end`) that appears on the Calendar. Body holds agenda, notes, and follow-up tasks.
+
+**Favorite**:
+A saved shortcut to a note, heading, folder, search, collection, task view, calendar view, or URL.
+_Avoid_: Bookmark
+
+**Task**:
+A Markdown checkbox item indexed into the productivity layer. Any `- [ ]` is valid; richer metadata is optional and progressive. Managed tasks gain a lazily assigned stable ID.
+
+**Due**:
+A task's deadline date. Never rewritten by calendar drags.
+
+**Scheduled**:
+A task's calendar time block. Rewritten when the item is dragged on the calendar; distinct from Due.
+
+### Updates and testing
+
+**Update-check**:
+Fetch of the latest stable release tag compared against the running version. Silent when offline.
+
+**Update-download / update-install**:
+Fetch of the `.exe` plus `SHA256SUMS.txt`, mandatory SHA-256 verification, launch installer, quit app.
+
+**Release channel**:
+`stable` (`vX.Y.Z`, offered by the updater) versus `prerelease` (`-beta`/`-rc`, never auto-offered).
+
+**Logic test**:
+Pure protocol or filesystem test runnable on any OS with no real Windows or WSL desktop.
+
+**Parked**:
+Code kept in the repo but not a priority that never blocks Windows work.
+
+**Launch-failure**:
+Installer ran but no window opens after double-click.
+
+**Install-failure**:
+Installer itself was blocked or aborted; app files never land on disk.
+
+**Publisher-warning**:
+Windows SmartScreen "Unknown publisher" on an unsigned build. Bypass via More info → Run anyway.
+_Avoid_: publisher error
+
+**Download-failure**:
+Browser or GitHub fetch blocked or hash mismatch.

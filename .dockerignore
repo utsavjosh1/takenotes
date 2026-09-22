@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-electron
+dist-helper
+dist-server
+smoke-artifacts
+.git
+wsl-helper
+tests
+docs

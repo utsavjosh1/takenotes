@@ -9,6 +9,8 @@ const FIXTURE = [
   "work:x:1001:1001:Work:/home/work:/bin/zsh",
   "svc-deploy:x:999:999:deploy:/srv/deploy:/bin/bash",
   "customhome:x:1002:1002:Custom:/data/custom:/bin/bash",
+  "appsvc:x:1003:1003:Service:/srv/app:/usr/sbin/nologin",
+  "disabled:x:1004:1004:Disabled:/home/disabled:/bin/false",
   "",
   "this line has no colons at all",
   "baduid:x:notanumber:1003:Bad:/home/bad:/bin/bash",
@@ -40,13 +42,16 @@ describe("filterCandidateUsers", () => {
     expect(names).not.toContain("daemon");
     expect(names).not.toContain("nobody");
     expect(names).not.toContain("svc-deploy");
+    expect(names).not.toContain("appsvc");
+    expect(names).not.toContain("disabled");
   });
 
-  it("always includes the current user even below the threshold", () => {
-    const odd = ["admin:x:500:500:Admin:/home/admin:/bin/bash", "utsav:x:1000:1000::/home/utsav:/bin/bash"].join("\n");
+  it("always includes the current user even below the threshold or with a non-interactive shell", () => {
+    const odd = ["admin:x:500:500:Admin:/home/admin:/bin/bash", "disabled:x:1001:1001::/home/disabled:/bin/false", "utsav:x:1000:1000::/home/utsav:/bin/bash"].join("\n");
     const names = filterCandidateUsers(parsePasswd(odd), { currentUid: 500 }).map((u) => u.name);
     expect(names).toContain("admin");
     expect(names).toContain("utsav");
+    expect(filterCandidateUsers(parsePasswd(odd), { currentUid: 1001 }).map((u) => u.name)).toContain("disabled");
   });
 
   it("supports an overridable uid threshold for odd distro schemes", () => {

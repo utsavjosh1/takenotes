@@ -5,7 +5,7 @@ import { isWslKind, moveToTrashLabel, revealLabel, trashName } from "../shared/p
 import { COMMAND_DEFINITIONS, type CommandId } from "../shared/commands/registry";
 import { TitleBar, ActivityRail, StatusBar } from "./components/chrome";
 import { PaneView } from "./components/pane-view";
-import { buildWorkspaceIndex, workspaceIndex } from "./index/workspace-index";
+import { buildWorkspaceIndex, indexStatusMessage, workspaceIndex } from "./index/workspace-index";
 import { commandForKeyEvent } from "../shared/commands/hotkeys";
 import { indexedEntryToQuickOpenItem } from "../shared/commands/palette";
 import { parseSearchQuery } from "../shared/search/query";
@@ -133,6 +133,10 @@ export default function App(): JSX.Element {
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
   const [commandDefinitions, setCommandDefinitions] = useState<CommandListResult>([...COMMAND_DEFINITIONS]);
   const [indexVersion, setIndexVersion] = useState(0);
+  // Parse-once index completeness (H-04): when safety bounds (file-count
+  // cap, oversized/unreadable skips) may have omitted notes, the status
+  // strip + Search panel say so instead of posing as complete.
+  const [indexNotice, setIndexNotice] = useState<string | null>(null);
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
   // Crash-recovery drafts (userData store, main process). Keyed by tab key.
   // This is RECOVERY data only: `Saved` is shown exclusively for bytes that
@@ -261,12 +265,15 @@ export default function App(): JSX.Element {
   // Parse-once index refresh (P1-07): runs async after open so the editor
   // stays snappy; workspace-level failures surface like tree failures.
   const refreshWorkspaceIndex = useCallback(async (ws: WorkspaceInfo) => {
+    setIndexNotice(null);
     const res = await buildWorkspaceIndex(window.takenotes, workspaceIndex, ws);
     if (!res.ok) {
+      setIndexNotice(null);
       if (isWslKind(ws.type)) setWslError(res.error.message);
       else errToast(res.error, "Couldn't build the search index");
       return;
     }
+    setIndexNotice(indexStatusMessage(res));
     setIndexVersion((v) => v + 1);
   }, [errToast]);
 
@@ -637,11 +644,12 @@ export default function App(): JSX.Element {
   }, [workspace, layout]);
 
   const copyRecoverySnapshot = useCallback(async (snapshotId: string) => {
-    const res = await window.takenotes.recovery.read(snapshotId);
+    if (!workspace) return;
+    const res = await window.takenotes.recovery.read(workspace.workspaceId, snapshotId);
     if (!res.ok) { errToast(res.error, "Couldn't copy recovery snapshot"); return; }
     await navigator.clipboard.writeText(res.result.content);
     toast("Copied recovery snapshot contents.");
-  }, [errToast, toast]);
+  }, [workspace, errToast, toast]);
 
   const restoreRecoverySnapshot = useCallback(async (snapshotId: string) => {
     if (!workspace || !historyDialog) return;
@@ -1246,6 +1254,7 @@ export default function App(): JSX.Element {
                     searchError={searchError}
                     filenameHits={filenameHits}
                     contentHits={contentHits}
+                    notice={indexNotice}
                     onOpen={(rel, line) => {
                       void openFile(rel).then(() => {
                         if (line) toast(`Jumped to line ${line}. In-editor scroll lands with Stage 7.`);
@@ -1396,6 +1405,7 @@ export default function App(): JSX.Element {
           savedAt={activeTab?.savedAt ?? ""}
           connection={wslError ? "disconnected" : workspace.connection}
           fileCount={allFiles.length}
+          indexWarning={indexNotice}
         />
       )}
       {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}

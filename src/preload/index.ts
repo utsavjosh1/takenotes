@@ -33,7 +33,7 @@ export type TakeNotesApi = {
       reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
     }): Promise<IpcResult<RecoverySnapshotMeta | null>>;
     list(workspaceId: string, relativePath: string): Promise<IpcResult<RecoverySnapshotMeta[]>>;
-    read(snapshotId: string): Promise<IpcResult<RecoverySnapshotRead>>;
+    read(workspaceId: string, snapshotId: string): Promise<IpcResult<RecoverySnapshotRead>>;
     restore(args: {
       workspaceId: string;
       relativePath: string;
@@ -113,7 +113,7 @@ const api: TakeNotesApi = {
   recovery: {
     captureChanged: (args) => ipcRenderer.invoke("recovery:captureChanged", args),
     list: (workspaceId, relativePath) => ipcRenderer.invoke("recovery:list", workspaceId, relativePath),
-    read: (snapshotId) => ipcRenderer.invoke("recovery:read", snapshotId),
+    read: (workspaceId, snapshotId) => ipcRenderer.invoke("recovery:read", workspaceId, snapshotId),
     restore: (args) => ipcRenderer.invoke("recovery:restore", args),
   },
   workspace: {

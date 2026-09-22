@@ -109,6 +109,7 @@ export function StatusBar({
   savedAt,
   connection,
   fileCount,
+  indexWarning,
 }: {
   workspace: WorkspaceInfo | null;
   words: number;
@@ -118,6 +119,9 @@ export function StatusBar({
   savedAt: string;
   connection: "connected" | "disconnected" | "reconnecting" | "failed";
   fileCount: number;
+  /** Completeness notice from the parse-once index build (H-04): when
+   * safety bounds may have omitted notes, the strip says so. */
+  indexWarning: string | null;
 }): JSX.Element {
   if (!workspace) {
     return (
@@ -153,6 +157,9 @@ export function StatusBar({
       )}
       <span className={badConn ? "conn-bad" : "conn-ok"}>{seg.connection}</span>
       <span title="Notes in the Quick-open index">{seg.files}</span>
+      {indexWarning && (
+        <span className="conn-bad" title={indexWarning} role="note">Index partial</span>
+      )}
       <span className="right">
         <span>{words} words</span>
         <span>Ln {line}, Col {col}</span>

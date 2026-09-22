@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AppError } from "../../src/shared/errors";
 import type { DirectoryEntry, FileReadResult, IpcResult } from "../../src/shared/contracts/ipc";
 import { WorkspaceIndex } from "../../src/shared/index/store";
-import { buildWorkspaceIndex, type IndexApi } from "../../src/renderer/index/workspace-index";
+import { buildWorkspaceIndex, indexStatusMessage, type IndexApi } from "../../src/renderer/index/workspace-index";
 
 const WS = { workspaceId: "ws", displayName: "N", type: "windows-local", connection: "connected" } as const;
 
@@ -78,5 +78,31 @@ describe("workspace index build", () => {
     const r3 = await buildWorkspaceIndex(api({}, { listError: { code: "PERMISSION_DENIED", message: "no" } as AppError }), listFail, { ...WS });
     expect(r3).toMatchObject({ ok: false });
     expect(listFail.list("ws")).toEqual([]);
+  });
+});
+
+/** H-04: any bound that can omit eligible notes must produce user-visible
+ * warning data — never a silent partial index. */
+describe("index completeness notice", () => {
+  it("complete index produces no warning", () => {
+    expect(indexStatusMessage({ indexed: 42, skipped: 0, truncated: false })).toBeNull();
+  });
+
+  it("truncated listing produces a partial-index warning", () => {
+    const msg = indexStatusMessage({ indexed: 2000, skipped: 0, truncated: true });
+    expect(msg).toContain("Partial index");
+    expect(msg).toContain("2000");
+  });
+
+  it("skipped oversized files produce an incomplete-search indication", () => {
+    const msg = indexStatusMessage({ indexed: 10, skipped: 3, truncated: false });
+    expect(msg).toContain("incomplete");
+    expect(msg).toContain("3");
+  });
+
+  it("truncated + skipped reports both bounds distinctly", () => {
+    const msg = indexStatusMessage({ indexed: 2000, skipped: 2, truncated: true });
+    expect(msg).toContain("Partial index");
+    expect(msg).toContain("skipped");
   });
 });

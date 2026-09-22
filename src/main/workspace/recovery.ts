@@ -3,14 +3,57 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { appError, type AppError } from "../../shared/errors.js";
 import type { FileRevision } from "../../shared/contracts/ipc.js";
+import type { WorkspaceKind } from "../../shared/platform/types.js";
 import { toCanonicalRel } from "../../shared/platform/filesystem.js";
 import { validatePosixRelativePath, validateWorkspaceId } from "./path-security.js";
+import { workspaceKeyFor } from "./drafts.js";
 
 export const RECOVERY_VERSION = 1;
 export const RECOVERY_THROTTLE_MS = 5 * 60 * 1000;
 export const RECOVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type RecoveryReason = "edit" | "save" | "close" | "shutdown" | "restore-before";
+
+/**
+ * Stable recovery namespace for one opened Workspace (H-01).
+ *
+ * The runtime `workspaceId` is an opaque random UUID minted on every
+ * `register()` — reopening the same folder mints a NEW id, so keying
+ * recovery storage by the raw id orphans history across restarts. This key
+ * instead reuses the established drafts identity (`workspaceKeyFor`):
+ * `kind + canonical root + distro + linuxUser`. Same Workspace reopened
+ * under a fresh runtime id maps to the SAME namespace; `Ubuntu/utsav` and
+ * `Ubuntu/work` (or two different roots) map to DIFFERENT namespaces.
+ *
+ * The runtime `workspaceId` architecture is untouched — callers resolve
+ * `workspaceId → registration → this stable key` at the IPC boundary.
+ */
+export function recoveryKeyForWorkspace(input: {
+  type: WorkspaceKind;
+  root: string;
+  distro?: string;
+  linuxUser?: string;
+}): string {
+  return workspaceKeyFor({
+    workspaceType: input.type,
+    workspaceRoot: canonicalRecoveryRoot(input.type, input.root),
+    distro: input.distro,
+    linuxUser: input.linuxUser,
+  });
+}
+
+/** Canonicalize the root before hashing so trivial reopen variations
+ * (trailing separators, Windows case differences) stay one identity.
+ * This canonicalization applies ONLY to the recovery namespace — the
+ * registered `root` itself is never rewritten. */
+function canonicalRecoveryRoot(type: WorkspaceKind, root: string): string {
+  if (type === "windows-local") {
+    // Windows filesystems are case-insensitive; `C:\Notes` reopened as
+    // `c:\notes\` is the same Workspace.
+    return root.replace(/[/\\]+$/, "").toLowerCase();
+  }
+  return root.replace(/\/+$/, "");
+}
 
 export type RecoverySnapshotMeta = {
   snapshotId: string;
@@ -190,11 +233,18 @@ export class RecoveryStore {
     }
   }
 
-  async read(snapshotIdInput: string): Promise<RecoveryResult<RecoverySnapshot>> {
+  /**
+   * Scoped snapshot read (M-01): the snapshot must belong to the
+   * requested recovery namespace. Cross-workspace reads fail with
+   * NOT_FOUND — A's bytes are never returned to B.
+   */
+  async read(namespaceKeyInput: string, snapshotIdInput: string): Promise<RecoveryResult<RecoverySnapshot>> {
+    const wid = validateWorkspaceId(namespaceKeyInput);
+    if ("error" in wid) return { ok: false, error: wid.error };
     const sid = validateSnapshotId(snapshotIdInput);
     if ("error" in sid) return { ok: false, error: sid.error };
     try {
-      const record = await this.findBySnapshotId(sid.snapshotId);
+      const record = await this.findInNamespace(wid.workspaceId, sid.snapshotId);
       if (!record) return { ok: false, error: appError("NOT_FOUND", "Recovery snapshot not found.") };
       return { ok: true, result: { ...metaOf(record), content: record.content } };
     } catch (err) {
@@ -221,7 +271,7 @@ export class RecoveryStore {
     if (typeof input.currentContent !== "string" || typeof input.expectedHash !== "string") {
       return { ok: false, error: appError("INVALID_REQUEST", "Invalid recovery restore request.") };
     }
-    const snap = await this.read(sid.snapshotId);
+    const snap = await this.read(v.workspaceId, sid.snapshotId);
     if (!snap.ok) return snap;
     if (snap.result.workspaceId !== v.workspaceId || snap.result.relativePath !== v.relativePath) {
       return { ok: false, error: appError("INVALID_REQUEST", "Recovery snapshot does not belong to this note.") };
@@ -264,8 +314,11 @@ export class RecoveryStore {
     return records;
   }
 
-  private async findBySnapshotId(snapshotId: string): Promise<RecoveryRecord | null> {
-    const root = this.recoveryRoot();
+  /** Scoped lookup: only the requested namespace directory is scanned.
+   * There is deliberately no global snapshot lookup — the renderer never
+   * gets cross-workspace bytes (M-01). */
+  private async findInNamespace(namespaceKey: string, snapshotId: string): Promise<RecoveryRecord | null> {
+    const root = path.join(this.recoveryRoot(), namespaceKey);
     const stack = [root];
     while (stack.length > 0) {
       const dir = stack.pop()!;
@@ -284,7 +337,12 @@ export class RecoveryStore {
         if (!d.name.endsWith(".json")) continue;
         try {
           const parsed: unknown = JSON.parse(await fs.readFile(p, "utf8"));
-          if (isRecord(parsed) && parsed.snapshotId === snapshotId && this.now() - parsed.createdAt <= RECOVERY_RETENTION_MS) {
+          if (
+            isRecord(parsed) &&
+            parsed.snapshotId === snapshotId &&
+            parsed.workspaceId === namespaceKey &&
+            this.now() - parsed.createdAt <= RECOVERY_RETENTION_MS
+          ) {
             return parsed;
           }
         } catch {
