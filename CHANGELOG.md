@@ -4,6 +4,22 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-09-22
+
+### Added
+
+- Self-hosted server foundation with owner setup, login sessions, CSRF protection, workspace persistence, and browser note read/update flows.
+- Shared CoreNoteService parity seam for native and HTTP note operations, with expanded behavioral contract coverage.
+- User-visible partial-index warnings for capped workspace listings and oversized skipped notes.
+- Phase 1 architecture, ADR, roadmap, ticket, and blocked Windows/WSL evidence documentation updates.
+
+### Fixed
+
+- Recovery snapshots now use stable workspace identity, survive reopen, and deny cross-workspace reads.
+- Native Windows root confinement and shared path safety vectors were tightened.
+- App platform/version IPC handlers now enforce sender validation.
+- WSL non-interactive user filtering was improved.
+
 ## [0.0.8] - 2026-09-19
 
 ### Added

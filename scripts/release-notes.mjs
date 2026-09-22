@@ -16,18 +16,14 @@ const body = `${section}
 
 ## Downloads
 
-Pick the installer for your OS (all three are attached to this release):
+Windows-only release artifacts are attached to this release:
 
 - **Windows 11 x64:** \`takenotes-${pkg.version}-win-x64.exe\` (NSIS installer, run and follow prompts).
-  WSL2 with Ubuntu 22.04 x64 or Ubuntu 24.04 x64 for WSL features.
-- **macOS 13+ arm64 / x64:** \`takenotes-${pkg.version}-mac-arm64.dmg\` (Apple Silicon) or
-  \`takenotes-${pkg.version}-mac-x64.dmg\` (Intel). Open the DMG and drag to Applications.
-- **Linux x64 (Ubuntu 24.04 LTS):** \`takenotes-${pkg.version}-linux-x86_64.AppImage\`
-  (make executable and run), or \`takenotes-${pkg.version}-linux-amd64.deb\` / \`*.rpm\`.
+- **Windows 11 x64 portable:** \`takenotes-${pkg.version}-win-x64.zip\`.
 
-Early builds are unsigned: Windows SmartScreen / macOS Gatekeeper warnings are
-expected — choose Run anyway / Open. No auto-update in MVP; download new
-installers manually from GitHub Releases.
+WSL features require WSL2 with Ubuntu 22.04 x64 or Ubuntu 24.04 x64.
+Early builds are unsigned: Windows SmartScreen warnings are expected — choose
+Run anyway. In-app updates use GitHub Releases.
 
 ## Checksums & provenance
 
