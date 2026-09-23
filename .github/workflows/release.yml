@@ -132,7 +132,7 @@ jobs:
         # release still ships with SHA256SUMS + SBOM and the gap stays
         # documented — never fail the release over provenance alone.
         continue-on-error: true
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: "release/*.exe, release/*.zip"
       - name: Create GitHub Release
