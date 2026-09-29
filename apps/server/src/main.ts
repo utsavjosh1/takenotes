@@ -161,6 +161,9 @@ export async function bootWslRuntime(): Promise<void> {
   const runtimeId = randomUUID();
   const runtime = createWslRuntimeApp({ version: appVersion() });
   const server = serve({ fetch: runtime.app.fetch, hostname: host, port });
+  // serve() returns before listen() completes: with `--port 0` the address
+  // is still null here, so wait for the listening event first.
+  await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address();
   const actualPort = typeof address === "object" && address ? address.port : port;
   if (!actualPort) {

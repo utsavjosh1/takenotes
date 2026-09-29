@@ -384,7 +384,13 @@ async function handle(operation: string, payload: unknown, sessionId: string): P
     try {
       await fs.writeFile(abs, bytes, { flag: "wx" });
     } catch (e: unknown) {
-      throw mapErrno(e as NodeJS.ErrnoException, "file");
+      const ce = e as NodeJS.ErrnoException;
+      // "wx" fails with EEXIST when the file is already there — that file
+      // is not ours, never touch it. Any other failure may have left a
+      // partial file behind, which would turn a retry into ALREADY_EXISTS:
+      // remove only what this operation could have created.
+      if (ce?.code !== "EEXIST") await fs.rm(abs, { force: true });
+      throw mapErrno(ce, "file");
     }
     const stat = await fs.stat(abs);
     const written = await fs.readFile(abs);
