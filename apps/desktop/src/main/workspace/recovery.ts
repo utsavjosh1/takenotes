@@ -367,7 +367,14 @@ export class RecoveryStore {
       } catch {
         continue;
       }
-      if (path.basename(dir) === "snapshots") {
+      // A note-path directory may itself be named `snapshots` (POSIX
+      // relative paths allow it): only treat a directory as a snapshot
+      // container when it actually holds recovery JSON records, otherwise
+      // keep traversing so nested snapshot dirs are still reached.
+      const isSnapshotDir =
+        path.basename(dir) === "snapshots" &&
+        dirents.some((d) => d.isFile() && d.name.endsWith(".json"));
+      if (isSnapshotDir) {
         for (const d of dirents) {
           if (!d.isFile() || !d.name.endsWith(".json")) continue;
           const file = path.join(dir, d.name);
