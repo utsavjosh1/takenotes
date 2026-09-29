@@ -2,12 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { WorkspaceRegistry } from "../../src/main/workspace/registry";
-import { NativeFileAdapter } from "../../src/main/workspace/file-adapter";
-import { NoteService } from "../../src/main/services/note-service";
-import { WorkspaceService } from "../../src/main/services/workspace-service";
-import { WorkspaceIndex } from "../../src/shared/index/store";
-import type { WorkspaceKind } from "../../src/shared/platform/types";
+import { WorkspaceRegistry } from "@takenotes/desktop/main/workspace/registry";
+import { NativeFileAdapter } from "@takenotes/desktop/main/workspace/file-adapter";
+import { NoteService } from "@takenotes/desktop/main/services/note-service";
+import { WorkspaceService } from "@takenotes/desktop/main/services/workspace-service";
+import { WorkspaceIndex } from "@takenotes/core/index/store";
+import type { WorkspaceKind } from "@takenotes/platform/types";
 
 /** P1-07 acceptance 2 through the production desktop seam: index entries
  * track real filesystem mutations; rebuild-after-drop matches the disk. */

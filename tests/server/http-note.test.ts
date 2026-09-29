@@ -2,17 +2,17 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createTakenotesServer } from "../../src/server/app.js";
-import { SingleOwnerAuth } from "../../src/server/auth.js";
-import { TakenotesClient } from "../../src/server/client.js";
-import { PersistentServerWorkspaceRegistry } from "../../src/server/workspace-registry.js";
-import { WorkspaceRegistry } from "../../src/main/workspace/registry.js";
-import { NativeFileAdapter } from "../../src/main/workspace/file-adapter.js";
-import { NoteService } from "../../src/main/services/note-service.js";
-import { WorkspaceService } from "../../src/main/services/workspace-service.js";
-import type { CoreWorkspace } from "../../src/core/services/note-service.js";
-import type { FileReadResult, FileRevision, IpcResult } from "../../src/shared/contracts/ipc.js";
-import type { AppError } from "../../src/shared/errors.js";
+import { createTakenotesServer } from "@takenotes/server/app";
+import { SingleOwnerAuth } from "@takenotes/server/auth";
+import { TakenotesClient } from "@takenotes/server/client";
+import { PersistentServerWorkspaceRegistry } from "@takenotes/server/workspace-registry";
+import { WorkspaceRegistry } from "@takenotes/desktop/main/workspace/registry";
+import { NativeFileAdapter } from "@takenotes/desktop/main/workspace/file-adapter";
+import { NoteService } from "@takenotes/desktop/main/services/note-service";
+import { WorkspaceService } from "@takenotes/desktop/main/services/workspace-service";
+import type { CoreWorkspace } from "@takenotes/core/services/note-service";
+import type { FileReadResult, FileRevision, IpcResult } from "@takenotes/contracts/ipc";
+import type { AppError } from "@takenotes/contracts/errors";
 import { defineNoteBehaviorSuite } from "../contracts/note-behavior-contract.js";
 
 function tempRoot(prefix: string): string {

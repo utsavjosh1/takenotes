@@ -6,7 +6,7 @@ import {
   rendererAppUrl,
   resolveFileForAppRequest,
   resolveRendererDir,
-} from "../../src/main/window.js";
+} from "@takenotes/desktop/main/window";
 
 /** Regression for v0.0.5/v0.0.6 launch-failure: the missing-bundle dialog only
  * carried the version + path, so a fresh-but-broken install on

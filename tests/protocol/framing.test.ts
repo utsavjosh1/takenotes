@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { FrameDecoder, encodeFrame } from "../../src/shared/protocol";
-import { MAX_FRAME_BYTES } from "../../src/shared/protocol-version";
+import { FrameDecoder, encodeFrame } from "@takenotes/contracts/protocol";
+import { MAX_FRAME_BYTES } from "@takenotes/contracts/protocol-version";
 
 describe("protocol framing", () => {
   it("decodes one complete frame", () => {

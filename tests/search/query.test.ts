@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSearchQuery } from "../../src/shared/search/query";
+import { parseSearchQuery } from "@takenotes/core/search/query";
 
 /** P1-08 query language: plain terms, "phrases", file:/path:/tag:/type:,
  * is:task — AND-combined. Deferred operators error as INVALID_REQUEST

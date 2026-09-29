@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildWslHelperArgv, isValidDistroId, isValidLinuxUser } from "../../src/main/wsl/launch-security";
-import { listWslUsers } from "../../src/main/wsl/user-discovery";
+import { buildWslHelperArgv, isValidDistroId, isValidLinuxUser } from "@takenotes/desktop/main/wsl/launch-security";
+import { listWslUsers } from "@takenotes/desktop/main/wsl/user-discovery";
 
 describe("buildWslHelperArgv", () => {
   it("passes distro and user as separate argv elements (no shell)", () => {

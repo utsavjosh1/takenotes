@@ -2,7 +2,7 @@
   "name": "takenotes",
   "version": "0.0.9",
   "private": true,
-  "description": "takenotes — filesystem-first local Markdown notebook for Windows with WSL awareness.",
+  "description": "takenotes \u2014 filesystem-first local Markdown notebook for Windows with WSL awareness.",
   "author": {
     "name": "Utsav Josh",
     "email": "utsav304joshi@gmail.com"
@@ -15,23 +15,23 @@
   },
   "main": "dist-electron/main/index.cjs",
   "scripts": {
-    "dev": "node scripts/dev.mjs",
+    "dev": "node tools/scripts/dev.mjs",
     "build": "npm run build:renderer && npm run build:electron && npm run build:helper",
     "build:renderer": "vite build",
-    "build:electron": "node scripts/build-main.mjs",
-    "build:helper": "node scripts/build-helper.mjs",
-    "build:server": "node scripts/build-server.mjs",
+    "build:electron": "node tools/scripts/build-main.mjs",
+    "build:helper": "node tools/scripts/build-helper.mjs",
+    "build:server": "node tools/scripts/build-server.mjs",
     "server:start": "node dist-server/server.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run",
-    "version:set": "node scripts/set-version.mjs",
-    "version:check": "node scripts/check-version.mjs",
+    "version:set": "node tools/scripts/set-version.mjs",
+    "version:check": "node tools/scripts/check-version.mjs",
     "package:win": "npm run build && electron-builder --win nsis zip --publish never",
-    "release:verify": "node scripts/verify-release.mjs",
-    "verify:packaged": "node scripts/verify-packaged.mjs",
-    "release:notes": "node scripts/release-notes.mjs",
-    "fixture:generate": "node scripts/generate-fixture.mjs",
+    "release:verify": "node tools/scripts/verify-release.mjs",
+    "verify:packaged": "node tools/scripts/verify-packaged.mjs",
+    "release:notes": "node tools/scripts/release-notes.mjs",
+    "fixture:generate": "node tools/scripts/generate-fixture.mjs",
     "audit:deps": "npm audit --omit=dev && npm audit"
   },
   "dependencies": {
@@ -47,6 +47,7 @@
     "hono": "^4.13.8",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "valibot": "1.5.0",
     "yaml": "2.9.1"
   },
   "devDependencies": {

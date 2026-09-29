@@ -6,9 +6,9 @@ import {
   RecoveryStore,
   recoveryKeyForWorkspace,
   type RecoveryRestoreWriter,
-} from "../../src/main/workspace/recovery.js";
-import { WorkspaceRegistry, type WorkspaceRegistration } from "../../src/main/workspace/registry.js";
-import type { FileRevision } from "../../src/shared/contracts/ipc.js";
+} from "@takenotes/desktop/main/workspace/recovery";
+import { WorkspaceRegistry, type WorkspaceRegistration } from "@takenotes/desktop/main/workspace/registry";
+import type { FileRevision } from "@takenotes/contracts/ipc";
 
 /**
  * H-01 / M-01 regression: recovery identity across reopen.

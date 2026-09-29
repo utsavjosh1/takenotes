@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listDistributions } from "../../src/main/wsl/distributions";
+import { listDistributions } from "@takenotes/desktop/main/wsl/distributions";
 
 /** Windows-only live evidence (runs in Windows CI, skipped on Linux):
  * listing distributions is read-only — a stopped distro stays stopped.

@@ -17,7 +17,7 @@ import {
   splitPane,
   updateDocContent,
   type DocState,
-} from "../../src/renderer/panes";
+} from "@takenotes/desktop/renderer/panes";
 
 function doc(relativePath: string, content = "x\n", extra?: Partial<DocState>): DocState {
   return {

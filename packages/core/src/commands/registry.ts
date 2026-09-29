@@ -19,6 +19,10 @@ export type CommandId =
   | "view.toggleFocus"
   | "view.nextTab"
   | "view.prevTab"
+  | "pane.splitVertical"
+  | "pane.splitHorizontal"
+  | "pane.close"
+  | "pane.focusNext"
   | "view.tab1"
   | "view.tab2"
   | "view.tab3"
@@ -93,6 +97,10 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "view.toggleFocus", title: "Toggle Focus Mode", category: "View", scope: "application" },
   { id: "view.nextTab", title: "Next Tab", category: "View", scope: "workspace" },
   { id: "view.prevTab", title: "Previous Tab", category: "View", scope: "workspace" },
+  { id: "pane.splitVertical", title: "Split Pane Right", category: "Pane", scope: "workspace" },
+  { id: "pane.splitHorizontal", title: "Split Pane Down", category: "Pane", scope: "workspace" },
+  { id: "pane.close", title: "Close Split Pane", category: "Pane", scope: "workspace" },
+  { id: "pane.focusNext", title: "Focus Next Pane", category: "Pane", scope: "workspace" },
   { id: "view.tab1", title: "Go to Tab 1", category: "View", scope: "workspace" },
   { id: "view.tab2", title: "Go to Tab 2", category: "View", scope: "workspace" },
   { id: "view.tab3", title: "Go to Tab 3", category: "View", scope: "workspace" },

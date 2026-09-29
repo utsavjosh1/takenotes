@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WorkspaceIndex } from "../../src/shared/index/store";
+import { WorkspaceIndex } from "@takenotes/core/index/store";
 
 const REV = (hash: string) => ({ hash, size: 10, mtimeMs: 1 });
 

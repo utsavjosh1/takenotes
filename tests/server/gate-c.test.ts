@@ -15,11 +15,11 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createTakenotesServer } from "../../src/server/app.js";
-import { FileOwnerAuth } from "../../src/server/auth-store.js";
-import { TakenotesClient } from "../../src/server/client.js";
-import { PersistentServerWorkspaceRegistry } from "../../src/server/workspace-registry.js";
-import { assertProductionCookieContract } from "../../src/server/cookies.js";
+import { createTakenotesServer } from "@takenotes/server/app";
+import { FileOwnerAuth } from "@takenotes/server/auth-store";
+import { TakenotesClient } from "@takenotes/server/client";
+import { PersistentServerWorkspaceRegistry } from "@takenotes/server/workspace-registry";
+import { assertProductionCookieContract } from "@takenotes/server/cookies";
 
 const PASSWORD = "correct-horse-battery-staple";
 const NEXT_PASSWORD = "rotated-horse-battery-staple";

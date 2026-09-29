@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { listDistributions } from "../../src/main/wsl/distributions";
-import { filterCandidateUsers, parsePasswd } from "../../wsl-helper/src/users";
+import { listDistributions } from "@takenotes/desktop/main/wsl/distributions";
+import { filterCandidateUsers, parsePasswd } from "@takenotes/wsl-helper/users";
 
 /** Windows-only live evidence (runs in Windows CI, skipped on Linux):
  * a real installed distro yields interactive users from its own

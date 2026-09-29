@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDocument } from "../../src/shared/index/document";
+import { parseDocument } from "@takenotes/core/index/document";
 
 function parse(body: string, rel = "note.md") {
   return parseDocument("ws1", rel, body, { hash: "h", size: body.length, mtimeMs: 1 });
@@ -11,7 +11,7 @@ describe("frontmatter", () => {
   it("no frontmatter → empty map, body fully parsed", () => {
     const e = parse("# Hello\n#tag\n");
     expect(e.frontmatter).toEqual({});
-    expect(e.title).toBeUndefined();
+    expect(e.title).toBe("Hello");
     expect(e.headings.map((h) => h.text)).toEqual(["Hello"]);
     expect(e.tags).toEqual(["tag"]);
     expect(e.searchableText).toContain("Hello");
@@ -40,7 +40,7 @@ describe("frontmatter", () => {
   it("malformed frontmatter (no closing fence) → {} and whole file stays searchable", () => {
     const e = parse("---\ntitle: [unclosed\n# Still Here\n");
     expect(e.frontmatter).toEqual({});
-    expect(e.title).toBeUndefined();
+    expect(e.title).toBe("Still Here");
     expect(e.headings.map((h) => h.text)).toEqual(["Still Here"]);
     expect(e.searchableText).toContain("Still Here");
   });
@@ -62,7 +62,20 @@ describe("frontmatter", () => {
   it("non-string scalars stay in the raw map; unknown keys preserved", () => {
     const e = parse("---\ncount: 3\nflag: true\ncustom: whatever\n---\n");
     expect(e.frontmatter).toMatchObject({ count: 3, flag: true, custom: "whatever" });
-    expect(e.title).toBeUndefined();
+    expect(e.title).toBe("note");
+  });
+});
+
+describe("title fallback (Step 3a: frontmatter → first H1 → filename stem)", () => {
+  it("frontmatter wins over H1 and filename", () => {
+    expect(parse("---\ntitle: FM\n---\n# H1\n", "dir/file.md").title).toBe("FM");
+  });
+  it("first H1 wins over filename; H2-only falls through to stem", () => {
+    expect(parse("# First\n## Second\n", "dir/file.md").title).toBe("First");
+    expect(parse("## Only H2\n", "dir/my-note.md").title).toBe("my-note");
+  });
+  it("nested path yields basename stem", () => {
+    expect(parse("no headings here\n", "Daily/2026/09/2026-09-28.md").title).toBe("2026-09-28");
   });
 });
 

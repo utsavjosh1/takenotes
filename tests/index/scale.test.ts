@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WorkspaceIndex } from "../../src/shared/index/store";
+import { WorkspaceIndex } from "@takenotes/core/index/store";
 
 /** P1-07 scale evidence: a few thousand files parse once into memory;
  * P1-08 queries then read memory, never disk. Bound is deliberately loose
