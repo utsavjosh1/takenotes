@@ -387,7 +387,9 @@ export class RecoveryStore {
             /* cleanup is bounded/best effort: ignore malformed files */
           }
         }
-        continue;
+        // Fall through to directory traversal: a snapshot dir may itself
+        // contain nested snapshot dirs (note paths can include a `snapshots`
+        // segment), so expired records below must still be reached.
       }
       for (const d of dirents) {
         if (d.isDirectory()) stack.push(path.join(dir, d.name));
