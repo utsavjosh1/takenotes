@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { commandForKeyEvent } from "../../src/shared/commands/hotkeys";
-import { acceleratorFor, shortcutMapFor } from "../../src/shared/platform/keymap";
+import { commandForKeyEvent } from "@takenotes/core/commands/hotkeys";
+import { acceleratorFor, shortcutMapFor } from "@takenotes/platform/keymap";
 
 describe("fixed P1 hotkeys", () => {
   it("maps Ctrl+P to Quick Open and Ctrl+Shift+P to commands", () => {

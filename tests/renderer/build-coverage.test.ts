@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { DirectoryEntry, FileReadResult, IpcResult } from "../../src/shared/contracts/ipc";
-import { WorkspaceIndex } from "../../src/shared/index/store";
-import { buildWorkspaceIndex, type IndexApi } from "../../apps/desktop/src/renderer/index/workspace-index";
+import type { DirectoryEntry, FileReadResult, IpcResult } from "@takenotes/contracts/ipc";
+import { WorkspaceIndex } from "@takenotes/core/index/store";
+import { buildWorkspaceIndex, type IndexApi } from "@takenotes/desktop/renderer/index/workspace-index";
 
 const WS = { workspaceId: "ws", displayName: "N", type: "windows-local", connection: "connected" } as const;
 

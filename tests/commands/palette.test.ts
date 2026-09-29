@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { COMMAND_DEFINITIONS } from "../../src/shared/commands/registry";
-import { commandQueryText, paletteModeForQuery, searchCommands } from "../../src/shared/commands/palette";
+import { COMMAND_DEFINITIONS } from "@takenotes/core/commands/registry";
+import { commandQueryText, paletteModeForQuery, searchCommands } from "@takenotes/core/commands/palette";
 
 describe("command palette query", () => {
   it("> prefix selects command mode and strips the prefix", () => {

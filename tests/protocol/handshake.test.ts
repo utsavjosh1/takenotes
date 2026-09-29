@@ -1,12 +1,12 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION } from "../../src/shared/protocol-version";
-import { HelperSupervisor } from "../../apps/desktop/src/main/wsl/helper-supervisor";
-import { HelperClient } from "../../apps/desktop/src/main/wsl/helper-client";
+import { PROTOCOL_VERSION } from "@takenotes/contracts/protocol-version";
+import { HelperSupervisor } from "@takenotes/desktop/main/wsl/helper-supervisor";
+import { HelperClient } from "@takenotes/desktop/main/wsl/helper-client";
 
 async function ensureHelperBuilt(): Promise<string> {
   const { execFileSync } = await import("node:child_process");
-  execFileSync("node", ["scripts/build-helper.mjs"], { stdio: "pipe" });
+  execFileSync("node", ["tools/scripts/build-helper.mjs"], { stdio: "pipe" });
   return path.resolve("dist-helper/helper.cjs");
 }
 

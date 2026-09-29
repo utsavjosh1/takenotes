@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync, statSync } 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createDirectory, deleteDirectory, renameDirectory } from "../../apps/desktop/src/main/workspace/local-workspace";
+import { createDirectory, deleteDirectory, renameDirectory } from "@takenotes/desktop/main/workspace/local-workspace";
 
 describe.runIf(process.platform !== "win32")("directory operations (posix local workspace)", () => {
   let root: string;

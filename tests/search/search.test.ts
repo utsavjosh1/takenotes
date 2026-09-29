@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { WorkspaceIndex } from "../../src/shared/index/store";
-import { parseSearchQuery } from "../../src/shared/search/query";
-import { searchContent, searchFilenames } from "../../src/shared/search/search";
-import { buildWorkspaceIndex, type IndexApi } from "../../apps/desktop/src/renderer/index/workspace-index";
-import type { FileReadResult } from "../../src/shared/contracts/ipc";
+import { WorkspaceIndex } from "@takenotes/core/index/store";
+import { parseSearchQuery } from "@takenotes/core/search/query";
+import { searchContent, searchFilenames } from "@takenotes/core/search/search";
+import { buildWorkspaceIndex, type IndexApi } from "@takenotes/desktop/renderer/index/workspace-index";
+import type { FileReadResult } from "@takenotes/contracts/ipc";
 
 const REV = (h: string) => ({ hash: h, size: 50, mtimeMs: 1 });
 

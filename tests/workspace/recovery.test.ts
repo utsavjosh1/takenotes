@@ -7,9 +7,9 @@ import {
   RECOVERY_THROTTLE_MS,
   RecoveryStore,
   type RecoveryRestoreWriter,
-} from "../../apps/desktop/src/main/workspace/recovery.js";
-import type { FileRevision } from "../../src/shared/contracts/ipc.js";
-import { appError } from "../../src/shared/errors.js";
+} from "@takenotes/desktop/main/workspace/recovery";
+import type { FileRevision } from "@takenotes/contracts/ipc";
+import { appError } from "@takenotes/contracts/errors";
 
 async function tmpDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "takenotes-recovery-"));

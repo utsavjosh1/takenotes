@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toHelperError } from "../../apps/desktop/src/main/ipc/helper-errors";
+import { toHelperError } from "@takenotes/desktop/main/ipc/helper-errors";
 
 /** P1-04 acceptance: structured helper error codes survive the IPC boundary.
  * `toHelperError` is the single chokepoint every WSL IPC handler uses — a

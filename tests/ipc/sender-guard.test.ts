@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isTrustedWindow } from "../../apps/desktop/src/main/ipc/guard.js";
+import { isTrustedWindow } from "@takenotes/desktop/main/ipc/guard";
 
 /** M-04: the sender boundary is uniform — foreign/untrusted senders are
  * rejected even for low-sensitivity data like platform/version. */

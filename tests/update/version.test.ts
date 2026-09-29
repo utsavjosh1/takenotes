@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareVersions, isNewerRelease, parseChecksumFile, parseVersion, windowsInstallerName } from "../../apps/desktop/src/main/update/version";
+import { compareVersions, isNewerRelease, parseChecksumFile, parseVersion, windowsInstallerName } from "@takenotes/desktop/main/update/version";
 
 describe("parseVersion", () => {
   it("parses tags and bare versions", () => {

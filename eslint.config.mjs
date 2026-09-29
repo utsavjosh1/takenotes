@@ -7,13 +7,13 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["src/main/**/*.ts", "src/preload/**/*.ts", "src/server/**/*.ts", "apps/desktop/src/main/**/*.ts", "apps/desktop/src/preload/**/*.ts", "wsl-helper/**/*.ts", "scripts/**/*.mjs", "tests/**/*.ts", "tools-aliases.ts"],
+    files: ["apps/desktop/src/main/**/*.ts", "apps/desktop/src/preload/**/*.ts", "apps/server/**/*.ts", "tools/wsl-helper/**/*.ts", "tools/scripts/**/*.mjs", "scripts/**/*.mjs", "tests/**/*.ts", "tools-aliases.ts"],
     languageOptions: {
       globals: { ...globals.node },
     },
   },
   {
-    files: ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "apps/desktop/src/renderer/**/*.ts", "apps/desktop/src/renderer/**/*.tsx", "packages/ui/src/**/*.ts", "packages/ui/src/**/*.tsx", "public/**/*.js"],
+    files: ["apps/desktop/src/renderer/**/*.ts", "apps/desktop/src/renderer/**/*.tsx", "packages/ui/src/**/*.ts", "packages/ui/src/**/*.tsx", "public/**/*.js"],
     languageOptions: {
       globals: { ...globals.browser },
     },
@@ -28,7 +28,7 @@ export default tseslint.config(
   // Defense in depth: shipped main/helper code must never gain network imports
   // by accident. Release-time scripts/ are intentionally excluded.
   {
-    files: ["src/main/**/*.ts", "src/preload/**/*.ts", "apps/desktop/src/main/**/*.ts", "apps/desktop/src/preload/**/*.ts", "wsl-helper/**/*.ts"],
+    files: ["apps/desktop/src/main/**/*.ts", "apps/desktop/src/preload/**/*.ts", "tools/wsl-helper/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -46,7 +46,7 @@ export default tseslint.config(
   },
   // Last block wins: CLI scripts may log to stdout.
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["tools/scripts/**/*.mjs", "scripts/**/*.mjs"],
     rules: {
       "no-console": "off",
     },

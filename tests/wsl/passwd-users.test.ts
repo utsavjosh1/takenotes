@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterCandidateUsers, parsePasswd } from "../../wsl-helper/src/users";
+import { filterCandidateUsers, parsePasswd } from "@takenotes/wsl-helper/users";
 
 const FIXTURE = [
   "root:x:0:0:root:/root:/bin/bash",
