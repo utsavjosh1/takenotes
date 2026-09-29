@@ -6,8 +6,8 @@ import {
   RecoveryStore,
   recoveryKeyForWorkspace,
   type RecoveryRestoreWriter,
-} from "../../src/main/workspace/recovery.js";
-import { WorkspaceRegistry, type WorkspaceRegistration } from "../../src/main/workspace/registry.js";
+} from "../../apps/desktop/src/main/workspace/recovery.js";
+import { WorkspaceRegistry, type WorkspaceRegistration } from "../../apps/desktop/src/main/workspace/registry.js";
 import type { FileRevision } from "../../src/shared/contracts/ipc.js";
 
 /**

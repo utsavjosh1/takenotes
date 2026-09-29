@@ -3,12 +3,12 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { HelperClient } from "../../src/main/wsl/helper-client";
+import { HelperClient } from "../../apps/desktop/src/main/wsl/helper-client";
 import { PROTOCOL_VERSION } from "../../src/shared/protocol-version";
-import { WorkspaceRegistry } from "../../src/main/workspace/registry";
-import { NativeFileAdapter } from "../../src/main/workspace/file-adapter";
-import { NoteService } from "../../src/main/services/note-service";
-import { WorkspaceService } from "../../src/main/services/workspace-service";
+import { WorkspaceRegistry } from "../../apps/desktop/src/main/workspace/registry";
+import { NativeFileAdapter } from "../../apps/desktop/src/main/workspace/file-adapter";
+import { NoteService } from "../../apps/desktop/src/main/services/note-service";
+import { WorkspaceService } from "../../apps/desktop/src/main/services/workspace-service";
 
 async function ensureHelperBuilt(): Promise<string> {
   const { execFileSync } = await import("node:child_process");

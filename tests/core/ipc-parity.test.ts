@@ -11,10 +11,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { WorkspaceRegistry } from "../../src/main/workspace/registry.js";
-import { NativeFileAdapter } from "../../src/main/workspace/file-adapter.js";
-import { NoteService } from "../../src/main/services/note-service.js";
-import { WorkspaceService } from "../../src/main/services/workspace-service.js";
+import { WorkspaceRegistry } from "../../apps/desktop/src/main/workspace/registry.js";
+import { NativeFileAdapter } from "../../apps/desktop/src/main/workspace/file-adapter.js";
+import { NoteService } from "../../apps/desktop/src/main/services/note-service.js";
+import { WorkspaceService } from "../../apps/desktop/src/main/services/workspace-service.js";
 
 function makeNotes(): { workspaces: WorkspaceService; notes: NoteService } {
   const workspaces = new WorkspaceService(new WorkspaceRegistry());

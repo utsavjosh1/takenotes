@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import type { CommandListResult, DirectoryEntry, RecoverySnapshotMeta, SearchMatch, WorkspaceInfo, WslDistribution, WslLinuxUser } from "../shared/contracts/ipc";
+import type { CommandListResult, DirectoryEntry, RecoverySnapshotMeta, SearchMatch, WorkspaceInfo, WslDistribution, WslLinuxUser } from "@takenotes/contracts/ipc";
 import { usePlatform } from "./hooks/use-platform";
-import { isWslKind, moveToTrashLabel, revealLabel, trashName } from "../shared/platform/filesystem";
-import { COMMAND_DEFINITIONS, type CommandId } from "../shared/commands/registry";
-import { TitleBar, ActivityRail, StatusBar } from "./components/chrome";
+import { isWslKind, moveToTrashLabel, revealLabel, trashName } from "@takenotes/platform/filesystem";
+import { COMMAND_DEFINITIONS, type CommandId } from "@takenotes/core/commands/registry";
+import { TitleBar, ActivityRail, StatusBar, type SidebarView } from "./components/chrome";
 import { PaneView } from "./components/pane-view";
 import { buildWorkspaceIndex, indexStatusMessage, workspaceIndex } from "./index/workspace-index";
-import { commandForKeyEvent } from "../shared/commands/hotkeys";
-import { indexedEntryToQuickOpenItem } from "../shared/commands/palette";
-import { parseSearchQuery } from "../shared/search/query";
-import { searchContent, searchFilenames } from "../shared/search/search";
+import { commandForKeyEvent } from "@takenotes/core/commands/hotkeys";
+import { indexedEntryToQuickOpenItem } from "@takenotes/core/commands/palette";
+import { parseSearchQuery } from "@takenotes/core/search/query";
+import { searchContent, searchFilenames } from "@takenotes/core/search/search";
 import { FileTree, type TreeState } from "./components/tree";
 import { SearchPanel, useDebouncedValue } from "./components/search";
 import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
@@ -113,7 +113,7 @@ export default function App(): JSX.Element {
   // saving one tab never alters another's state. Layout is window-local,
   // never persisted.
   const [layout, setLayout] = useState(() => createLayout());
-  const [view, setView] = useState<"files" | "search">("files");
+  const [view, setView] = useState<SidebarView>("files");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem("takenotes.sidebarWidth") ?? 240) || 240);
   const [palette, setPalette] = useState<{ initialQuery: string } | null>(null);
@@ -1136,7 +1136,7 @@ export default function App(): JSX.Element {
   if (!workspace) {
     return (
       <div className="app">
-        <TitleBar workspace={null} platform={platform} onQuickOpen={() => {}} onOpenWindows={() => void openLocal()} onOpenWsl={() => void openWslDialog()} />
+        <TitleBar workspace={null} platform={platform} wslEnabled={settings.wslEnabled} onQuickOpen={() => {}} onOpenWindows={() => void openLocal()} onOpenWsl={() => void openWslDialog()} />
         <div className="empty">
           <img src={stackedDarkUrl} className="brand-logo only-dark" alt="takenotes" draggable={false} />
           <img src={stackedLightUrl} className="brand-logo only-light" alt="takenotes" draggable={false} />
@@ -1173,7 +1173,7 @@ export default function App(): JSX.Element {
   return (
     <div className="app">
       {!focusMode && (
-        <TitleBar workspace={workspace} platform={platform} onQuickOpen={() => executeCommand("quickOpen.open")} onOpenWindows={() => void openLocal()} onOpenWsl={() => void openWslDialog()} />
+        <TitleBar workspace={workspace} platform={platform} wslEnabled={settings.wslEnabled} onQuickOpen={() => executeCommand("quickOpen.open")} onOpenWindows={() => void openLocal()} onOpenWsl={() => void openWslDialog()} />
       )}
       <div className="body">
         {!focusMode && (
@@ -1417,6 +1417,7 @@ export default function App(): JSX.Element {
           commands={commands}
           recentCommands={recentCommands}
           onOpenFile={(rel) => { rememberCommand("quickOpen.open"); void openFile(rel); }}
+          onCreateFile={(name) => { rememberCommand("quickOpen.open"); setView("files"); setSidebarOpen(true); setCreating({ dir: "", folder: false }); setCreateName(name); setPalette(null); }}
           onClose={() => setPalette(null)}
         />
       )}

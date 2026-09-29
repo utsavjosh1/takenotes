@@ -1,0 +1,92 @@
+/* Generated from src/theme.ts. Run npm run ui:tokens; do not edit by hand. */
+
+:root {
+  --tn-space-1: 4px;
+  --tn-space-2: 8px;
+  --tn-space-3: 12px;
+  --tn-space-4: 16px;
+  --tn-space-5: 20px;
+  --tn-space-6: 24px;
+  --tn-space-8: 32px;
+  --tn-space-10: 40px;
+  --tn-space-12: 48px;
+  --tn-space-16: 64px;
+  --tn-radius-row: 6px;
+  --tn-radius-control: 8px;
+  --tn-radius-menu: 12px;
+  --tn-radius-dialog: 16px;
+  --tn-font-size-secondary: 0.75rem;
+  --tn-font-size-control: 0.875rem;
+  --tn-font-size-heading: 1.25rem;
+  --tn-font-size-body: 1rem;
+  --tn-font-size-touch-control: 1rem;
+  --tn-font-size-touch-body: 1.0625rem;
+  --tn-line-height-ui: 1.4;
+  --tn-line-height-heading: 1.3;
+  --tn-line-height-body: 1.65;
+  --tn-target-control: 36px;
+  --tn-target-icon: 32px;
+  --tn-target-row: 32px;
+  --tn-target-touch: 48px;
+  --tn-target-touch-row: 52px;
+}
+
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --tn-surface-app: #faf6ee;
+  --tn-surface-sidebar: #f3ecdd;
+  --tn-surface-editor: #fffdf7;
+  --tn-surface-overlay: #fffdf7;
+  --tn-surface-input: #fffdf7;
+  --tn-surface-hover: #ece4d1;
+  --tn-surface-selected: #ece8ff;
+  --tn-text-primary: #191817;
+  --tn-text-secondary: #4c4a45;
+  --tn-text-muted: #6c6558;
+  --tn-border-subtle: #e5dcc8;
+  --tn-border-control: #8a806d;
+  --tn-accent: #4f41d6;
+  --tn-accent-hover: #4032ba;
+  --tn-action-fill: #1d1c1a;
+  --tn-action-text: #fffdf7;
+  --tn-success-text: #356b2f;
+  --tn-success-surface: #e7f4df;
+  --tn-warning-text: #805500;
+  --tn-warning-surface: #fff3d1;
+  --tn-danger-text: #a53240;
+  --tn-danger-surface: #fcebed;
+  --tn-selection: #e3dcff;
+  --tn-code-surface: #f3ecdd;
+  --tn-highlight-surface: #ffdf8e;
+  --tn-scrollbar: #cbbfa6;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --tn-surface-app: #151310;
+  --tn-surface-sidebar: #201c16;
+  --tn-surface-editor: #191613;
+  --tn-surface-overlay: #26211a;
+  --tn-surface-input: #191613;
+  --tn-surface-hover: #322b22;
+  --tn-surface-selected: #342b50;
+  --tn-text-primary: #f4ecd9;
+  --tn-text-secondary: #d9cfae;
+  --tn-text-muted: #b7ad9b;
+  --tn-border-subtle: #38322a;
+  --tn-border-control: #887d69;
+  --tn-accent: #ad9fff;
+  --tn-accent-hover: #c3b9ff;
+  --tn-action-fill: #f4ecd9;
+  --tn-action-text: #191817;
+  --tn-success-text: #b9e5a8;
+  --tn-success-surface: #20321f;
+  --tn-warning-text: #ffdf8e;
+  --tn-warning-surface: #352a14;
+  --tn-danger-text: #ffadb5;
+  --tn-danger-surface: #3b2025;
+  --tn-selection: #493968;
+  --tn-code-surface: #26211a;
+  --tn-highlight-surface: #59451b;
+  --tn-scrollbar: #5a5042;
+}

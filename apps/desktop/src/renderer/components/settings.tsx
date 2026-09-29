@@ -4,7 +4,7 @@ import { Icon } from "./icons";
 import horizontalDarkUrl from "../assets/brand/takenotes-horizontal-dark.svg";
 import horizontalLightUrl from "../assets/brand/takenotes-horizontal-light.svg";
 import type { PlatformState } from "../hooks/use-platform";
-import type { CommandId } from "../../shared/commands/registry";
+import type { CommandId } from "@takenotes/core/commands/registry";
 
 const TABS = ["General", "Appearance", "Editor", "Files", "Shortcuts", "About"] as const;
 
