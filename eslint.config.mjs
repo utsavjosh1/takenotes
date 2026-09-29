@@ -3,17 +3,17 @@ import tseslint from "typescript-eslint";
 import globals from "globals";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "dist-electron/**", "dist-helper/**", "dist-server/**", "release/**", "coverage/**", "node_modules/**", "resources/wsl/linux-x64/**"] },
+  { ignores: ["dist/**", "dist-electron/**", "dist-helper/**", "dist-server/**", "release/**", "coverage/**", "node_modules/**", "reference/**", "resources/wsl/linux-x64/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["apps/desktop/src/main/**/*.ts", "apps/desktop/src/preload/**/*.ts", "apps/server/**/*.ts", "tools/wsl-helper/**/*.ts", "tools/scripts/**/*.mjs", "scripts/**/*.mjs", "tests/**/*.ts", "tools-aliases.ts"],
+    files: ["apps/desktop/src/main/**/*.ts", "apps/desktop/src/preload/**/*.ts", "apps/server/**/*.ts", "tools/wsl-helper/**/*.ts", "tools/scripts/**/*.mjs", "tests/**/*.ts"],
     languageOptions: {
       globals: { ...globals.node },
     },
   },
   {
-    files: ["apps/desktop/src/renderer/**/*.ts", "apps/desktop/src/renderer/**/*.tsx", "packages/ui/src/**/*.ts", "packages/ui/src/**/*.tsx", "public/**/*.js"],
+    files: ["apps/desktop/src/renderer/**/*.ts", "apps/desktop/src/renderer/**/*.tsx", "apps/web/src/**/*.ts", "apps/web/src/**/*.tsx", "packages/ui/src/**/*.ts", "packages/ui/src/**/*.tsx", "tests/ui/**/*.ts", "tests/ui/**/*.tsx", "public/**/*.js"],
     languageOptions: {
       globals: { ...globals.browser },
     },
@@ -46,7 +46,7 @@ export default tseslint.config(
   },
   // Last block wins: CLI scripts may log to stdout.
   {
-    files: ["tools/scripts/**/*.mjs", "scripts/**/*.mjs"],
+    files: ["tools/scripts/**/*.mjs"],
     rules: {
       "no-console": "off",
     },

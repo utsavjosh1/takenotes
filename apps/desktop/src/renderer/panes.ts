@@ -1,200 +1,126 @@
 import type { TabState } from "./components/types";
 
-/** Shared open-document registry + two-pane layout (P1-06).
+/** Single-window tab layout.
  *
- * One `DocState` per open file (`workspaceId:relativePath`): dirty,
- * revision baseline, conflict, and save progress live on the DOCUMENT, so
- * two panes on the same file always agree (edit in one → dirty in both;
- * save in either → both clean with the new revision). Panes only hold
- * open-key lists + their own active key. Pure functions — no React —
- * tested in tests/renderer/panes.test.ts.
- *
- * Phase 1 caps at TWO panes: a simple side-by-side model, not an IDE
- * layout tree. Layout is window-local and never persisted. No file
- * semantics change here: save/conflict behavior stays P1-05-owned.
+ * Roadmap Step 1 explicitly excludes editor splits/stacked panes/pop-outs.
+ * This module therefore models exactly one tab strip and one active editor.
+ * Documents still carry dirty/revision/conflict state independently so save
+ * or conflict in one tab never leaks into another.
  */
 export type DocState = TabState;
 
-export type PaneState = {
-  id: string;
+export type TabLayout = {
+  docs: Record<string, DocState>;
   openKeys: string[];
   activeKey: string | null;
+  /** Most-recently closed relative paths for Ctrl+Shift+T. */
+  closedTabs: string[];
 };
 
-export type PaneLayout = {
-  docs: Record<string, DocState>;
-  panes: PaneState[];
-  activePaneId: string;
-  orientation: "horizontal" | "vertical";
-};
+export type PaneLayout = TabLayout;
 
-let paneSeq = 0;
-
-function nextPaneId(): string {
-  paneSeq += 1;
-  return `pane-${paneSeq}-${Date.now().toString(36)}`;
-}
-
-function paneOf(layout: PaneLayout, paneId: string): PaneState {
-  const pane = layout.panes.find((p) => p.id === paneId);
-  if (!pane) throw new Error(`Unknown pane: ${paneId}`);
-  return pane;
-}
-
-/** Docs no pane references anymore — safe to drop (drafts, not docs, are
- * the unsaved-content safety net; see closeDocInPane). */
-function pruneOrphanDocs(layout: PaneLayout): PaneLayout {
-  const referenced = new Set<string>();
-  for (const p of layout.panes) for (const k of p.openKeys) referenced.add(k);
-  const docs: Record<string, DocState> = {};
-  for (const [k, d] of Object.entries(layout.docs)) {
-    if (referenced.has(k)) docs[k] = d;
-  }
-  return { ...layout, docs };
-}
-
-function patchDoc(layout: PaneLayout, key: string, patch: Partial<DocState>): PaneLayout {
+function patchDoc(layout: TabLayout, key: string, patch: Partial<DocState>): TabLayout {
   const doc = layout.docs[key];
   if (!doc) return layout;
   return { ...layout, docs: { ...layout.docs, [key]: { ...doc, ...patch } } };
 }
 
-export function createLayout(): PaneLayout {
-  const id = nextPaneId();
-  return { docs: {}, panes: [{ id, openKeys: [], activeKey: null }], activePaneId: id, orientation: "vertical" };
+function pruneDocs(layout: TabLayout): TabLayout {
+  const keep = new Set(layout.openKeys);
+  const docs: Record<string, DocState> = {};
+  for (const [key, doc] of Object.entries(layout.docs)) {
+    if (keep.has(key)) docs[key] = doc;
+  }
+  return { ...layout, docs };
 }
 
-/** Open (or reveal, if already open) a document in a pane. An already-open
- * doc keeps its dirty/conflict/baseline state — reopening never resets it. */
-export function openDocInPane(layout: PaneLayout, paneId: string, doc: DocState): PaneLayout {
-  const pane = paneOf(layout, paneId);
+export function createLayout(): TabLayout {
+  return { docs: {}, openKeys: [], activeKey: null, closedTabs: [] };
+}
+
+export function openDoc(layout: TabLayout, doc: DocState): TabLayout {
   const docs = layout.docs[doc.key] ? layout.docs : { ...layout.docs, [doc.key]: doc };
-  const openKeys = pane.openKeys.includes(doc.key) ? pane.openKeys : [...pane.openKeys, doc.key];
-  const panes = layout.panes.map((p) => (p.id === paneId ? { ...p, openKeys, activeKey: doc.key } : p));
-  return { ...layout, docs, panes, activePaneId: paneId };
-}
-
-export function activateDoc(layout: PaneLayout, paneId: string, key: string): PaneLayout {
-  const pane = paneOf(layout, paneId);
-  if (!pane.openKeys.includes(key)) return layout;
+  const openKeys = layout.openKeys.includes(doc.key) ? layout.openKeys : [...layout.openKeys, doc.key];
   return {
     ...layout,
-    activePaneId: paneId,
-    panes: layout.panes.map((p) => (p.id === paneId ? { ...p, activeKey: key } : p)),
+    docs,
+    openKeys,
+    activeKey: doc.key,
+    closedTabs: layout.closedTabs.filter((rel) => rel !== doc.relativePath),
   };
 }
 
-/** Explicit active pane: save/close/open always name their pane — never
- * whichever component rendered last. */
-export function activatePane(layout: PaneLayout, paneId: string): PaneLayout {
-  paneOf(layout, paneId);
-  return { ...layout, activePaneId: paneId };
+export function activateDoc(layout: TabLayout, key: string): TabLayout {
+  if (!layout.openKeys.includes(key)) return layout;
+  return { ...layout, activeKey: key };
 }
 
-export function activePane(layout: PaneLayout): PaneState {
-  return paneOf(layout, layout.activePaneId);
+export function activeDoc(layout: TabLayout): DocState | null {
+  if (!layout.activeKey) return null;
+  return layout.docs[layout.activeKey] ?? null;
 }
 
-/** Active pane → active key → shared doc (both panes see the same object). */
-export function activeDoc(layout: PaneLayout): DocState | null {
-  const pane = layout.panes.find((p) => p.id === layout.activePaneId);
-  const key = pane?.activeKey;
-  if (!key) return null;
-  return layout.docs[key] ?? null;
-}
-
-export function paneDocs(layout: PaneLayout, paneId: string): DocState[] {
-  const pane = paneOf(layout, paneId);
-  const out: DocState[] = [];
-  for (const k of pane.openKeys) {
-    const d = layout.docs[k];
-    if (d) out.push(d);
-  }
-  return out;
-}
-
-/** Split a pane. Orientation names the SPLIT line (VS Code convention):
- * "vertical" = side-by-side panes (Split right), "horizontal" = stacked
- * (Split down). Phase 1 caps at two panes; further splits are refused
- * (returned unchanged). The new pane opens on the source pane's active
- * document — the acceptance-1 setup in one action. */
-export function splitPane(layout: PaneLayout, paneId: string, orientation: "horizontal" | "vertical"): PaneLayout {
-  if (layout.panes.length >= 2) return layout;
-  const source = paneOf(layout, paneId);
-  const id = nextPaneId();
-  const openKeys = source.activeKey ? [source.activeKey] : [];
-  const next: PaneState = { id, openKeys, activeKey: source.activeKey };
-  return { ...layout, panes: [...layout.panes, next], activePaneId: id, orientation };
-}
-
-/** Close a pane; the last pane cannot close. Docs referenced nowhere else
- * are pruned; the surviving pane keeps its own state untouched. */
-export function closePane(layout: PaneLayout, paneId: string): PaneLayout {
-  if (layout.panes.length <= 1) return layout;
-  paneOf(layout, paneId);
-  const panes = layout.panes.filter((p) => p.id !== paneId);
-  const activePaneId = layout.activePaneId === paneId ? panes[0]!.id : layout.activePaneId;
-  return pruneOrphanDocs({ ...layout, panes, activePaneId });
+export function tabDocs(layout: TabLayout): DocState[] {
+  return layout.openKeys.map((key) => layout.docs[key]).filter((doc): doc is DocState => Boolean(doc));
 }
 
 export type CloseResult = {
-  layout: PaneLayout;
-  /** The closed doc (state at close) — the caller flushes it to the draft
-   * store when dirty, so dirty tabs are never silently discarded. Null
-   * when the key wasn't open (layout returned unchanged). */
+  layout: TabLayout;
   closed: DocState | null;
-  /** True when no remaining pane references the doc. */
   orphaned: boolean;
 };
 
-/** Close one document in one pane. Other panes on the same file are
- * unaffected; the doc entry survives while referenced anywhere. */
-export function closeDocInPane(layout: PaneLayout, paneId: string, key: string): CloseResult {
-  const pane = paneOf(layout, paneId);
+export function closeDoc(layout: TabLayout, key: string): CloseResult {
   const closed = layout.docs[key] ?? null;
-  if (!closed) return { layout, closed, orphaned: false };
-  const openKeys = pane.openKeys.filter((k) => k !== key);
-  let next: PaneLayout = {
+  if (!closed) return { layout, closed: null, orphaned: false };
+  const index = layout.openKeys.indexOf(key);
+  const openKeys = layout.openKeys.filter((k) => k !== key);
+  const activeKey = layout.activeKey === key ? (openKeys[Math.min(index, openKeys.length - 1)] ?? null) : layout.activeKey;
+  const next = pruneDocs({
     ...layout,
-    panes: layout.panes.map((p) =>
-      p.id === paneId
-        ? { ...p, openKeys, activeKey: p.activeKey === key ? (openKeys[Math.min(openKeys.length - 1, Math.max(0, pane.openKeys.indexOf(key)))] ?? null) : p.activeKey }
-        : p,
-    ),
-  };
-  const stillReferenced = next.panes.some((p) => p.openKeys.includes(key));
-  next = pruneOrphanDocs(next);
-  return { layout: next, closed, orphaned: !stillReferenced };
+    openKeys,
+    activeKey,
+    closedTabs: [closed.relativePath, ...layout.closedTabs.filter((rel) => rel !== closed.relativePath)].slice(0, 20),
+  });
+  return { layout: next, closed, orphaned: true };
 }
 
-export function updateDocContent(layout: PaneLayout, key: string, content: string): PaneLayout {
+export function popClosedTab(layout: TabLayout): { layout: TabLayout; relativePath: string | null } {
+  const [relativePath, ...closedTabs] = layout.closedTabs;
+  return { layout: { ...layout, closedTabs }, relativePath: relativePath ?? null };
+}
+
+export function updateDocContent(layout: TabLayout, key: string, content: string): TabLayout {
   return patchDoc(layout, key, { content, dirty: true });
 }
 
-export function markSaving(layout: PaneLayout, key: string, saving: boolean): PaneLayout {
+export function markSaving(layout: TabLayout, key: string, saving: boolean): TabLayout {
   return patchDoc(layout, key, { saving });
 }
 
-export function markSaved(layout: PaneLayout, key: string, revisionHash: string, savedAt: string): PaneLayout {
+export function markSaved(layout: TabLayout, key: string, revisionHash: string, savedAt: string): TabLayout {
   return patchDoc(layout, key, { dirty: false, conflict: false, saving: false, revisionHash, savedAt });
 }
 
-export function markConflict(layout: PaneLayout, key: string): PaneLayout {
+export function markConflict(layout: TabLayout, key: string): TabLayout {
   return patchDoc(layout, key, { conflict: true, saving: false });
 }
 
-/** Reload-from-disk resolution: fresh content becomes the clean baseline. */
-export function resolveDoc(layout: PaneLayout, key: string, content: string, revisionHash: string): PaneLayout {
+export function resolveDoc(layout: TabLayout, key: string, content: string, revisionHash: string): TabLayout {
   return patchDoc(layout, key, { content, dirty: false, conflict: false, saving: false, revisionHash });
+}
+
+export function togglePinned(layout: TabLayout, key: string): TabLayout {
+  const doc = layout.docs[key];
+  if (!doc) return layout;
+  return patchDoc(layout, key, { pinned: !doc.pinned });
 }
 
 function docKey(workspaceId: string, relativePath: string): string {
   return `${workspaceId}:${relativePath}`;
 }
 
-/** Rename remaps open keys in place: content, dirty, and revision baselines
- * survive — switching/reopening never resets them. */
-export function applyRename(layout: PaneLayout, workspaceId: string, oldRel: string, newRel: string): PaneLayout {
+export function applyRename(layout: TabLayout, workspaceId: string, oldRel: string, newRel: string): TabLayout {
   const oldKey = docKey(workspaceId, oldRel);
   const newKey = docKey(workspaceId, newRel);
   const doc = layout.docs[oldKey];
@@ -202,25 +128,42 @@ export function applyRename(layout: PaneLayout, workspaceId: string, oldRel: str
   const docs = { ...layout.docs };
   delete docs[oldKey];
   docs[newKey] = { ...doc, key: newKey, relativePath: newRel };
-  const panes = layout.panes.map((p) => ({
-    ...p,
-    openKeys: p.openKeys.map((k) => (k === oldKey ? newKey : k)),
-    activeKey: p.activeKey === oldKey ? newKey : p.activeKey,
-  }));
-  return { ...layout, docs, panes };
+  return {
+    ...layout,
+    docs,
+    openKeys: layout.openKeys.map((key) => (key === oldKey ? newKey : key)),
+    activeKey: layout.activeKey === oldKey ? newKey : layout.activeKey,
+    closedTabs: layout.closedTabs.map((rel) => (rel === oldRel ? newRel : rel)),
+  };
 }
 
-/** File/folder delete drops the affected docs (exact key + folder prefix). */
-export function removeDocsForEntry(layout: PaneLayout, workspaceId: string, entryRel: string): PaneLayout {
+export function removeDocsForEntry(layout: TabLayout, workspaceId: string, entryRel: string): TabLayout {
   const prefix = `${workspaceId}:${entryRel}`;
-  const drop = (k: string): boolean => k === prefix || k.startsWith(`${prefix}/`);
-  const docs: Record<string, DocState> = {};
-  for (const [k, d] of Object.entries(layout.docs)) {
-    if (!drop(k)) docs[k] = d;
-  }
-  const panes = layout.panes.map((p) => {
-    const openKeys = p.openKeys.filter((k) => !drop(k));
-    return { ...p, openKeys, activeKey: p.activeKey && drop(p.activeKey) ? (openKeys[0] ?? null) : p.activeKey };
-  });
-  return { ...layout, docs, panes };
+  const dropKey = (key: string): boolean => key === prefix || key.startsWith(`${prefix}/`);
+  const openKeys = layout.openKeys.filter((key) => !dropKey(key));
+  const activeKey = layout.activeKey && dropKey(layout.activeKey) ? (openKeys[0] ?? null) : layout.activeKey;
+  const next = pruneDocs({ ...layout, openKeys, activeKey });
+  const closedTabs = next.closedTabs.filter((rel) => rel !== entryRel && !rel.startsWith(`${entryRel}/`));
+  return { ...next, closedTabs };
 }
+
+export function reorderTabs(layout: TabLayout, from: string, to: string): TabLayout {
+  const a = layout.openKeys.indexOf(from);
+  const b = layout.openKeys.indexOf(to);
+  if (a < 0 || b < 0) return layout;
+  const openKeys = [...layout.openKeys];
+  const [moved] = openKeys.splice(a, 1);
+  openKeys.splice(b, 0, moved!);
+  return { ...layout, openKeys };
+}
+
+export function activateTabByIndex(layout: TabLayout, index: number): TabLayout {
+  const key = layout.openKeys[index];
+  return key ? activateDoc(layout, key) : layout;
+}
+
+// Compatibility aliases for older callers/tests while the renderer finishes
+// the split-pane cleanup. They all target the single tab strip.
+export const openDocInPane = (layout: TabLayout, _paneId: string, doc: DocState): TabLayout => openDoc(layout, doc);
+export const closeDocInPane = (layout: TabLayout, _paneId: string, key: string): CloseResult => closeDoc(layout, key);
+export const paneDocs = (layout: TabLayout, _paneId?: string): DocState[] => tabDocs(layout);

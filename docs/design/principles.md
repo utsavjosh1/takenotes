@@ -1,5 +1,7 @@
 # Design principles — takenotes
 
+> For the implementation-ready desktop, mobile, and web direction, start with the [UI/UX design guide](ui-ux/README.md). These original editor-first principles remain useful context.
+
 > Does this help the user find a note, understand where they are, or continue writing?
 
 The editor is the product. Everything else supports the editor.

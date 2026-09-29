@@ -56,4 +56,4 @@ emoji) are preserved byte-exact, never rewritten (§24).
 - Tier 2 distros/desktops are best-effort until tested (see
   `support-matrix.md`).
 - Real Wayland/X11 + DEB/RPM validation needs Linux desktop hardware or
-  VMs with GPU-accelerated sessions (`final-platform-audit.md`).
+  VMs with GPU-accelerated sessions (`../archive/status/final-platform-audit.md`).

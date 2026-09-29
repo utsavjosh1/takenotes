@@ -1,5 +1,7 @@
 # States — takenotes
 
+> Earlier desktop copy reference. Use the proposed [state inventory and copy contracts](ui-ux/components-and-states.md#3-required-state-inventory-and-copy) for new UI. In particular, never claim unsaved text is safe locally unless durable recovery has actually succeeded.
+
 Sentence case. Short, direct, human. Every error: what happened, is work safe,
 what to do.
 

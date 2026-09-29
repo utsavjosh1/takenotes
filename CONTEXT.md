@@ -47,6 +47,46 @@ A task's deadline date. Never rewritten by calendar drags.
 **Scheduled**:
 A task's calendar time block. Rewritten when the item is dragged on the calendar; distinct from Due.
 
+### Index (Step 3a lifecycle)
+
+**Document index**:
+Per-workspace in-memory parse of notes, rebuildable from disk. Keyed `workspaceId + relativePath`; workspaces never share entries.
+_Avoid_: document-index.ts
+
+**Title**:
+Frontmatter `title`, else first `# ` heading, else filename stem.
+
+**searchableText**:
+Title + aliases + headings + tags + body. Frontmatter excluded.
+
+**Anchor**:
+Existing trailing `^id` preserved in the index. Indexing never assigns IDs.
+
+**Index bounds**:
+Bulk build caps at 2000 files (`truncated`) and skips files over 1 MiB (`skipped`), both surfaced via status notice. Neither makes the workspace unusable.
+
+**Index lifecycle**:
+Open parses and builds, writes re-parse, renames re-key, deletes drop, watcher events refresh, rebuild restores. Revision hash guards stale parses.
+
+**Frontmatter**:
+The raw YAML map at the top of a note. Storage truth; reads never normalize it.
+
+**Properties**:
+The typed interpretation of frontmatter through the registry. A lossless lens — `tags: single`, `tags: [a, b]`, and missing `tags` stay distinct on disk.
+
+**Property type**:
+Per-name interpretation (`text`, `list-text`, `number`, `checkbox`, `date`, `datetime`, `tags`) from an app-data registry keyed by workspace. Only an explicit patch coerces a value; the registry never rewrites on read.
+
+### Organization
+
+**Quick Open**:
+Fuzzy file opener by name or alias with create-on-no-match.
+_Avoid_: Quick Switcher
+
+**Command Palette**:
+Fuzzy command runner by title, opened with `>` mode.
+_Avoid_: Palette
+
 ### Updates and testing
 
 **Update-check**:

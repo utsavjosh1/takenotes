@@ -93,4 +93,4 @@ User Markdown files are authoritative; the app never moves them into a database.
   skip files over 1 MiB (`skipped`). Either bound sets a user-visible
   notice in the status strip and Search panel — never a silent partial index.
 - **P1-11 is NOT VERIFIED**: real Windows 11 + WSL2 evidence is still pending
-  (see `docs/tickets/P1-11-windows-verification.md`).
+  (see `archive/tickets/P1-11-windows-verification.md`).

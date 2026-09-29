@@ -14,7 +14,7 @@ describe("command palette query", () => {
   });
 
   it("matches commands by category and id fallback", () => {
-    expect(searchCommands(COMMAND_DEFINITIONS, "> pane").map((c) => c.id)).toContain("pane.splitVertical");
+    expect(searchCommands(COMMAND_DEFINITIONS, "> tab").map((c) => c.id)).toContain("note.reopenClosed");
     expect(searchCommands(COMMAND_DEFINITIONS, "> quickOpen.open").map((c) => c.id)).toEqual(["quickOpen.open"]);
   });
 

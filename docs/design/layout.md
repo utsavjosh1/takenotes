@@ -1,5 +1,7 @@
 # Layout — takenotes
 
+> Earlier desktop layout reference. For the proposed cross-platform redesign, use the [UI/UX guide](ui-ux/README.md) and its [desktop layout specification](ui-ux/desktop.md). Target dimensions become authoritative as each migration slice lands.
+
 ```
 ┌─────────────────────────────────────────────────┐
 │ TitleBar 40px: workspace · Search… Ctrl P · win │

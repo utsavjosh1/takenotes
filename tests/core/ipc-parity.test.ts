@@ -5,7 +5,7 @@
  * same args, same `FileReadResult` shape, same `AppError` codes.
  * Uses the production `NoteService + WorkspaceService + NativeFileAdapter`
  * against a tempdir — no Electron needed. Real `ipcMain.handle` wiring
- * stays transport-only in `src/main/ipc/register.ts`.
+ * stays transport-only in `apps/desktop/src/main/ipc/register.ts`.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

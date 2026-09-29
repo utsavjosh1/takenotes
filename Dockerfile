@@ -6,9 +6,11 @@ COPY package.json package-lock.json ./
 # Full install here: esbuild (devDep) bundles the server; the runtime stage
 # ships only the self-contained bundle, no node_modules at all.
 RUN npm ci
-COPY src ./src
-COPY scripts ./scripts
-RUN node scripts/build-server.mjs
+COPY apps ./apps
+COPY packages ./packages
+COPY tools ./tools
+COPY tsconfig.json ./tsconfig.json
+RUN node tools/scripts/build-server.mjs
 
 FROM node:24-slim AS runtime
 ENV NODE_ENV=production \
