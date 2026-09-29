@@ -192,7 +192,7 @@ Text such as “Both versions are safe” is allowed only when both versions are
 - Preserve native text selection, context menus where appropriate, clipboard, undo/redo, IME composition, and spellcheck preferences.
 - Typography or chrome rerenders must not recreate the editor and lose undo history. Treat any necessary editor remount as a tested behavior change.
 - Rendering Markdown never interprets raw user HTML without a reviewed sanitizer/security policy. Unsafe links do not execute in the app context.
-- Raw Markdown editing and rendered reading are distinct modes; reading never silently modifies the file.
+- Raw Markdown editing and rendered reading are distinct modes in read-only views; reading never silently modifies the file. Desktop editing follows ADR-0015's single editable CodeMirror surface (no separate Read/Edit mode).
 - Formatting actions operate on the current selection and are undoable. Mobile toolbars insert Markdown, not hidden rich-text data.
 - A load error is not an empty string document. Do not allow an unsuccessful read to become a successful save of an empty file.
 

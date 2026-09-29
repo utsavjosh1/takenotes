@@ -34,10 +34,13 @@ export function Dialog({ title, onClose, children, footer, size = "small", initi
       dialog.close();
       document.body.style.overflow = overflow;
       // showModal normally restores this itself. Avoid focusing behind a
-      // replacement modal, or an opener removed by navigation.
-      if (opener instanceof HTMLElement && opener.isConnected && !document.querySelector("dialog[open]")) {
-        opener.focus({ preventScroll: true });
-      }
+      // replacement modal, or an opener removed by navigation. Deferred: the
+      // browser may reset focus to <body> while React is still unmounting.
+      requestAnimationFrame(() => {
+        if (opener instanceof HTMLElement && opener.isConnected && !document.querySelector("dialog[open]")) {
+          opener.focus({ preventScroll: true });
+        }
+      });
     };
   }, []);
 

@@ -28,16 +28,29 @@ export function extractAtxHeadings(content: string): OutlineHeading[] {
   const lines = normalized.split("\n");
   const out: OutlineHeading[] = [];
   const seen = new Map<string, number>();
-  let fence: string | null = null;
+  let fence: { ch: string; len: number } | null = null;
   lines.forEach((raw, i) => {
     const line = raw;
-    const fenceMatch = /^(\s{0,3})(```+|~~~+)/.exec(line);
-    if (fenceMatch) {
-      const mark = fenceMatch[2]!.slice(0, 3);
-      fence = fence === null ? mark : fence === mark ? null : fence;
+    // A fence only closes on the same marker char, at least as long as the
+    // opener, with nothing but whitespace after it (CommonMark: no info
+    // string on closing fences; ```js never closes a ```` block).
+    const fenceMatch = /^(\s{0,3})(```+|~~~+)(.*)$/.exec(line);
+    if (fence === null) {
+      if (fenceMatch) {
+        fence = { ch: fenceMatch[2]![0]!, len: fenceMatch[2]!.length };
+        return;
+      }
+    } else {
+      if (
+        fenceMatch &&
+        fenceMatch[2]![0] === fence.ch &&
+        fenceMatch[2]!.length >= fence.len &&
+        fenceMatch[3]!.trim() === ""
+      ) {
+        fence = null;
+      }
       return;
     }
-    if (fence !== null) return;
     const m = /^(\s{0,3})(#{1,6})\s+(.+?)\s*(#+\s*)?$/.exec(line);
     if (!m) return;
     const text = m[3]!.replace(/\s+#+\s*$/, "").trim();

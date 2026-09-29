@@ -1,7 +1,7 @@
-import manifest from "../../../package.json";
+import { version } from "../../../package.json";
 
 export const site = {
-  version: manifest.version,
+  version,
   repository: "https://github.com/utsavjosh1/takenotes",
   releases: "https://github.com/utsavjosh1/takenotes/releases",
   issues: "https://github.com/utsavjosh1/takenotes/issues",

@@ -44,6 +44,20 @@ describe("step2 hotkeys", () => {
     expect(collisions[0]?.commands).toEqual(expect.arrayContaining(["note.new", "quickOpen.open"]));
   });
 
+  it("detects cross-scope shadowing (matcher ignores scope)", () => {
+    // editor.save (scope editor) keeps its default while search.open
+    // (scope workspace) is overridden to the same accelerator: the matcher
+    // always returns search.open, so this must surface as a collision even
+    // though the scopes differ.
+    const collisions = findOverrideCollisions(
+      { "editor.save": ["CommandOrControl+S"], "search.open": ["CommandOrControl+S"] },
+      (id) => (id === "editor.save" ? "editor" : "workspace"),
+    );
+    expect(collisions.length).toBe(1);
+    expect(collisions[0]?.accelerator).toBe("ctrlcmd+s");
+    expect(collisions[0]?.commands).toEqual(expect.arrayContaining(["editor.save", "search.open"]));
+  });
+
   it("locks Step 2 defaults: no Ctrl+E toggle, Ctrl+T unbound", () => {
     const map: Record<string, string | undefined> = {};
     for (const def of COMMAND_DEFINITIONS) map[def.id] = acceleratorFor(def.id, "windows");

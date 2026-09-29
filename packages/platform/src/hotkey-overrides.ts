@@ -113,21 +113,24 @@ export type OverrideCollision = {
   commands: CommandId[];
 };
 
-/** Same-normalized-accelerator collisions across the resolved set. */
+/** Same-normalized-accelerator collisions across the resolved set.
+ * Scope-agnostic by design: the matcher above ignores scope, so an
+ * override in one scope that shadows another command's default would
+ * otherwise silence that command with no warning. */
 export function findOverrideCollisions(
   resolved: Partial<Record<CommandId, string[]>>,
-  scopeFor: (id: CommandId) => string,
+  _scopeFor: (id: CommandId) => string,
 ): OverrideCollision[] {
   const byKey = new Map<string, CommandId[]>();
   for (const [id, accs] of Object.entries(resolved) as [CommandId, string[]][]) {
     for (const acc of accs ?? []) {
-      const key = `${scopeFor(id)}::${normalizeAccelerator(acc)}`;
+      const key = normalizeAccelerator(acc);
       byKey.set(key, [...(byKey.get(key) ?? []), id]);
     }
   }
   const out: OverrideCollision[] = [];
   for (const [key, ids] of byKey) {
-    if (ids.length > 1) out.push({ accelerator: key.split("::")[1]!, commands: [...new Set(ids)] });
+    if (ids.length > 1) out.push({ accelerator: key, commands: [...new Set(ids)] });
   }
   return out;
 }

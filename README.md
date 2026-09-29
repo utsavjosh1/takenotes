@@ -41,8 +41,8 @@ npm run package:win  # Windows installer (Windows host)
 
 No native toolchains, no second language, and no database.
 
-Local planning/design notes live under `docs/`, but that folder is intentionally
-ignored and not published to GitHub.
+Local planning/design notes live under `docs/`. That folder is versioned in
+the GitHub repository but intentionally excluded from the product website.
 
 ## Releases
 

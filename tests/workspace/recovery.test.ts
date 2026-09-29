@@ -106,6 +106,17 @@ describe("recovery snapshots", () => {
     expect(listed.ok && listed.result.map((s) => s.snapshotId)).toEqual(["new", "boundary"]);
   });
 
+  it("expires snapshots nested under a note directory named 'snapshots'", async () => {
+    // A note path may itself contain a `snapshots` segment: expiry must look
+    // past the note directory instead of mistaking it for a snapshot store.
+    let now = 1_000_000;
+    const store = new RecoveryStore(await tmpDir(), { now: () => now, id: ids("old") });
+    await store.captureChanged({ workspaceId: "workspace-1", relativePath: "snapshots/secret.md", content: "old", reason: "save" });
+    now = 1_000_000 + RECOVERY_RETENTION_MS + 1;
+    const listed = await store.list("workspace-1", "snapshots/secret.md");
+    expect(listed.ok && listed.result).toEqual([]);
+  });
+
   it("isolates histories by workspaceId, including same relative path for WSL users", async () => {
     const store = new RecoveryStore(await tmpDir(), { now: () => 1_000, id: ids("utsav", "work") });
     await store.captureChanged({ workspaceId: "ubuntu-utsav", relativePath: "README.md", content: "personal", reason: "save" });

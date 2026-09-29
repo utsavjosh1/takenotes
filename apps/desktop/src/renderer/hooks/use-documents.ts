@@ -250,7 +250,13 @@ export function useDocuments(
       }
       return;
     }
-    setLayout((l) => markSaved(l, key, res.result.hash, new Date().toLocaleTimeString()));
+    setLayout((l) => {
+      const cur = l.docs[key];
+      const saved = markSaved(l, key, res.result.hash, new Date().toLocaleTimeString());
+      // Keystrokes typed during the write must stay dirty against the new
+      // baseline — otherwise autosave never refires and they die on close.
+      return cur && cur.content !== target.content ? updateDocContent(saved, key, cur.content) : saved;
+    });
     // File changed → replace exactly this index entry (content + the
     // authoritative post-write revision: zero extra reads).
     workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res.result);
@@ -349,7 +355,11 @@ export function useDocuments(
       expectedHash: diskHash, newlineStyle: target.newlineStyle, hadBom: target.hadBom,
     });
     if (!res2.ok) { errToast(res2.error); return; }
-    setLayout((l) => markSaved(l, target.key, res2.result.hash, new Date().toLocaleTimeString()));
+    setLayout((l) => {
+      const cur = l.docs[target.key];
+      const saved = markSaved(l, target.key, res2.result.hash, new Date().toLocaleTimeString());
+      return cur && cur.content !== target.content ? updateDocContent(saved, target.key, cur.content) : saved;
+    });
     // Conflict resolved by overwrite: the file changed → re-parse it.
     workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res2.result);
     bumpIndex();

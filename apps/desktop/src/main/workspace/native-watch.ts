@@ -26,6 +26,8 @@ function sig(e: DirectoryEntry): string {
 export class NativeWorkspaceWatcher {
   private readonly timers = new Map<string, ReturnType<typeof setInterval>>();
   private readonly snapshots = new Map<string, Snapshot>();
+  /** Bumps on every start/stop so a stale in-flight scan can't arm a timer. */
+  private readonly generations = new Map<string, number>();
 
   constructor(
     private readonly adapter: FileAdapter,
@@ -35,7 +37,10 @@ export class NativeWorkspaceWatcher {
 
   start(ws: WatchWorkspace): void {
     this.stop(ws.workspaceId);
+    const gen = (this.generations.get(ws.workspaceId) ?? 0) + 1;
+    this.generations.set(ws.workspaceId, gen);
     void this.scan(ws).then((out) => {
+      if (this.generations.get(ws.workspaceId) !== gen) return;
       if ("error" in out) return;
       this.snapshots.set(ws.workspaceId, out.snapshot);
       const timer = setInterval(() => void this.tick(ws), this.intervalMs);
@@ -44,6 +49,7 @@ export class NativeWorkspaceWatcher {
   }
 
   stop(workspaceId: string): void {
+    this.generations.set(workspaceId, (this.generations.get(workspaceId) ?? 0) + 1);
     const timer = this.timers.get(workspaceId);
     if (timer) clearInterval(timer);
     this.timers.delete(workspaceId);

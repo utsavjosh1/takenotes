@@ -49,6 +49,15 @@ import { useCommands } from "./hooks/use-commands";
 import { useFavorites } from "./hooks/use-favorites";
 import { useGlobalKeyboard } from "./hooks/use-global-keyboard";
 import { useHotkeys } from "./hooks/use-hotkeys";
+import type { DocumentIndexEntry } from "@takenotes/core/index/document";
+
+/** Body-only text for previews. `searchableText` prefixes title, aliases,
+ * headings and tags before the body — slicing the known prefix keeps the
+ * ~20-line excerpt budget on actual note content. */
+function previewBodyText(entry: DocumentIndexEntry): string {
+  const prefixLines = 1 + entry.aliases.length + entry.headings.length + entry.tags.length;
+  return entry.searchableText.split("\n").slice(prefixLines).join("\n");
+}
 
 /** Composition root. Owns only shell-level UI state (view, sidebar,
 // palette, menus, dialogs visibility, version) and cross-domain
@@ -166,14 +175,16 @@ export default function App(): JSX.Element {
   // Step 2 Page Preview lookup: resolved target → first-20-lines excerpt
   // rendered via the shared reference renderer + full-path footer.
   // Index-backed (no IO); targets outside the index show nothing.
+  // Previews use the note BODY, not searchableText (which prefixes title,
+  // aliases, headings and tags and would spend the excerpt on metadata).
   const previewForTarget = useCallback((target: string): { html: string; fullPath: string } | null => {
     const ws = workspaceApi.workspace;
     if (!ws) return null;
     const rel = resolveWikilinkTarget(target, treeApi.allFiles.map((f) => f.relativePath));
     if (!rel) return null;
     const entry = workspaceIndex.get(ws.workspaceId, rel);
-    if (!entry?.searchableText) return null;
-    return { html: renderMarkdown(previewExcerpt(entry.searchableText)).html, fullPath: rel };
+    if (!entry) return null;
+    return { html: renderMarkdown(previewExcerpt(previewBodyText(entry))).html, fullPath: rel };
   }, [workspaceApi.workspace, treeApi.allFiles]);
 
   // Explorer hover preview (same lookup, 400ms hover, card in App root).
@@ -190,8 +201,8 @@ export default function App(): JSX.Element {
       const ws = workspaceApi.workspace;
       if (!ws) return;
       const entry = workspaceIndex.get(ws.workspaceId, rel);
-      if (!entry?.searchableText) return;
-      setHoverCard({ html: renderMarkdown(previewExcerpt(entry.searchableText)).html, fullPath: rel, x, y });
+      if (!entry) return;
+      setHoverCard({ html: renderMarkdown(previewExcerpt(previewBodyText(entry))).html, fullPath: rel, x, y });
     }, 400);
   }, [clearHover, workspaceApi.workspace]);
 
@@ -208,7 +219,10 @@ export default function App(): JSX.Element {
   // workspace keeps working when toggled off; only new connects hide.
   const wslFeature = platform.capabilities.wsl && settings.wslEnabled;
   const wslApi = useWslConnect(notify, (ws) => workspaceApi.openWorkspace(ws));
-  const updatesApi = useUpdates(notify, platform.capabilities.updates, () => setSettingsOpen(false));
+  // Stable identity: an inline closure here would recreate updatesApi.check
+  // on every render and re-run the startup effect (IPC storm + dialog reset).
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const updatesApi = useUpdates(notify, platform.capabilities.updates, closeSettings);
 
   // One logical "refresh workspace" operation (M4): every user-facing
   // refresh entry point (menu, palette, reconnect) delegates here so tree
@@ -277,13 +291,20 @@ export default function App(): JSX.Element {
       if (settings.theme === "system") document.documentElement.dataset.theme = mq.matches ? "dark" : "light";
     };
     mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [settings.theme]);
+
+  // Mount-only: version label + silent startup update check (ADR-0006).
+  // Kept separate from the theme listener above so renders (and theme
+  // switches) never re-fire IPC update checks or reset dialog progress.
+  useEffect(() => {
     const bridge = getBridge();
     if (bridge) void bridge.app.version().then((r) => { if (r.ok) setVersion(r.result); }).catch(() => undefined);
     // Silent startup update check (ADR-0006): main enforces the 24h cadence
     // and offline silence; an available update opens the dialog.
     void updatesApi.check(false).catch(() => undefined);
-    return () => mq.removeEventListener("change", onChange);
-  }, [settings.theme, updatesApi.check]);
+    // updatesApi.check is stable (closeSettings is memoized), so this runs once.
+  }, []);
 
   const menuOps: MenuOps = useMemo(() => ({
     openFile: (rel) => void docsApi.openFile(rel),
@@ -439,7 +460,15 @@ export default function App(): JSX.Element {
                         toast(`"${file.name}" skipped — binary import arrives with Step 4 attachments.`);
                         continue;
                       }
-                      const name = uniqueCopyName(file.name.replace(/\.[^.]+$/, ".md"), existing);
+                      // Collisions are per-directory: compare against sibling
+                      // basenames, not full workspace-relative paths.
+                      const prefix = dir ? `${dir}/`.toLowerCase() : "";
+                      const siblings = new Set(
+                        [...existing]
+                          .filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes("/"))
+                          .map((p) => p.slice(prefix.length)),
+                      );
+                      const name = uniqueCopyName(file.name.replace(/\.[^.]+$/, ".md"), siblings);
                       const rel = dir ? `${dir}/${name}` : name;
                       const created = await bridge.file.create(ws.workspaceId, rel);
                       if (!created.ok) { toast(`Couldn't import "${file.name}".`); continue; }

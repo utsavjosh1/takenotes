@@ -12,7 +12,7 @@ docs/
   roadmap.md           phases + what is next
   guides/              how to work with the repo (dev, test, release, deploy)
   specs/               frozen implementation specs
-  decisions/           ADRs 0001–0014 (accepted, historical — do not edit)
+  decisions/           ADRs 0001–0015 (accepted, historical — do not edit)
   design/              active product + UI design notes
   platform/            per-OS behavior (Windows-first, WSL, macOS, Linux)
   archive/             point-in-time evidence — read-only history
@@ -42,7 +42,8 @@ Accepted and frozen. Link them, don't rewrite them:
 `0006` in-app updates · `0007` workspace identity ·
 `0008` filesystem truth · `0009` service layer / MCP ·
 `0010` markdown tasks · `0011` daily / today / events ·
-`0012` MCP stdio · `0013` recovery · `0014` dual-host service layer.
+`0012` MCP stdio · `0013` recovery · `0014` dual-host service layer ·
+`0015` single-surface WYSIWYG.
 
 Superseding an ADR means writing a **new** ADR, never editing history.
 

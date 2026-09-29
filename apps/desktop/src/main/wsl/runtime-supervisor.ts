@@ -164,10 +164,18 @@ export class WslRuntimeSupervisor {
       body["workspaceId"] = active.activeWorkspaceId;
     }
     this.onDiagnostic(`[wsl-runtime-request] ${operation} runtimeId=${active.runtimeId}`);
+    // A hung runtime keeps its process alive: bound every request so a
+    // stall surfaces as DISCONNECTED instead of hanging forever.
     const res = await fetch(new URL(`/api/runtime/rpc/${operation}`, active.endpoint), {
       method: "POST",
       headers: { authorization: `Bearer ${active.token}`, "content-type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    }).catch((err: unknown) => {
+      if (err instanceof DOMException && err.name === "TimeoutError") {
+        throw appError("DISCONNECTED", "WSL runtime request timed out.");
+      }
+      throw err;
     });
     const result = await parseRuntimeResult<unknown>(res);
     if (operation === "workspace.open") {

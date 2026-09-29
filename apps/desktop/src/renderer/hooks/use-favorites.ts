@@ -128,26 +128,28 @@ export function useFavorites(workspace: WorkspaceInfo | null, notify: Notify): F
           errToast(created.error);
           return;
         }
-      }
-      const read = await bridge.file.read(workspace.workspaceId, FAVORITES_REL);
-      if (!read.ok) {
-        errToast(read.error);
+        // Created elsewhere since we loaded: adopt it instead of
+        // overwriting blindly.
+        toast("Favorites changed elsewhere — reloading to merge.");
+        await reload();
         return;
       }
+      // Write against the loaded baseline so CONFLICT can actually fire —
+      // re-reading the revision here would make every write self-consistent
+      // and silently discard external changes.
       const written = await bridge.file.write({
         workspaceId: workspace.workspaceId,
         relativePath: FAVORITES_REL,
         content,
-        expectedHash: read.result.revision.hash,
+        expectedHash: revisionHash,
         newlineStyle: "lf",
         hadBom: false,
       });
       if (!written.ok) {
-        // CONFLICT: keep the local doc (both versions safe), surface + refresh baseline.
+        // CONFLICT: keep the local doc and the old baseline (both versions
+        // safe) — the next save re-conflicts instead of overwriting.
         if (written.error.code === "CONFLICT") {
           toast("Favorites changed elsewhere — your list is kept; reload to merge.");
-          const cur = await bridge.file.read(workspace.workspaceId, FAVORITES_REL);
-          if (cur.ok) setRevisionHash(cur.result.revision.hash);
         } else errToast(written.error);
         return;
       }
@@ -155,7 +157,7 @@ export function useFavorites(workspace: WorkspaceInfo | null, notify: Notify): F
       setExists(true);
       setDirty(false);
     },
-    [workspace, exists, revisionHash, errToast, toast],
+    [workspace, exists, revisionHash, errToast, toast, reload],
   );
 
   return {
