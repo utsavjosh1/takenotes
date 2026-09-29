@@ -14,7 +14,23 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "useUnknownInCatchVariables": true
+    "useUnknownInCatchVariables": true,
+    "baseUrl": ".",
+    "paths": {
+      "@takenotes/contracts/ipc": ["packages/contracts/src/contracts/ipc.ts"],
+      "@takenotes/contracts/errors": ["packages/contracts/src/errors.ts"],
+      "@takenotes/contracts/protocol": ["packages/contracts/src/protocol.ts"],
+      "@takenotes/contracts/protocol-version": ["packages/contracts/src/protocol-version.ts"],
+      "@takenotes/core/*": ["packages/core/src/*"],
+      "@takenotes/platform": ["packages/platform/src/index.ts"],
+      "@takenotes/platform/*": ["packages/platform/src/*"],
+      "@takenotes/ui": ["packages/ui/src/index.ts"],
+      "@takenotes/ui/*": ["packages/ui/src/*"],
+      "@takenotes/test-support": ["packages/test-support/src/index.ts"],
+      "@takenotes/desktop/*": ["apps/desktop/src/*"],
+      "@takenotes/server/*": ["apps/server/src/*"],
+      "@takenotes/wsl-helper/*": ["tools/wsl-helper/src/*"]
+    }
   },
-  "include": ["src/**/*", "wsl-helper/src/**/*", "tests/**/*", "scripts/**/*", "vite.config.ts"]
+  "include": ["apps/**/*", "packages/**/*", "tools/wsl-helper/src/**/*", "tests/**/*", "tools/scripts/**/*", "vite.config.ts"]
 }

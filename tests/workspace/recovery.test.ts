@@ -7,9 +7,9 @@ import {
   RECOVERY_THROTTLE_MS,
   RecoveryStore,
   type RecoveryRestoreWriter,
-} from "../../src/main/workspace/recovery.js";
-import type { FileRevision } from "../../src/shared/contracts/ipc.js";
-import { appError } from "../../src/shared/errors.js";
+} from "@takenotes/desktop/main/workspace/recovery";
+import type { FileRevision } from "@takenotes/contracts/ipc";
+import { appError } from "@takenotes/contracts/errors";
 
 async function tmpDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "takenotes-recovery-"));
@@ -38,7 +38,20 @@ async function findSnapshotsDir(base: string): Promise<string> {
   throw new Error("snapshots directory not found");
 }
 
+async function pathExists(file: string): Promise<boolean> {
+  return fs.stat(file).then(() => true, () => false);
+}
+
 describe("recovery snapshots", () => {
+  it("stores snapshots under recovery/<stable-namespace>/<relative-path>/", async () => {
+    const base = await tmpDir();
+    const store = new RecoveryStore(base, { now: () => 1_000, id: ids("s1") });
+
+    await store.captureChanged({ workspaceId: "workspace-1", relativePath: "folder/README.md", content: "A", reason: "save" });
+
+    expect(await pathExists(path.join(base, "recovery", "workspace-1", "folder", "README.md", "snapshots"))).toBe(true);
+  });
+
   it("creates the first changed snapshot, skips identical content, throttles edits, and permits a later changed snapshot", async () => {
     let now = 1_000;
     const store = new RecoveryStore(await tmpDir(), { now: () => now, id: ids("s1", "s2") });

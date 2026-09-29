@@ -59,6 +59,6 @@ Finder reveal, §212). Uninstall (drag to Trash) never touches notes (§141).
 ## Known limitations
 
 - Notarization + clean-Mac Gatekeeper test are NOT TESTED in this Linux
-  container (see `final-platform-audit.md`).
+  container (see `../archive/status/final-platform-audit.md`).
 - Case-sensitive APFS volumes: covered by unit-tested case-independent
   identity logic, not yet by on-volume CI (§108).

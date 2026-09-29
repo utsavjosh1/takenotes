@@ -4,7 +4,7 @@
   "private": true,
   "description": "takenotes — filesystem-first local Markdown notebook for Windows with WSL awareness.",
   "author": {
-    "name": "Utsav Josh",
+    "name": "Utsav Joshi",
     "email": "utsav304joshi@gmail.com"
   },
   "desktopName": "takenotes",
@@ -15,46 +15,34 @@
   },
   "main": "dist-electron/main/index.cjs",
   "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "build": "npm run build:renderer && npm run build:electron && npm run build:helper",
-    "build:renderer": "vite build",
-    "build:electron": "node scripts/build-main.mjs",
-    "build:helper": "node scripts/build-helper.mjs",
-    "build:server": "node scripts/build-server.mjs",
+    "dev": "node tools/scripts/dev.mjs",
+    "build": "npm run build:renderer && npm run build:electron && npm run build:server && npm run build:helper",
+    "build:renderer": "vite build --config vite.config.ts",
+    "build:electron": "node tools/scripts/build-main.mjs",
+    "build:helper": "node tools/scripts/build-helper.mjs",
+    "build:server": "node tools/scripts/build-server.mjs",
     "server:start": "node dist-server/server.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "ui:tokens": "node tools/scripts/generate-ui-tokens.mjs",
+    "ui:tokens:check": "node tools/scripts/generate-ui-tokens.mjs --check",
     "lint": "eslint .",
     "test": "vitest run",
-    "version:set": "node scripts/set-version.mjs",
-    "version:check": "node scripts/check-version.mjs",
+    "version:set": "node tools/scripts/set-version.mjs",
+    "version:check": "node tools/scripts/check-version.mjs",
     "package:win": "npm run build && electron-builder --win nsis zip --publish never",
-    "release:verify": "node scripts/verify-release.mjs",
-    "verify:packaged": "node scripts/verify-packaged.mjs",
-    "release:notes": "node scripts/release-notes.mjs",
-    "fixture:generate": "node scripts/generate-fixture.mjs",
-    "audit:deps": "npm audit --omit=dev && npm audit"
-  },
-  "dependencies": {
-    "@codemirror/autocomplete": "6.20.3",
-    "@codemirror/commands": "6.11.1",
-    "@codemirror/lang-markdown": "6.5.2",
-    "@codemirror/language": "6.12.4",
-    "@codemirror/search": "6.7.2",
-    "@codemirror/state": "6.7.5",
-    "@codemirror/view": "6.43.11",
-    "@hono/node-server": "^2.1.1",
-    "@lezer/highlight": "1.2.3",
-    "hono": "^4.13.8",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "yaml": "2.9.1"
+    "release:verify": "node tools/scripts/verify-release.mjs",
+    "verify:packaged": "node tools/scripts/verify-packaged.mjs",
+    "release:notes": "node tools/scripts/release-notes.mjs",
+    "fixture:generate": "node tools/scripts/generate-fixture.mjs",
+    "audit:deps": "npm audit --omit=dev && npm audit",
+    "dev:desktop": "node tools/scripts/dev.mjs",
+    "dev:web": "npm --workspace @takenotes/web run dev",
+    "mobile:help": "npm --workspace @takenotes/mobile run help"
   },
   "devDependencies": {
     "@electron/fuses": "2.1.3",
     "@eslint/js": "10.0.1",
     "@types/node": "26.6.2",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
     "electron": "44.4.3",
     "electron-builder": "26.15.3",
@@ -69,6 +57,11 @@
   "allowScripts": {
     "esbuild@0.28.2": true,
     "electron-winstaller@5.4.0": true,
-    "electron@44.3.0": true
-  }
+    "electron@44.4.3": true
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tools/*"
+  ]
 }

@@ -61,4 +61,4 @@ false`, §140–§142).
 
 - Windows ARM64: not released until build + installer + tests pass on hardware (§126).
 - Real NTFS + `wsl.exe` round-trip validation needs a Windows 11 host
-  (see `docs/mvp-status.md`).
+  (see `../archive/status/mvp-status.md`).

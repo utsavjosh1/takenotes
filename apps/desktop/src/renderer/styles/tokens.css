@@ -1,0 +1,101 @@
+/* Desktop layout ownership + temporary aliases. Canonical values are in
+ * @takenotes/ui/tokens.css, generated from packages/ui/src/theme.ts. */
+:root {
+  --titlebar-height: 40px;
+  --rail-width: 48px;
+  --sidebar-width: 256px;
+  --tabstrip-height: 36px;
+  --statusbar-height: 28px;
+  --tree-row-height: var(--tn-target-row);
+  --tree-indent: 16px;
+  --readable-width: 760px;
+
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-editor: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
+  --text-ui: var(--tn-font-size-control);
+  --text-secondary-size: var(--tn-font-size-secondary);
+  --editor-font-size: var(--tn-font-size-body);
+  --editor-line-height: var(--tn-line-height-body);
+  --editor-max-width: 760px;
+
+  --sp-2: 2px;
+  --sp-4: var(--tn-space-1);
+  --sp-6: 6px;
+  --sp-8: var(--tn-space-2);
+  --sp-12: var(--tn-space-3);
+  --sp-16: var(--tn-space-4);
+  --sp-20: var(--tn-space-5);
+  --sp-24: var(--tn-space-6);
+  --sp-32: var(--tn-space-8);
+  --sp-40: var(--tn-space-10);
+  --sp-48: var(--tn-space-12);
+  --sp-64: var(--tn-space-16);
+  --radius-tiny: 4px;
+  --radius-row: var(--tn-radius-row);
+  --radius-control: var(--tn-radius-control);
+  --radius-input: var(--tn-radius-control);
+  --radius-menu: var(--tn-radius-menu);
+  --radius-dialog: var(--tn-radius-dialog);
+  --radius-overlay: var(--tn-radius-dialog);
+
+  --motion-fast: 100ms;
+  --motion-base: 150ms;
+  --motion-slow: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-dropdown: 100;
+  --z-popover: 200;
+  --z-command: 300;
+  --z-dialog: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+}
+
+:root, [data-theme] {
+  --surface-app: var(--tn-surface-app);
+  --surface-sidebar: var(--tn-surface-sidebar);
+  --surface-editor: var(--tn-surface-editor);
+  --surface-overlay: var(--tn-surface-overlay);
+  --surface-input: var(--tn-surface-input);
+  --surface-hover: var(--tn-surface-hover);
+  --surface-active: var(--tn-surface-selected);
+  --surface-selected: var(--tn-surface-selected);
+  --border-subtle: var(--tn-border-subtle);
+  --border-strong: var(--tn-border-control);
+  --border-control: var(--tn-border-control);
+  --text-primary: var(--tn-text-primary);
+  --text-secondary: var(--tn-text-secondary);
+  --text-muted: var(--tn-text-muted);
+  --accent: var(--tn-accent);
+  --accent-hover: var(--tn-accent-hover);
+  --accent-soft: color-mix(in srgb, var(--tn-accent) 14%, transparent);
+  --danger: var(--tn-danger-text);
+  --danger-surface: var(--tn-danger-surface);
+  --warning: var(--tn-warning-text);
+  --warning-surface: var(--tn-warning-surface);
+  --success: var(--tn-success-text);
+  --success-surface: var(--tn-success-surface);
+  --selection: var(--tn-selection);
+  --code-bg: var(--tn-code-surface);
+  --highlight-surface: var(--tn-highlight-surface);
+  --action-fill: var(--tn-action-fill);
+  --action-text: var(--tn-action-text);
+  --scrollbar: var(--tn-scrollbar);
+  --shadow-menu: 0 4px 16px rgb(62 52 25 / .12);
+  --shadow-overlay: 0 16px 48px rgb(62 52 25 / .18);
+}
+[data-theme="dark"] {
+  --shadow-menu: 0 4px 16px rgb(0 0 0 / .32);
+  --shadow-overlay: 0 16px 48px rgb(0 0 0 / .45);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; }
+  *, *::before, *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

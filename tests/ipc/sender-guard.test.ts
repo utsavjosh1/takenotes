@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isTrustedWindow } from "../../src/main/ipc/guard.js";
+import { isTrustedWindow } from "@takenotes/desktop/main/ipc/guard";
 
 /** M-04: the sender boundary is uniform — foreign/untrusted senders are
  * rejected even for low-sensitivity data like platform/version. */
@@ -23,7 +23,7 @@ describe("ipc sender guard", () => {
  * must enforce the sender boundary. This tripwire fails if a new handler is
  * added without `senderIsOurs` — the exact M-04 omission. */
 describe("ipc handler sender audit", () => {
-  const source = readFileSync(join(__dirname, "..", "..", "src", "main", "ipc", "register.ts"), "utf8");
+  const source = readFileSync(join(__dirname, "..", "..", "apps", "desktop", "src", "main", "ipc", "register.ts"), "utf8");
   const handlers = [...source.matchAll(/ipcMain\.handle\("([^"]+)"/g)].map((m) => m[1]!);
 
   it("registers the known handler inventory (update this list deliberately)", () => {
@@ -32,6 +32,8 @@ describe("ipc handler sender audit", () => {
         "app:platform",
         "app:version",
         "commands:list",
+        "daily:createToday",
+        "daily:getToday",
         "directory:create",
         "directory:delete",
         "directory:list",
@@ -52,9 +54,11 @@ describe("ipc handler sender audit", () => {
         "update:check",
         "update:download",
         "workspace:close",
+        "workspace:listRecent",
         "workspace:listWsl",
         "workspace:listWslUsers",
         "workspace:openLocal",
+        "workspace:openRecent",
         "wsl:connect",
       ].sort(),
     );

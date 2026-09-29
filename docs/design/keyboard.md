@@ -1,5 +1,7 @@
 # Keyboard — takenotes
 
+> Earlier desktop shortcut reference, not a browser/mobile binding contract. The [UI/UX guide](ui-ux/README.md) requires labels from the platform keymap and native/browser-safe alternatives. Check `packages/platform/src/keymap.ts` for actual bindings.
+
 | Keys | Action |
 |---|---|
 | `Ctrl+N` | New note |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDocument } from "../../src/shared/index/document";
+import { parseDocument } from "@takenotes/core/index/document";
 
 /** P1-08 precondition support: the entry records where the body begins so
  * content snippets map to honest file lines (frontmatter excluded). */

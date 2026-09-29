@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FuseV1Options } from "@electron/fuses";
-import { FUSE_CONFIG } from "../../scripts/after-pack-fuses.mjs";
+import { FUSE_CONFIG } from "../../tools/scripts/after-pack-fuses.mjs";
 
 /** Regression for 2026-09-18 Windows launch-failure:
  * `[FATAL:gin/v8_initializer.cc] Error loading V8 startup snapshot file`.

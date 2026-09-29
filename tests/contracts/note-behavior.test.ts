@@ -8,8 +8,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "vitest";
-import { CoreNoteService, type CoreWorkspace } from "../../src/core/services/note-service.js";
-import { LocalHostFilesystem } from "../../src/main/workspace/local-host-filesystem.js";
+import { CoreNoteService, type CoreWorkspace } from "@takenotes/core/services/note-service";
+import { LocalHostFilesystem } from "@takenotes/desktop/main/workspace/local-host-filesystem";
 import { defineNoteBehaviorSuite } from "./note-behavior-contract.js";
 
 function makeTempRoot(): string {

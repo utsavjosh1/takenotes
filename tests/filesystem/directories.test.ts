@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync, statSync } 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createDirectory, deleteDirectory, renameDirectory } from "../../src/main/workspace/local-workspace";
+import { createDirectory, deleteDirectory, listDirectory, renameDirectory } from "@takenotes/desktop/main/workspace/local-workspace";
 
 describe.runIf(process.platform !== "win32")("directory operations (posix local workspace)", () => {
   let root: string;
@@ -45,6 +45,13 @@ describe.runIf(process.platform !== "win32")("directory operations (posix local 
     const out = await deleteDirectory(root, "linux-local", "docs", true);
     expect("error" in out).toBe(false);
     expect(() => statSync(path.join(root, "docs"))).toThrow();
+  });
+
+  it("lists nested entries with canonical / relative paths", async () => {
+    await createDirectory(root, "linux-local", "docs/sub");
+    writeFileSync(path.join(root, "docs", "sub", "note.md"), "# hi\n");
+    const out = await listDirectory(root, "linux-local", "docs");
+    expect(out).toMatchObject({ entries: [expect.objectContaining({ relativePath: "docs/sub" })] });
   });
 
   it("renames directories with contents", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { friendlyError } from "../../src/renderer/error-text";
+import { friendlyError } from "@takenotes/desktop/renderer/error-text";
 
 /** P1-04 acceptance: the renderer shows PERMISSION_DENIED distinctly from
  * NOT_FOUND (the ticket's PATH_NOT_FOUND). A user locked out by Linux

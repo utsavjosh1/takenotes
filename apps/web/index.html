@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="takenotes is a quiet, local-first Markdown notebook. Plain files, Windows + WSL workflows, open source." />
+    <meta name="theme-color" content="#faf6ee" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // Set the palette before first paint; storage can be unavailable.
+      (() => {
+        let preference = null;
+        try { preference = localStorage.getItem("takenotes.web.theme"); } catch {}
+        const theme = preference === "light" || preference === "dark"
+          ? preference
+          : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+        document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#191613" : "#faf6ee";
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/takenotes-app-icon-light.svg" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/svg+xml" href="/takenotes-app-icon-dark.svg" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/takenotes-app-icon-light.svg" />
+    <link rel="apple-touch-icon" href="/takenotes-app-icon-light.svg" />
+    <title>takenotes — filesystem-first Markdown notebook</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

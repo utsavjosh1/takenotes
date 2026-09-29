@@ -13,7 +13,7 @@ import {
   recoveryDecision,
   saveDraft,
   workspaceKeyFor,
-} from "../../src/main/workspace/drafts.js";
+} from "@takenotes/desktop/main/workspace/drafts";
 
 async function tmpDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "takenotes-drafts-"));

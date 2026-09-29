@@ -1,5 +1,7 @@
 # Interactions — takenotes
 
+> Earlier desktop interaction reference. For the redesign, follow [components and interaction states](ui-ux/components-and-states.md), including explicit destructive consequences, keyboard/touch alternatives, and truthful persistence states. Do not infer current capabilities from these older notes.
+
 - **Hover:** background shift only, ≤150ms, no long animations.
 - **Tree:** single click opens (markdown/text). Chevron toggles folder. Hover
   reveals a `···` button; all else via right-click menu. `F2` inline rename

@@ -1,0 +1,31 @@
+{
+  "name": "@takenotes/core",
+  "version": "0.0.8",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@takenotes/contracts": "0.0.8",
+    "@takenotes/platform": "0.0.8",
+    "valibot": "1.5.0",
+    "yaml": "2.9.1"
+  },
+  "exports": {
+    "./commands/hotkeys": "./src/commands/hotkeys.ts",
+    "./commands/palette": "./src/commands/palette.ts",
+    "./commands/registry": "./src/commands/registry.ts",
+    "./explorer/sort": "./src/explorer/sort.ts",
+    "./favorites/store": "./src/favorites/store.ts",
+    "./outline/extract": "./src/outline/extract.ts",
+    "./index/document": "./src/index/document.ts",
+    "./index/properties": "./src/index/properties.ts",
+    "./index/store": "./src/index/store.ts",
+    "./markdown/render": "./src/markdown/render.ts",
+    "./policy/note-policy": "./src/policy/note-policy.ts",
+    "./ports/host-filesystem": "./src/ports/host-filesystem.ts",
+    "./productivity/daily": "./src/productivity/daily.ts",
+    "./search/query": "./src/search/query.ts",
+    "./search/search": "./src/search/search.ts",
+    "./services/note-service": "./src/services/note-service.ts",
+    "./validation/schemas": "./src/validation/schemas.ts"
+  }
+}

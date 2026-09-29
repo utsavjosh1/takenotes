@@ -1,6 +1,8 @@
 # Design tokens — takenotes
 
-Single source: `src/renderer/styles/tokens.css`. All components use semantic
+> Earlier desktop palette reference. The proposed warm-paper light/dark system and shared-token migration are specified in [UI/UX foundations](ui-ux/foundations.md) and the [implementation plan](ui-ux/implementation.md). Values below are not the new target palette.
+
+Existing desktop source: `apps/desktop/src/renderer/styles/tokens.css`. All components use semantic
 variables; no scattered hex values.
 
 ## Surfaces
