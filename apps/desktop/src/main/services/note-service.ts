@@ -87,13 +87,18 @@ export class NoteService {
     oldPath: string;
     newPath: string;
     kind: "file" | "directory";
-  }): Promise<{ ok: true } | { error: AppError }> {
+  }): Promise<{ ok: true; linksFailed: string[] } | { error: AppError }> {
     const after = await this.collectNativeMarkdown(input.root, input.type);
-    if ("error" in after) return after;
+    // Everything below runs after the rename already succeeded: a failure
+    // here must never masquerade as a failed rename (the caller would retry
+    // the old path and report another error while links already moved).
+    // Report partial success so the caller refreshes instead of retrying.
+    if ("error" in after) return { ok: true, linksFailed: [`<scan>: ${after.error.message}`] };
+    const failed: string[] = [];
     const allowBareFileName = input.kind === "file" && !hasDuplicateBareName(input.beforePaths, input.oldPath);
     for (const rel of after.paths) {
       const read = await this.deps.native.read(input.root, input.type, rel);
-      if ("error" in read) return read;
+      if ("error" in read) { failed.push(rel); continue; }
       const next = rewriteWikilinksForMove(read.result.content, input.oldPath, input.newPath, {
         kind: input.kind,
         allowBareFileName,
@@ -108,9 +113,9 @@ export class NoteService {
         read.result.newlineStyle,
         read.result.hadBom,
       );
-      if ("error" in written) return written;
+      if ("error" in written) failed.push(rel);
     }
-    return { ok: true };
+    return { ok: true, linksFailed: failed };
   }
 
   async listTree(workspaceId: string, relativePath: string): Promise<{ entries: DirectoryEntry[] } | { error: AppError }> {
@@ -249,7 +254,7 @@ export class NoteService {
     }
   }
 
-  async renamePath(workspaceId: string, oldPath: string, newPath: string): Promise<{ ok: true } | { error: AppError }> {
+  async renamePath(workspaceId: string, oldPath: string, newPath: string): Promise<{ ok: true; linksFailed?: string[] } | { error: AppError }> {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
     if (r.kind === "native") {
@@ -257,7 +262,10 @@ export class NoteService {
       if ("error" in before) return before;
       const renamed = await this.deps.native.rename(r.root, r.type, oldPath, newPath);
       if ("error" in renamed) return renamed;
-      return this.rewriteNativeLinksAfterMove({ root: r.root, type: r.type, beforePaths: before.paths, oldPath, newPath, kind: "file" });
+      const out = await this.rewriteNativeLinksAfterMove({ root: r.root, type: r.type, beforePaths: before.paths, oldPath, newPath, kind: "file" });
+      if ("error" in out) return out;
+      if (out.linksFailed.length > 0) console.warn(`[note-service] rename succeeded but ${out.linksFailed.length} link(s) failed to rewrite: ${out.linksFailed.join(", ")}`);
+      return out.linksFailed.length > 0 ? { ok: true, linksFailed: out.linksFailed } : { ok: true };
     }
     if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
     try {
@@ -321,7 +329,7 @@ export class NoteService {
     workspaceId: string,
     oldPath: string,
     newPath: string,
-  ): Promise<{ ok: true } | { error: AppError }> {
+  ): Promise<{ ok: true; linksFailed?: string[] } | { error: AppError }> {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
     if (r.kind === "native") {
@@ -329,7 +337,10 @@ export class NoteService {
       if ("error" in before) return before;
       const renamed = await this.deps.native.renameDirectory(r.root, r.type, oldPath, newPath);
       if ("error" in renamed) return renamed;
-      return this.rewriteNativeLinksAfterMove({ root: r.root, type: r.type, beforePaths: before.paths, oldPath, newPath, kind: "directory" });
+      const out = await this.rewriteNativeLinksAfterMove({ root: r.root, type: r.type, beforePaths: before.paths, oldPath, newPath, kind: "directory" });
+      if ("error" in out) return out;
+      if (out.linksFailed.length > 0) console.warn(`[note-service] directory rename succeeded but ${out.linksFailed.length} link(s) failed to rewrite: ${out.linksFailed.join(", ")}`);
+      return out.linksFailed.length > 0 ? { ok: true, linksFailed: out.linksFailed } : { ok: true };
     }
     if (!this.wslOnline()) return { error: appError("DISCONNECTED", "WSL helper is not connected.") };
     try {

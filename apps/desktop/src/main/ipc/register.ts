@@ -376,9 +376,16 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     const reg = workspaces.get(v.workspaceId);
     if (reg && !isNativeWorkspace(reg)) {
       // Best-effort: release the runtime/helper-side root; registry close always runs.
+      // Close on the transport that owns this workspace — a runtime session
+      // for another distro/user must not be torn down by mistake.
       try {
-        if (runtimeSupervisor?.getSession()) await runtimeSupervisor.request("workspace.close", {});
-        else if (supervisor?.getSession()) await supervisor.request("workspace.close", {});
+        const matches = (s: { distro: string; linuxUser: string } | null | undefined): boolean =>
+          !!s && s.distro === reg.distro && s.linuxUser === reg.linuxUser;
+        if (runtimeSupervisor && matches(runtimeSupervisor.getSession())) {
+          await runtimeSupervisor.request("workspace.close", {});
+        } else if (supervisor && matches(supervisor.getSession())) {
+          await supervisor.request("workspace.close", {});
+        }
       } catch {
         /* transport already gone — registry is the source of truth */
       }
