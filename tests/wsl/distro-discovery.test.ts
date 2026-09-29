@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseWslVerboseList } from "../../src/main/wsl/output-decoder";
-import { listDistributions } from "../../src/main/wsl/distributions";
-import { WorkspaceService } from "../../src/main/services/workspace-service";
-import { WorkspaceRegistry } from "../../src/main/workspace/registry";
+import { parseWslVerboseList } from "../../apps/desktop/src/main/wsl/output-decoder";
+import { listDistributions } from "../../apps/desktop/src/main/wsl/distributions";
+import { WorkspaceService } from "../../apps/desktop/src/main/services/workspace-service";
+import { WorkspaceRegistry } from "../../apps/desktop/src/main/workspace/registry";
 
 function utf16le(text: string, withBom: boolean): Buffer {
   const body = Buffer.from(text, "utf16le");

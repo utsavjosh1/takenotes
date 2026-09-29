@@ -1,8 +1,8 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION } from "../../src/shared/protocol-version";
-import { HelperSupervisor } from "../../src/main/wsl/helper-supervisor";
-import { HelperClient } from "../../src/main/wsl/helper-client";
+import { HelperSupervisor } from "../../apps/desktop/src/main/wsl/helper-supervisor";
+import { HelperClient } from "../../apps/desktop/src/main/wsl/helper-client";
 
 async function ensureHelperBuilt(): Promise<string> {
   const { execFileSync } = await import("node:child_process");

@@ -7,7 +7,7 @@ import {
   type Command,
 } from "../../src/shared/commands/registry";
 import { acceleratorFor } from "../../src/shared/platform/keymap";
-import { CommandService } from "../../src/main/services/command-service";
+import { CommandService } from "../../apps/desktop/src/main/services/command-service";
 
 /** P1-09 canonical command registry: IDs are stable, labels are metadata. */
 describe("command registry", () => {

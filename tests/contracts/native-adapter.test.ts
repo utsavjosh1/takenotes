@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "vitest";
 import type { CoreWorkspace } from "../../src/core/services/note-service.js";
-import { NativeFileAdapter } from "../../src/main/workspace/file-adapter.js";
+import { NativeFileAdapter } from "../../apps/desktop/src/main/workspace/file-adapter.js";
 import { defineNoteBehaviorSuite } from "./note-behavior-contract.js";
 
 describe("production native note path satisfies the Core contract", () => {

@@ -14,7 +14,38 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "useUnknownInCatchVariables": true
+    "useUnknownInCatchVariables": true,
+    "baseUrl": ".",
+    "paths": {
+      "@takenotes/contracts/ipc": ["src/shared/contracts/ipc.ts"],
+      "@takenotes/contracts/errors": ["src/shared/errors.ts"],
+      "@takenotes/contracts/protocol": ["src/shared/protocol.ts"],
+      "@takenotes/contracts/protocol-version": ["src/shared/protocol-version.ts"],
+      "@takenotes/core/commands/*": ["src/shared/commands/*"],
+      "@takenotes/core/index/store": ["src/shared/index/store.ts"],
+      "@takenotes/core/index/document": ["src/shared/index/document.ts"],
+      "@takenotes/core/index/properties": ["src/shared/index/properties.ts"],
+      "@takenotes/core/policy/*": ["src/core/policy/*"],
+      "@takenotes/core/search/*": ["src/shared/search/*"],
+      "@takenotes/core/ports/*": ["src/core/ports/*"],
+      "@takenotes/core/productivity/*": ["src/shared/productivity/*"],
+      "@takenotes/core/services/*": ["src/core/services/*"],
+      "@takenotes/platform": ["src/shared/platform/index.ts"],
+      "@takenotes/platform/*": ["src/shared/platform/*"],
+      "@takenotes/ui": ["packages/ui/src/index.ts"],
+      "@takenotes/ui/*": ["packages/ui/src/*"],
+      "@takenotes/ui/dom.css": ["packages/ui/src/dom/styles.css"],
+      "@takenotes/ui/tokens.css": ["packages/ui/src/tokens.css"],
+      "@takenotes/desktop/*": ["apps/desktop/src/*"]
+    }
   },
-  "include": ["src/**/*", "wsl-helper/src/**/*", "tests/**/*", "scripts/**/*", "vite.config.ts"]
+  "include": [
+    "src/**/*",
+    "apps/desktop/src/**/*",
+    "packages/ui/src/**/*",
+    "wsl-helper/src/**/*",
+    "tests/**/*",
+    "scripts/**/*",
+    "vite.config.ts"
+  ]
 }
