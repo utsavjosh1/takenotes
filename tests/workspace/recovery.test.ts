@@ -117,6 +117,28 @@ describe("recovery snapshots", () => {
     expect(listed.ok && listed.result).toEqual([]);
   });
 
+  it("expires records nested below a snapshot dir that also holds records", async () => {
+    // Fall-through regression: note `s.md` and note `s.md/snapshots/y.md`
+    // share the `s.md/snapshots/` directory, which then holds both recovery
+    // JSON and a nested snapshot dir. Expiry must descend past the JSON
+    // instead of stopping at the first snapshot dir. Asserted on disk:
+    // `list()` filters expired records, so it cannot catch retention.
+    const base = await tmpDir();
+    let now = 1_000_000;
+    const store = new RecoveryStore(base, { now: () => now, id: ids("outer", "inner") });
+    await store.captureChanged({ workspaceId: "workspace-1", relativePath: "s.md", content: "outer", reason: "save" });
+    await store.captureChanged({ workspaceId: "workspace-1", relativePath: "s.md/snapshots/y.md", content: "inner", reason: "save" });
+    const outerFile = path.join(base, "recovery", "workspace-1", "s.md", "snapshots", "1000000-outer.json");
+    const innerFile = path.join(base, "recovery", "workspace-1", "s.md", "snapshots", "y.md", "snapshots", "1000000-inner.json");
+    expect(await pathExists(outerFile)).toBe(true);
+    expect(await pathExists(innerFile)).toBe(true);
+    now = 1_000_000 + RECOVERY_RETENTION_MS + 1;
+    const outer = await store.list("workspace-1", "s.md");
+    expect(outer.ok && outer.result).toEqual([]);
+    expect(await pathExists(outerFile)).toBe(false);
+    expect(await pathExists(innerFile)).toBe(false);
+  });
+
   it("isolates histories by workspaceId, including same relative path for WSL users", async () => {
     const store = new RecoveryStore(await tmpDir(), { now: () => 1_000, id: ids("utsav", "work") });
     await store.captureChanged({ workspaceId: "ubuntu-utsav", relativePath: "README.md", content: "personal", reason: "save" });
