@@ -29,6 +29,7 @@
     "./productivity/templates": "./src/productivity/templates.ts",
     "./productivity/tasks": "./src/productivity/tasks.ts",
     "./productivity/today": "./src/productivity/today.ts",
+    "./productivity/calendar": "./src/productivity/calendar.ts",
     "./search/query": "./src/search/query.ts",
     "./search/search": "./src/search/search.ts",
     "./services/note-service": "./src/services/note-service.ts",

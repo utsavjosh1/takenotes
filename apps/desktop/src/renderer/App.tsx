@@ -28,6 +28,7 @@ import { CommandMenu } from "./components/palette";
 import { TemplatePicker } from "./components/template-picker";
 import { TaskDialog, type NewTaskInput } from "./components/task-dialog";
 import { TodayPane } from "./components/today-pane";
+import { CalendarPane } from "./components/calendar-pane";
 import { collectTodayTasks } from "@takenotes/core/productivity/today";
 import { templateDate } from "@takenotes/core/productivity/templates";
 import { SettingsDialog } from "./components/settings";
@@ -91,9 +92,9 @@ export default function App(): JSX.Element {
   // Per-pane collapse (Step 2 shell seam): one flag per left pane, persisted.
   const [paneCollapsed, setPaneCollapsed] = useState<Record<SidebarView, boolean>>(() => {
     try {
-      return { files: false, search: false, outline: false, favorites: false, today: false, ...JSON.parse(localStorage.getItem("takenotes.paneCollapsed") ?? "{}") };
+      return { files: false, search: false, outline: false, favorites: false, today: false, calendar: false, ...JSON.parse(localStorage.getItem("takenotes.paneCollapsed") ?? "{}") };
     } catch {
-      return { files: false, search: false, outline: false, favorites: false, today: false };
+      return { files: false, search: false, outline: false, favorites: false, today: false, calendar: false };
     }
   });
   const togglePaneCollapse = useCallback((v: SidebarView) => {
@@ -383,6 +384,50 @@ export default function App(): JSX.Element {
     toast(`Task added to ${rel}.`);
   }, [workspaceApi.workspace, settings.taskCaptureTarget, toast, commandsApi, bumpIndex, treeApi, docsApi]);
 
+  // Calendar drag (productivity step 4): dropping a task on a day rewrites
+  // only its `@scheduled` token — never `@due`, never anything else. The
+  // write rides the same `expectedHash` guard as saves and capture, so a
+  // concurrent edit surfaces as CONFLICT instead of overwriting. The line
+  // is re-read fresh (1-based) and must still be a checkbox; stale drops
+  // bail out with a toast instead of touching the file.
+  const rescheduleTask = useCallback(async (relativePath: string, line: number, targetDate: string) => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) return;
+    const { rewriteScheduledToken } = await import("@takenotes/core/productivity/calendar");
+    const read = await bridge.file.read(ws.workspaceId, relativePath);
+    if (!read.ok) { toast(`Couldn't open ${relativePath}.`, "error"); return; }
+    const newline = read.result.content.includes("\r\n") ? "\r\n" : "\n";
+    const lines = read.result.content.split(newline);
+    const current = lines[line - 1];
+    if (current === undefined || !/^\s*(?:>\s*)*([-*+]|\d+[.)])\s+\[[ xX]\]/.test(current)) {
+      toast("That task moved — refresh and try again.", "error");
+      return;
+    }
+    let nextLine: string;
+    try {
+      nextLine = rewriteScheduledToken(current, targetDate);
+    } catch {
+      toast("Couldn't move the task: invalid date.", "error");
+      return;
+    }
+    if (nextLine === current) return;
+    lines[line - 1] = nextLine;
+    const next = lines.join(newline);
+    const written = await bridge.file.write({
+      workspaceId: ws.workspaceId, relativePath, content: next,
+      expectedHash: read.result.revision.hash, newlineStyle: read.result.newlineStyle, hadBom: read.result.hadBom,
+    });
+    if (!written.ok) {
+      if (written.error.code === "CONFLICT") toast(`${relativePath} changed on disk — drop NOT applied. Try again.`, "error");
+      else toast(`Couldn't move the task.`, "error");
+      return;
+    }
+    workspaceIndex.upsert(ws.workspaceId, relativePath, next, written.result);
+    bumpIndex();
+    void docsApi.reconcileExternalChange(relativePath);
+  }, [workspaceApi.workspace, toast, bumpIndex, docsApi]);
+
   useGlobalKeyboard({
     paletteOpen: palette !== null || templatePickerOpen || taskDialogOpen,
     platform,
@@ -627,7 +672,7 @@ export default function App(): JSX.Element {
                 }}
               >
                 {paneCollapsed[view] ? (
-                  <div className="panel-title">{view === "files" ? "Explorer" : view === "search" ? "Search" : view === "outline" ? "Outline" : view === "today" ? "Today" : "Favorites"} (collapsed)</div>
+                  <div className="panel-title">{view === "files" ? "Explorer" : view === "search" ? "Search" : view === "outline" ? "Outline" : view === "today" ? "Today" : view === "calendar" ? "Calendar" : "Favorites"} (collapsed)</div>
                 ) : view === "files" ? (
                   <>
                     {treeApi.creating && (
@@ -701,6 +746,22 @@ export default function App(): JSX.Element {
                           gotoLine(line);
                         });
                       }}
+                    />
+                  ) : (
+                    <div className="panel-title">No workspace index yet.</div>
+                  )
+                ) : view === "calendar" ? (
+                  todayGroups && linkGraph ? (
+                    <CalendarPane
+                      entries={linkGraph.entries}
+                      today={todayGroups.today}
+                      onOpenTask={(rel, line) => {
+                        void docsApi.openFile(rel).then(() => {
+                          gotoLine(line);
+                        });
+                      }}
+                      onOpenNote={(rel) => openLinkTarget(rel)}
+                      onReschedule={(rel, line, targetDate) => void rescheduleTask(rel, line, targetDate)}
                     />
                   ) : (
                     <div className="panel-title">No workspace index yet.</div>

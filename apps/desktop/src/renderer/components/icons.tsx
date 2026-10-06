@@ -16,6 +16,7 @@ const paths: Record<string, JSX.Element> = {
   list: (<><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></>),
   star: (<><path d="M11.56 3.26a.5.5 0 0 1 .88 0l2.95 5.98 6.6.96a.5.5 0 0 1 .28.85l-4.78 4.66.11 6.59a.5.5 0 0 1-.73.45L12 19.77l-5.87 3.08a.5.5 0 0 1-.73-.45l1.13-6.6L1.75 10a.5.5 0 0 1 .28-.85l6.6-.96Z" /></>),
   calendar: (<><path d="M8 2v4" /><path d="M16 2v4" /><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M3 10h18" /></>),
+  grid: (<><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /></>),
   command: (<><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" /></>),
   alert: (<><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></>),
 };
