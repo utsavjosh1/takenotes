@@ -68,6 +68,7 @@ export function PaneView({
   relativePath,
   lineNumbers,
   wordWrap,
+  livePreview,
   fullWidth,
   reportCursor,
   onEdit,
@@ -81,6 +82,7 @@ export function PaneView({
   relativePath: string;
   lineNumbers: boolean;
   wordWrap: boolean;
+  livePreview: boolean;
   fullWidth: boolean;
   /** Only the active pane reports cursor position to the status strip. */
   reportCursor: boolean;
@@ -120,7 +122,7 @@ export function PaneView({
     void onTitleCommit(next);
   };
 
-  const sessionKey = `${docKey}|ln${lineNumbers ? 1 : 0}|ww${wordWrap ? 1 : 0}`;
+  const sessionKey = `${docKey}|ln${lineNumbers ? 1 : 0}|ww${wordWrap ? 1 : 0}|lp${livePreview ? 1 : 0}`;
 
   // Mount / remount when the pane switches documents or toggles settings.
   // `content` here is the prop value at mount time — the base this editor
@@ -134,6 +136,7 @@ export function PaneView({
     const session = createEditor(el, content, {
       lineNumbers,
       wordWrap,
+      livePreview,
       onChange: (c) => {
         renderedRef.current = c;
         cbRef.current.onEdit(docKey, c);

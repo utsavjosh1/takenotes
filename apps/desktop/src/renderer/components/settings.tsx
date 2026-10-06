@@ -70,6 +70,9 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
             <SettingRow label="Line numbers" description="Show gutter line numbers.">
               {(control) => <input {...control} type="checkbox" checked={settings.lineNumbers} onChange={(e) => set("lineNumbers", e.target.checked)} />}
             </SettingRow>
+            <SettingRow label="Live preview" description="Render markdown in place; the cursor line shows raw source. Off shows plain source everywhere.">
+              {(control) => <input {...control} type="checkbox" checked={settings.livePreview} onChange={(e) => set("livePreview", e.target.checked)} />}
+            </SettingRow>
           </>}
           {tab === "Files" && <SettingRow label="Search exclusions" description="Always skipped: .git, node_modules, dist, build, coverage." />}
           {tab === "Shortcuts" && <ShortcutTable platform={platform} hotkeys={hotkeys} />}

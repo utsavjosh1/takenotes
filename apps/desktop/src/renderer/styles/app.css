@@ -303,6 +303,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .wys-media-preview img { max-width: 100%; height: auto; border-radius: var(--radius-control); display: block; }
 .wys-media-preview audio, .wys-media-preview video { max-width: 100%; display: block; }
 .wys-task { accent-color: var(--accent); width: 14px; height: 14px; margin: 0 6px 0 1px; vertical-align: -2px; cursor: pointer; }
+.wys-bullet, .wys-olist-num, .wys-pipe, .wys-callout-chip, .wys-fnref { cursor: text; }
 
 /* Floating format bubble: selection formatting without visible syntax. */
 .fmt-bubble {

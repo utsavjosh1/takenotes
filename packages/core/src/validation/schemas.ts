@@ -19,6 +19,7 @@ export const SettingsSchema = v.object({
   fullWidth: v.optional(v.boolean()),
   wordWrap: v.optional(v.boolean()),
   lineNumbers: v.optional(v.boolean()),
+  livePreview: v.optional(v.boolean()),
   confirmTrash: v.optional(v.boolean()),
   /** Opt-in WSL workspaces (Windows only). Off → plain notetaking app. */
   wslEnabled: v.optional(v.boolean()),

@@ -29,6 +29,8 @@ export type EditorSession = {
 export type EditorOptions = {
   lineNumbers: boolean;
   wordWrap: boolean;
+  /** Live preview (default on). Off renders plain markdown source. */
+  livePreview?: boolean;
   onChange: (content: string) => void;
   onCursor?: (line: number, col: number) => void;
   /** Selection/focus changes for the floating format bubble. */
@@ -156,8 +158,10 @@ export function createEditor(parent: HTMLElement, initialContent: string, opts: 
     search(),
     // Markdown-backed WYSIWYG: inline marks hide, task markers become
     // live checkboxes, tables/callouts/code/media earn in-editor styling.
-    // The doc stays plain Markdown on this single surface.
-    wysiwyg(),
+    // The doc stays plain Markdown on this single surface. The cursor
+    // line always reveals raw source; `livePreview: false` shows source
+    // everywhere (settings kill-switch).
+    wysiwyg({ livePreview: opts.livePreview !== false }),
     closeBrackets(),
     // Indent guides for nested lists/tasks (Step 1 editor basics).
     indentGuides(),

@@ -26,6 +26,7 @@ export type CtxMenu = {
   items: { label: string; shortcut?: string; danger?: boolean; disabled?: boolean; run: () => void }[];
 } | null;
 
+
 export type Settings = {
   theme: "system" | "light" | "dark";
   fontSize: number;
@@ -34,6 +35,8 @@ export type Settings = {
   fullWidth: boolean;
   wordWrap: boolean;
   lineNumbers: boolean;
+  /** Live preview: render markdown in place, cursor line shows source. Off = plain source. */
+  livePreview: boolean;
   confirmTrash: boolean;
   /** Opt-in WSL workspaces. Gated on platform WSL support; off → plain notetaking app. */
   wslEnabled: boolean;
@@ -49,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fullWidth: false,
   wordWrap: true,
   lineNumbers: false,
+  livePreview: true,
   confirmTrash: false,
   wslEnabled: false,
   ribbonVisible: true,

@@ -678,6 +678,7 @@ export default function App(): JSX.Element {
                     relativePath={doc.relativePath}
                     lineNumbers={settings.lineNumbers}
                     wordWrap={settings.wordWrap}
+                    livePreview={settings.livePreview}
                     fullWidth={settings.fullWidth}
                     reportCursor
                     onEdit={docsApi.onEdit}
