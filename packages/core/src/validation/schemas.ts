@@ -29,6 +29,8 @@ export const SettingsSchema = v.object({
   ribbonVisible: v.optional(v.boolean()),
   /** Template folder (relative path). Empty string disables template picking. */
   templateFolder: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256))),
+  /** Where the New-task command appends: today's Daily Note or Inbox.md. */
+  taskCaptureTarget: v.optional(v.picklist(["daily", "inbox"])),
 });
 
 export type ValidatedSettings = v.InferOutput<typeof SettingsSchema>;

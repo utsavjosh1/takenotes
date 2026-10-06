@@ -84,6 +84,11 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
             <SettingRow label="Template folder" description="Ordinary folder of .md templates, relative to the workspace root. Insert Template renders {{title}}, {{date}}, {{time}} only.">
               {(control) => <input {...control} type="text" value={settings.templateFolder} placeholder="Templates" onChange={(e) => set("templateFolder", e.target.value)} />}
             </SettingRow>
+            <SettingRow label="New tasks go to" description="Daily appends to today's Daily Note (never created silently); Inbox appends to Inbox.md.">
+              {(control) => <select {...control} value={settings.taskCaptureTarget} onChange={(e) => set("taskCaptureTarget", e.target.value as Settings["taskCaptureTarget"])}>
+                <option value="daily">Today's Daily Note</option><option value="inbox">Inbox.md</option>
+              </select>}
+            </SettingRow>
             <SettingRow label="Update links on rename" description="Rewrite [[links]] when a note or folder moves. Off asks first and renames only.">
               {(control) => <input {...control} type="checkbox" checked={settings.autoUpdateLinks} onChange={(e) => set("autoUpdateLinks", e.target.checked)} />}
             </SettingRow>

@@ -130,6 +130,7 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       "tree.collapseAll": () => tree.collapseAll(),
       "favorites.addActive": () => deps.addActiveToFavorites?.(),
       "template.insert": () => window.dispatchEvent(new CustomEvent("takenotes:open-template-picker")),
+      "task.new": () => window.dispatchEvent(new CustomEvent("takenotes:open-task-dialog")),
     };
     const whenFor = (id: CommandId): boolean => {
       if (id === "editor.save" || id === "editor.find" || id === "note.close") return activeDoc(docs.layout) !== null;
@@ -146,6 +147,7 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       if (id === "tree.expandAll" || id === "tree.collapseAll") return workspace !== null;
       if (id === "favorites.addActive") return activeDoc(docs.layout) !== null;
       if (id === "template.insert") return workspace !== null && activeDoc(docs.layout) !== null;
+      if (id === "task.new") return workspace !== null;
       return runners[id] !== undefined;
     };
     return new CommandRegistry(

@@ -49,6 +49,8 @@ export type Settings = {
   ribbonVisible: boolean;
   /** Folder of `.md` template notes, relative to the workspace root. */
   templateFolder: string;
+  /** Where the New-task command appends: today's Daily Note or Inbox.md. */
+  taskCaptureTarget: "daily" | "inbox";
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -66,6 +68,7 @@ export const DEFAULT_SETTINGS: Settings = {
   wslEnabled: false,
   ribbonVisible: true,
   templateFolder: "Templates",
+  taskCaptureTarget: "daily",
 };
 
 export type AppSnapshot = {

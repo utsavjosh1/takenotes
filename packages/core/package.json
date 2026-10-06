@@ -27,6 +27,7 @@
     "./ports/host-filesystem": "./src/ports/host-filesystem.ts",
     "./productivity/daily": "./src/productivity/daily.ts",
     "./productivity/templates": "./src/productivity/templates.ts",
+    "./productivity/tasks": "./src/productivity/tasks.ts",
     "./search/query": "./src/search/query.ts",
     "./search/search": "./src/search/search.ts",
     "./services/note-service": "./src/services/note-service.ts",

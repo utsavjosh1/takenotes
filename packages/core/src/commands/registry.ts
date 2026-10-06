@@ -42,7 +42,8 @@ export type CommandId =
   | "tree.expandAll"
   | "tree.collapseAll"
   | "favorites.addActive"
-  | "template.insert";
+  | "template.insert"
+  | "task.new";
 
 export type CommandDefinition = {
   id: CommandId;
@@ -117,6 +118,7 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "tree.collapseAll", title: "Collapse All Folders", category: "File Tree", scope: "workspace" },
   { id: "favorites.addActive", title: "Add Active Note to Favorites", category: "Favorites", scope: "workspace" },
   { id: "template.insert", title: "Insert Template", category: "Note", scope: "editor" },
+  { id: "task.new", title: "New task", category: "Tasks", scope: "workspace" },
 ];
 
 export function commandDefinition(id: CommandId): CommandDefinition {

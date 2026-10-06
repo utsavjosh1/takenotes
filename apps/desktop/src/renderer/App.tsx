@@ -26,6 +26,7 @@ import { SearchPanel } from "./components/search";
 import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
 import { CommandMenu } from "./components/palette";
 import { TemplatePicker } from "./components/template-picker";
+import { TaskDialog, type NewTaskInput } from "./components/task-dialog";
 import { SettingsDialog } from "./components/settings";
 import { WslDialog } from "./components/wsl-dialog";
 import { UpdateDialog } from "./components/update-dialog";
@@ -101,6 +102,7 @@ export default function App(): JSX.Element {
   }, []);
   const [palette, setPalette] = useState<{ initialQuery: string } | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menu, setMenu] = useState<CtxMenu>(null);
   const [focusMode, setFocusMode] = useState(false);
@@ -298,8 +300,88 @@ export default function App(): JSX.Element {
     commandsApi.remember("template.insert");
   }, [workspaceApi.workspace, docsApi.activeTab, toast, commandsApi]);
 
+  // New-task dialog opens via the `task.new` command (palette, menu, or
+  // keyboard all dispatch `takenotes:open-task-dialog`).
+  useEffect(() => {
+    const onOpen = (): void => {
+      if (workspaceApi.workspace) setTaskDialogOpen(true);
+    };
+    window.addEventListener("takenotes:open-task-dialog", onOpen);
+    return () => window.removeEventListener("takenotes:open-task-dialog", onOpen);
+  }, [workspaceApi.workspace]);
+
+  // Task capture (productivity step 2): append `- [ ] text @due(...)` to
+  // today's Daily Note or Inbox.md per setting. The Daily Note is never
+  // created silently — a missing one asks first. The append is a
+  // read-then-write guarded by `expectedHash`, so a concurrent external
+  // edit surfaces as CONFLICT instead of overwriting. No database: the
+  // Markdown file stays authoritative and the index re-parses it.
+  const captureTask = useCallback(async (input: NewTaskInput) => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) return;
+    setTaskDialogOpen(false);
+    const { formatTaskLine, appendTaskLine, INBOX_RELATIVE_PATH } = await import("@takenotes/core/productivity/tasks");
+    let line: string;
+    try {
+      line = formatTaskLine(input.text, input.due);
+    } catch {
+      toast("Couldn't add the task: invalid text or due date.", "error");
+      return;
+    }
+    let rel = INBOX_RELATIVE_PATH;
+    let base: { content: string; hash: string; newlineStyle: "lf" | "crlf"; hadBom: boolean } | null = null;
+    let createdNew = false;
+    if (settings.taskCaptureTarget === "daily") {
+      const info = await bridge.daily.getToday(ws.workspaceId);
+      if (!info.ok) { toast(`Couldn't find today's Daily Note.`, "error"); return; }
+      rel = info.result.relativePath;
+      if (!info.result.exists) {
+        if (!window.confirm(`Today's Daily Note doesn't exist at ${rel}. Create it now?`)) return;
+        const created = await bridge.daily.createToday(ws.workspaceId);
+        if (!created.ok) { toast(`Couldn't create ${rel}.`, "error"); return; }
+        base = { content: created.result.content, hash: created.result.revision.hash, newlineStyle: "lf", hadBom: false };
+        createdNew = true;
+        workspaceIndex.upsert(ws.workspaceId, rel, created.result.content, created.result.revision);
+        bumpIndex();
+      }
+    }
+    if (!base) {
+      const read = await bridge.file.read(ws.workspaceId, rel);
+      if (!read.ok) {
+        if (read.error.code === "NOT_FOUND" && rel === INBOX_RELATIVE_PATH) {
+          const created = await bridge.file.create(ws.workspaceId, rel);
+          if (!created.ok) { toast(`Couldn't create ${rel}.`, "error"); return; }
+          base = { content: "", hash: created.result.hash, newlineStyle: "lf", hadBom: false };
+          createdNew = true;
+        } else {
+          toast(`Couldn't open ${rel}.`, "error");
+          return;
+        }
+      } else {
+        base = { content: read.result.content, hash: read.result.revision.hash, newlineStyle: read.result.newlineStyle, hadBom: read.result.hadBom };
+      }
+    }
+    const next = appendTaskLine(base.content, line);
+    const written = await bridge.file.write({
+      workspaceId: ws.workspaceId, relativePath: rel, content: next,
+      expectedHash: base.hash, newlineStyle: base.newlineStyle, hadBom: base.hadBom,
+    });
+    if (!written.ok) {
+      if (written.error.code === "CONFLICT") toast(`${rel} changed on disk — task NOT appended. Try again.`, "error");
+      else toast(`Couldn't append to ${rel}.`, "error");
+      return;
+    }
+    workspaceIndex.upsert(ws.workspaceId, rel, next, written.result);
+    bumpIndex();
+    if (createdNew) { void treeApi.refresh(ws); void treeApi.rebuild(ws); }
+    void docsApi.reconcileExternalChange(rel);
+    commandsApi.remember("task.new");
+    toast(`Task added to ${rel}.`);
+  }, [workspaceApi.workspace, settings.taskCaptureTarget, toast, commandsApi, bumpIndex, treeApi, docsApi]);
+
   useGlobalKeyboard({
-    paletteOpen: palette !== null || templatePickerOpen,
+    paletteOpen: palette !== null || templatePickerOpen || taskDialogOpen,
     platform,
     tree: treeApi,
     docs: docsApi,
@@ -807,6 +889,13 @@ export default function App(): JSX.Element {
             })();
           }}
           onClose={() => setPalette(null)}
+        />
+      )}
+      {taskDialogOpen && workspaceApi.workspace && (
+        <TaskDialog
+          target={settings.taskCaptureTarget}
+          onSubmit={(input) => void captureTask(input)}
+          onClose={() => setTaskDialogOpen(false)}
         />
       )}
       {templatePickerOpen && workspaceApi.workspace && docsApi.activeTab && (
