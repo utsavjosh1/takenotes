@@ -278,6 +278,8 @@ export default function App(): JSX.Element {
   }, [errToast]);
 
   const openWorkspace = useCallback(async (ws: WorkspaceInfo) => {
+    setCreating(null);
+    setCreateName("");
     setWorkspace(ws);
     setLayout(createLayout()); setCursor({ line: 1, col: 1 });
     setRecentWorkspaces((p) => {
@@ -911,11 +913,11 @@ export default function App(): JSX.Element {
     if (id === "editor.save" || id === "note.close") return activeDoc(layout) !== null;
     if (id === "pane.close" || id === "pane.focusNext") return layout.panes.length > 1;
     if (id === "workspace.refresh" || id === "workspace.close" || id === "search.open") return workspace !== null;
-    if (id === "workspace.openWsl") return platform.capabilities.wsl;
+    if (id === "workspace.openWsl") return platform.capabilities.wsl && settings.wslEnabled;
     if (id === "app.checkForUpdates") return platform.capabilities.updates;
     if (id === "workspace.switch") return false;
     return commandHandlers[id] !== undefined;
-  }, [layout, workspace, platform.capabilities.wsl, platform.capabilities.updates, commandHandlers]);
+  }, [layout, workspace, platform.capabilities.wsl, platform.capabilities.updates, settings.wslEnabled, commandHandlers]);
 
   const executeCommand = useCallback((id: CommandId) => {
     const run = commandHandlers[id];
@@ -1143,7 +1145,7 @@ export default function App(): JSX.Element {
           <p>Open your notes</p>
           <div className="actions">
             <button className="btn primary" onClick={() => void openLocal()}>Open folder</button>
-            {platform.capabilities.wsl && (
+            {platform.capabilities.wsl && settings.wslEnabled && (
               <button className="btn" onClick={() => void openWslDialog()}>Open WSL folder</button>
             )}
           </div>

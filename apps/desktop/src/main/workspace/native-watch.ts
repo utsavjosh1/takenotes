@@ -43,7 +43,14 @@ export class NativeWorkspaceWatcher {
       if (this.generations.get(ws.workspaceId) !== gen) return;
       if ("error" in out) return;
       this.snapshots.set(ws.workspaceId, out.snapshot);
-      const timer = setInterval(() => void this.tick(ws), this.intervalMs);
+      let busy = false;
+      const timer = setInterval(() => {
+        if (busy) return;
+        busy = true;
+        void this.tick(ws, gen).finally(() => {
+          busy = false;
+        });
+      }, this.intervalMs);
       this.timers.set(ws.workspaceId, timer);
     });
   }
@@ -56,10 +63,11 @@ export class NativeWorkspaceWatcher {
     this.snapshots.delete(workspaceId);
   }
 
-  private async tick(ws: WatchWorkspace): Promise<void> {
+  private async tick(ws: WatchWorkspace, gen: number): Promise<void> {
     const before = this.snapshots.get(ws.workspaceId);
     const out = await this.scan(ws);
     if ("error" in out) return;
+    if (this.generations.get(ws.workspaceId) !== gen) return;
     this.snapshots.set(ws.workspaceId, out.snapshot);
     if (!before) return;
     for (const [rel, nextSig] of out.snapshot) {
