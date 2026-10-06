@@ -54,9 +54,11 @@ export function parsePropertyRegistry(input: unknown): PropertyRegistry {
 /** Resolve the interpretation type for one property name: explicit
  * workspace entry, else V1 default, else `text`. */
 export function resolvePropertyType(registry: PropertyRegistry | undefined, name: string): PropertyType {
-  const explicit = registry !== undefined && isPatchableKey(name) ? registry[name] : undefined;
-  if (explicit !== undefined) return explicit;
-  return DEFAULT_PROPERTY_TYPES[name] ?? "text";
+  if (registry !== undefined && isPatchableKey(name) && Object.hasOwn(registry, name)) {
+    const explicit = registry[name];
+    if (isValidType(explicit)) return explicit;
+  }
+  return Object.hasOwn(DEFAULT_PROPERTY_TYPES, name) ? DEFAULT_PROPERTY_TYPES[name]! : "text";
 }
 
 /** Typed-lens read of one raw frontmatter value. Total: anything
