@@ -1,4 +1,5 @@
 import { parseDocument, type DocumentIndexEntry } from "./document";
+import { buildEdges, type Edge } from "./edges";
 import type { FileRevision } from "@takenotes/contracts/ipc";
 
 /** In-memory per-workspace document index (P1-07).
@@ -25,6 +26,8 @@ export type IndexInput = {
 
 export class WorkspaceIndex {
   private readonly docs = new Map<string, DocumentIndexEntry>();
+  /** Typed edge table per workspace, built once per rebuild (see `edges`). */
+  private readonly edgeTables = new Map<string, Edge[]>();
 
   private static key(workspaceId: string, relativePath: string): string {
     return `${workspaceId}:${relativePath}`;
@@ -44,7 +47,8 @@ export class WorkspaceIndex {
   }
 
   /** Parse-and-store one file. Same-hash → stored entry back, no re-parse.
-   * Oversized content (>1 MiB) is skipped → `null`. */
+   * Oversized content (>1 MiB) is skipped → `null`. Any mutation drops
+   * the workspace edge table; it rebuilds lazily on the next `edges`. */
   upsert(workspaceId: string, relativePath: string, content: string, revision: FileRevision): DocumentIndexEntry | null {
     if (content.length > MAX_INDEX_FILE_BYTES) return null;
     const key = WorkspaceIndex.key(workspaceId, relativePath);
@@ -52,6 +56,7 @@ export class WorkspaceIndex {
     if (existing && existing.revision.hash === revision.hash) return existing;
     const entry = parseDocument(workspaceId, relativePath, content, revision);
     this.docs.set(key, entry);
+    this.edgeTables.delete(workspaceId);
     return entry;
   }
 
@@ -62,6 +67,7 @@ export class WorkspaceIndex {
     if (!entry) return false;
     this.docs.delete(oldKey);
     this.docs.set(WorkspaceIndex.key(workspaceId, newRel), { ...entry, relativePath: newRel });
+    this.edgeTables.delete(workspaceId);
     return true;
   }
 
@@ -75,13 +81,16 @@ export class WorkspaceIndex {
         const rel = `${newDir}/${k.slice(oldPrefix.length)}`;
         this.docs.set(WorkspaceIndex.key(workspaceId, rel), { ...e, relativePath: rel });
         moved += 1;
+        this.edgeTables.delete(workspaceId);
       }
     }
     return moved;
   }
 
   remove(workspaceId: string, relativePath: string): boolean {
-    return this.docs.delete(WorkspaceIndex.key(workspaceId, relativePath));
+    const dropped = this.docs.delete(WorkspaceIndex.key(workspaceId, relativePath));
+    if (dropped) this.edgeTables.delete(workspaceId);
+    return dropped;
   }
 
   /** Folder delete/trash: drop the file plus everything under it. */
@@ -95,6 +104,7 @@ export class WorkspaceIndex {
         dropped += 1;
       }
     }
+    if (dropped > 0) this.edgeTables.delete(workspaceId);
     return dropped;
   }
 
@@ -107,6 +117,9 @@ export class WorkspaceIndex {
       if (in_.workspaceId !== workspaceId) continue;
       this.upsert(in_.workspaceId, in_.relativePath, in_.content, in_.revision);
     }
+    // One edge build per rebuild: entries are settled, so the table is
+    // computed eagerly and served from cache until the next mutation.
+    this.edgeTables.set(workspaceId, buildEdges(this.list(workspaceId)));
   }
 
   /** Discard one workspace's index. Lossless by construction — bytes live
@@ -116,5 +129,19 @@ export class WorkspaceIndex {
     for (const k of [...this.docs.keys()]) {
       if (k.startsWith(prefix)) this.docs.delete(k);
     }
+    this.edgeTables.delete(workspaceId);
+  }
+
+  /** Typed edge table for one workspace (`buildEdges` over its entries).
+   * Built once per rebuild and cached; incremental mutations invalidate
+   * the cache and it rebuilds lazily here. Returns a fresh array — never
+   * the live cache. Other workspaces never leak in (entries are keyed
+   * `workspaceId:relativePath`). */
+  edges(workspaceId: string): Edge[] {
+    const hit = this.edgeTables.get(workspaceId);
+    if (hit) return hit.slice();
+    const built = buildEdges(this.list(workspaceId));
+    this.edgeTables.set(workspaceId, built);
+    return built.slice();
   }
 }

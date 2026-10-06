@@ -1,4 +1,5 @@
 import type { WorkspaceInfo } from "@takenotes/contracts/ipc";
+import { resolveLinkTarget } from "@takenotes/core/index/edges";
 
 /** Minimal domain surface the workspace lifecycle choreography needs.
  * Implemented by the renderer hooks in production (`App.tsx` passes its
@@ -64,34 +65,14 @@ export async function refreshWorkspaceFlow(
   await Promise.all([deps.tree.refresh(ws), deps.tree.rebuild(ws), deps.search.refreshIndex(ws)]);
 }
 
-const NOTE_EXT = /\.(md|markdown|txt)$/i;
-
 /** Resolve a `[[wikilink]]` target to a workspace note path (Step 1 reading
- * view follow-links). Fragment (`#heading`/`#^block`) is stripped for
- * resolution — the file opens, scroll-to-anchor is deferred. Rules mirror
- * the link-rename ambiguity policy: a bare name shared by several notes
- * resolves to nothing (never guess); path-qualified targets match by
- * suffix and must also be unique. Extension is optional (`Note` =
- * `Note.md`); matching is case-insensitive with exact-case preferred. */
+ * view follow-links). Thin adapter over the core edge-table rule
+ * (`resolveLinkTarget`): fragment (`#heading`/`#^block`) is stripped for
+ * resolution — the file opens, scroll-to-anchor is deferred. A bare name
+ * shared by several notes resolves to nothing (never guess);
+ * path-qualified targets match by suffix and must also be unique.
+ * Extension is optional (`Note` = `Note.md`); matching is case-insensitive
+ * with exact-case preferred. */
 export function resolveWikilinkTarget(target: string, files: string[]): string | null {
-  const raw = target.split("#")[0] ?? "";
-  const base = raw.trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
-  if (!base) return null;
-  const notes = files.filter((f) => NOTE_EXT.test(f));
-  if (notes.length === 0) return null;
-  if (!base.includes("/")) {
-    const stem = base.replace(NOTE_EXT, "").toLowerCase();
-    const exact = notes.filter((f) => f.split("/").pop()!.replace(NOTE_EXT, "") === base.replace(NOTE_EXT, ""));
-    if (exact.length === 1) return exact[0]!;
-    const folded = notes.filter((f) => f.split("/").pop()!.replace(NOTE_EXT, "").toLowerCase() === stem);
-    return folded.length === 1 ? folded[0]! : null;
-  }
-  const withExt = NOTE_EXT.test(base) ? base : `${base}.md`;
-  const norm = withExt.toLowerCase();
-  const hits = notes.filter((f) => {
-    const l = f.toLowerCase();
-    return l === norm || l.endsWith(`/${norm}`);
-  });
-  const uniq = [...new Set(hits)];
-  return uniq.length === 1 ? uniq[0]! : null;
+  return resolveLinkTarget(target, files);
 }

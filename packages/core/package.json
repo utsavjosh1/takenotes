@@ -17,6 +17,7 @@
     "./favorites/store": "./src/favorites/store.ts",
     "./outline/extract": "./src/outline/extract.ts",
     "./index/document": "./src/index/document.ts",
+    "./index/edges": "./src/index/edges.ts",
     "./index/properties": "./src/index/properties.ts",
     "./index/store": "./src/index/store.ts",
     "./markdown/render": "./src/markdown/render.ts",

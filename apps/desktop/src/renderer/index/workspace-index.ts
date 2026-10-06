@@ -123,5 +123,8 @@ export async function buildWorkspaceIndex(
     inputs.push({ workspaceId: wid, relativePath: e.relativePath, content: read.result.content, revision: read.result.revision });
   }
   store.rebuild(wid, inputs);
+  // Warm the typed edge table once per rebuild (backlinks/graph/Collections
+  // consume it later via `store.edges`; no UI reads it yet).
+  store.edges(wid);
   return { ok: true, indexed: inputs.length, skipped, truncated };
 }
