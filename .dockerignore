@@ -6,5 +6,6 @@ dist-server
 smoke-artifacts
 .git
 wsl-helper
+tools/wsl-helper
 tests
 docs

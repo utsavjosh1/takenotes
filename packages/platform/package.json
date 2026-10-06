@@ -1,0 +1,17 @@
+{
+  "name": "@takenotes/platform",
+  "version": "0.0.8",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./filesystem": "./src/filesystem.ts",
+    "./index": "./src/index.ts",
+    "./keymap": "./src/keymap.ts",
+    "./platform": "./src/platform.ts",
+    "./shortcut-labels": "./src/shortcut-labels.ts",
+    "./types": "./src/types.ts",
+    "./window": "./src/window.ts"
+  }
+}

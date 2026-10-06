@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { COMMAND_DEFINITIONS } from "../../src/shared/commands/registry";
-import { commandQueryText, paletteModeForQuery, searchCommands } from "../../src/shared/commands/palette";
+import { COMMAND_DEFINITIONS } from "@takenotes/core/commands/registry";
+import { commandQueryText, paletteModeForQuery, searchCommands } from "@takenotes/core/commands/palette";
 
 describe("command palette query", () => {
   it("> prefix selects command mode and strips the prefix", () => {
@@ -14,7 +14,7 @@ describe("command palette query", () => {
   });
 
   it("matches commands by category and id fallback", () => {
-    expect(searchCommands(COMMAND_DEFINITIONS, "> pane").map((c) => c.id)).toContain("pane.splitVertical");
+    expect(searchCommands(COMMAND_DEFINITIONS, "> tab").map((c) => c.id)).toContain("note.reopenClosed");
     expect(searchCommands(COMMAND_DEFINITIONS, "> quickOpen.open").map((c) => c.id)).toEqual(["quickOpen.open"]);
   });
 

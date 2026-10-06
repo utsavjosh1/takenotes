@@ -3,15 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { HelperClient } from "../../apps/desktop/src/main/wsl/helper-client";
-import { PROTOCOL_VERSION } from "../../src/shared/protocol-version";
+import { HelperClient } from "@takenotes/desktop/main/wsl/helper-client";
+import { PROTOCOL_VERSION } from "@takenotes/contracts/protocol-version";
 
 let helperJs: string | null = null;
 
 async function ensureHelperBuilt(): Promise<string> {
   if (helperJs) return helperJs;
   const { execFileSync } = await import("node:child_process");
-  execFileSync("node", ["scripts/build-helper.mjs"], { stdio: "pipe" });
+  execFileSync("node", ["tools/scripts/build-helper.mjs"], { stdio: "pipe" });
   helperJs = path.resolve("dist-helper/helper.cjs");
   return helperJs;
 }

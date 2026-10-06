@@ -1,0 +1,13 @@
+{
+  "name": "@takenotes/contracts",
+  "version": "0.0.8",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./ipc": "./src/contracts/ipc.ts",
+    "./errors": "./src/errors.ts",
+    "./protocol": "./src/protocol.ts",
+    "./protocol-version": "./src/protocol-version.ts",
+    "./contracts/ipc": "./src/contracts/ipc.ts"
+  }
+}

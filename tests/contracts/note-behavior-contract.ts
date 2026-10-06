@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { CoreNoteService, CoreWorkspace } from "../../src/core/services/note-service.js";
-import { MAX_FILE_BYTES } from "../../src/core/policy/note-policy.js";
+import type { CoreNoteService, CoreWorkspace } from "@takenotes/core/services/note-service";
+import { MAX_FILE_BYTES } from "@takenotes/core/policy/note-policy";
 
 type NoteBehaviorService = Pick<CoreNoteService, "read" | "update">;
 

@@ -5,9 +5,9 @@ import {
   P1_REQUIRED_COMMAND_IDS,
   assertUniqueCommandDefinitions,
   type Command,
-} from "../../src/shared/commands/registry";
-import { acceleratorFor } from "../../src/shared/platform/keymap";
-import { CommandService } from "../../apps/desktop/src/main/services/command-service";
+} from "@takenotes/core/commands/registry";
+import { acceleratorFor } from "@takenotes/platform/keymap";
+import { CommandService } from "@takenotes/desktop/main/services/command-service";
 
 /** P1-09 canonical command registry: IDs are stable, labels are metadata. */
 describe("command registry", () => {

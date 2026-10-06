@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { statusSegments } from "../../apps/desktop/src/renderer/status";
+import { statusSegments } from "@takenotes/desktop/renderer/status";
 
 /** P1-06 acceptance 2: every status segment follows workspace switches;
  * disconnected WSL renders honestly, never as saved/clean. */

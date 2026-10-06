@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchQuickOpen, type QuickOpenItem } from "../../src/shared/commands/palette";
+import { searchQuickOpen, type QuickOpenItem } from "@takenotes/core/commands/palette";
 
 const files: QuickOpenItem[] = [
   { workspaceId: "A", relativePath: "MCP Architecture.md", title: "MCP Architecture" },

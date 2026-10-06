@@ -5,16 +5,16 @@
  * same args, same `FileReadResult` shape, same `AppError` codes.
  * Uses the production `NoteService + WorkspaceService + NativeFileAdapter`
  * against a tempdir — no Electron needed. Real `ipcMain.handle` wiring
- * stays transport-only in `src/main/ipc/register.ts`.
+ * stays transport-only in `apps/desktop/src/main/ipc/register.ts`.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { WorkspaceRegistry } from "../../apps/desktop/src/main/workspace/registry.js";
-import { NativeFileAdapter } from "../../apps/desktop/src/main/workspace/file-adapter.js";
-import { NoteService } from "../../apps/desktop/src/main/services/note-service.js";
-import { WorkspaceService } from "../../apps/desktop/src/main/services/workspace-service.js";
+import { WorkspaceRegistry } from "@takenotes/desktop/main/workspace/registry";
+import { NativeFileAdapter } from "@takenotes/desktop/main/workspace/file-adapter";
+import { NoteService } from "@takenotes/desktop/main/services/note-service";
+import { WorkspaceService } from "@takenotes/desktop/main/services/workspace-service";
 
 function makeNotes(): { workspaces: WorkspaceService; notes: NoteService } {
   const workspaces = new WorkspaceService(new WorkspaceRegistry());

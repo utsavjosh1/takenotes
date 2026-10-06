@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { listDistributions } from "../../apps/desktop/src/main/wsl/distributions";
+import { listDistributions } from "@takenotes/desktop/main/wsl/distributions";
 
 /** Windows-only live evidence (runs in Windows CI, skipped on Linux):
  * P1-04 mutation parity executed against a real distro with two Linux users

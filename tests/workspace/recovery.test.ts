@@ -7,9 +7,9 @@ import {
   RECOVERY_THROTTLE_MS,
   RecoveryStore,
   type RecoveryRestoreWriter,
-} from "../../apps/desktop/src/main/workspace/recovery.js";
-import type { FileRevision } from "../../src/shared/contracts/ipc.js";
-import { appError } from "../../src/shared/errors.js";
+} from "@takenotes/desktop/main/workspace/recovery";
+import type { FileRevision } from "@takenotes/contracts/ipc";
+import { appError } from "@takenotes/contracts/errors";
 
 async function tmpDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "takenotes-recovery-"));
@@ -38,7 +38,20 @@ async function findSnapshotsDir(base: string): Promise<string> {
   throw new Error("snapshots directory not found");
 }
 
+async function pathExists(file: string): Promise<boolean> {
+  return fs.stat(file).then(() => true, () => false);
+}
+
 describe("recovery snapshots", () => {
+  it("stores snapshots under recovery/<stable-namespace>/<relative-path>/", async () => {
+    const base = await tmpDir();
+    const store = new RecoveryStore(base, { now: () => 1_000, id: ids("s1") });
+
+    await store.captureChanged({ workspaceId: "workspace-1", relativePath: "folder/README.md", content: "A", reason: "save" });
+
+    expect(await pathExists(path.join(base, "recovery", "workspace-1", "folder", "README.md", "snapshots"))).toBe(true);
+  });
+
   it("creates the first changed snapshot, skips identical content, throttles edits, and permits a later changed snapshot", async () => {
     let now = 1_000;
     const store = new RecoveryStore(await tmpDir(), { now: () => now, id: ids("s1", "s2") });
@@ -91,6 +104,39 @@ describe("recovery snapshots", () => {
 
     const listed = await store.list("workspace-1", "a.md");
     expect(listed.ok && listed.result.map((s) => s.snapshotId)).toEqual(["new", "boundary"]);
+  });
+
+  it("expires snapshots nested under a note directory named 'snapshots'", async () => {
+    // A note path may itself contain a `snapshots` segment: expiry must look
+    // past the note directory instead of mistaking it for a snapshot store.
+    let now = 1_000_000;
+    const store = new RecoveryStore(await tmpDir(), { now: () => now, id: ids("old") });
+    await store.captureChanged({ workspaceId: "workspace-1", relativePath: "snapshots/secret.md", content: "old", reason: "save" });
+    now = 1_000_000 + RECOVERY_RETENTION_MS + 1;
+    const listed = await store.list("workspace-1", "snapshots/secret.md");
+    expect(listed.ok && listed.result).toEqual([]);
+  });
+
+  it("expires records nested below a snapshot dir that also holds records", async () => {
+    // Fall-through regression: note `s.md` and note `s.md/snapshots/y.md`
+    // share the `s.md/snapshots/` directory, which then holds both recovery
+    // JSON and a nested snapshot dir. Expiry must descend past the JSON
+    // instead of stopping at the first snapshot dir. Asserted on disk:
+    // `list()` filters expired records, so it cannot catch retention.
+    const base = await tmpDir();
+    let now = 1_000_000;
+    const store = new RecoveryStore(base, { now: () => now, id: ids("outer", "inner") });
+    await store.captureChanged({ workspaceId: "workspace-1", relativePath: "s.md", content: "outer", reason: "save" });
+    await store.captureChanged({ workspaceId: "workspace-1", relativePath: "s.md/snapshots/y.md", content: "inner", reason: "save" });
+    const outerFile = path.join(base, "recovery", "workspace-1", "s.md", "snapshots", "1000000-outer.json");
+    const innerFile = path.join(base, "recovery", "workspace-1", "s.md", "snapshots", "y.md", "snapshots", "1000000-inner.json");
+    expect(await pathExists(outerFile)).toBe(true);
+    expect(await pathExists(innerFile)).toBe(true);
+    now = 1_000_000 + RECOVERY_RETENTION_MS + 1;
+    const outer = await store.list("workspace-1", "s.md");
+    expect(outer.ok && outer.result).toEqual([]);
+    expect(await pathExists(outerFile)).toBe(false);
+    expect(await pathExists(innerFile)).toBe(false);
   });
 
   it("isolates histories by workspaceId, including same relative path for WSL users", async () => {

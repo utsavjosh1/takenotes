@@ -21,10 +21,10 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CoreNoteService, type CoreWorkspace } from "../../src/core/services/note-service.js";
-import { validateNoteRelativePath } from "../../src/core/policy/note-policy.js";
-import { LocalHostFilesystem } from "../../apps/desktop/src/main/workspace/local-host-filesystem.js";
-import { NativeFileAdapter } from "../../apps/desktop/src/main/workspace/file-adapter.js";
+import { CoreNoteService, type CoreWorkspace } from "@takenotes/core/services/note-service";
+import { validateNoteRelativePath } from "@takenotes/core/policy/note-policy";
+import { LocalHostFilesystem } from "@takenotes/desktop/main/workspace/local-host-filesystem";
+import { NativeFileAdapter } from "@takenotes/desktop/main/workspace/file-adapter";
 
 /** Vectors every boundary must refuse with INVALID_PATH or OUTSIDE_ROOT. */
 const REFUSED_VECTORS = [
