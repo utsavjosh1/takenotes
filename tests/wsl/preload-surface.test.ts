@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 /** The renderer must receive structured distro data, never shell capability:
  * no child_process, no spawn/exec, no generic channel invoke in preload. */
 describe("preload surface (no arbitrary process spawning)", () => {
-  const source = readFileSync(path.resolve("src/preload/index.ts"), "utf8");
+  const source = readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
 
   it("exposes only narrow named distro functions", () => {
     expect(source).toContain("listWslDistributions");

@@ -7,7 +7,7 @@ import {
   RECOVERY_THROTTLE_MS,
   RecoveryStore,
   type RecoveryRestoreWriter,
-} from "../../src/main/workspace/recovery.js";
+} from "../../apps/desktop/src/main/workspace/recovery.js";
 import type { FileRevision } from "../../src/shared/contracts/ipc.js";
 import { appError } from "../../src/shared/errors.js";
 

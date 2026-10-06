@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validatePosixRelativePath, validateWindowsRelativePath } from "../../src/main/workspace/path-security";
+import { validatePosixRelativePath, validateWindowsRelativePath } from "../../apps/desktop/src/main/workspace/path-security";
 
 describe("windows path validation", () => {
   it("accepts normal paths", () => {

@@ -23,8 +23,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CoreNoteService, type CoreWorkspace } from "../../src/core/services/note-service.js";
 import { validateNoteRelativePath } from "../../src/core/policy/note-policy.js";
-import { LocalHostFilesystem } from "../../src/main/workspace/local-host-filesystem.js";
-import { NativeFileAdapter } from "../../src/main/workspace/file-adapter.js";
+import { LocalHostFilesystem } from "../../apps/desktop/src/main/workspace/local-host-filesystem.js";
+import { NativeFileAdapter } from "../../apps/desktop/src/main/workspace/file-adapter.js";
 
 /** Vectors every boundary must refuse with INVALID_PATH or OUTSIDE_ROOT. */
 const REFUSED_VECTORS = [

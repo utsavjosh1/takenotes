@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Theme pre-paint lives in /theme-init.js (public/, external) so
+         `script-src 'self'` holds with no inline scripts. style-src
+         'unsafe-inline' remains a documented exception: CodeMirror and React
+         set inline styles at runtime. Vite rebases /theme-init.js to ./ on
+         build (base './'), same as the favicon above. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none';" />
+    <!-- Brand: absolute public paths are rebased to ./ by Vite on build (base './'). -->
+    <!-- Theme-aware tile favicons: dark tile for light UI, light tile for dark UI. Symbol stays in-app. -->
+    <link rel="icon" type="image/svg+xml" href="/takenotes-app-icon-light.svg" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/svg+xml" href="/takenotes-app-icon-dark.svg" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/takenotes-app-icon-light.svg" />
+    <link rel="apple-touch-icon" href="/takenotes-app-icon-light.svg" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf6ee" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#151310" />
+    <title>takenotes</title>
+    <script src="/theme-init.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

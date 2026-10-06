@@ -3,6 +3,7 @@ import type { CommandScope } from "../platform/types.js";
 export type CommandId =
   | "note.new"
   | "note.open"
+  | "note.openToday"
   | "note.close"
   | "workspace.open"
   | "workspace.openWsl"
@@ -67,6 +68,7 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "note.new", title: "New Note", category: "Note", scope: "workspace" },
   { id: "note.open", title: "Open Note", category: "Note", scope: "workspace" },
   { id: "note.close", title: "Close Tab", category: "Note", scope: "workspace" },
+  { id: "note.openToday", title: "Open Today's Daily Note", category: "Note", scope: "workspace" },
   { id: "workspace.open", title: "Open Folder", category: "Workspace", scope: "application" },
   { id: "workspace.openWsl", title: "Open WSL Folder", category: "Workspace", scope: "application" },
   { id: "workspace.switch", title: "Switch Workspace", category: "Workspace", scope: "application" },

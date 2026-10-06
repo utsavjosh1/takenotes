@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { WorkspaceRegistry } from "../../src/main/workspace/registry";
-import { adapterKindFor, type FileAdapter } from "../../src/main/workspace/file-adapter";
-import { NoteService } from "../../src/main/services/note-service";
-import { WorkspaceService } from "../../src/main/services/workspace-service";
+import { WorkspaceRegistry } from "../../apps/desktop/src/main/workspace/registry";
+import { adapterKindFor, type FileAdapter } from "../../apps/desktop/src/main/workspace/file-adapter";
+import { NoteService } from "../../apps/desktop/src/main/services/note-service";
+import { WorkspaceService } from "../../apps/desktop/src/main/services/workspace-service";
 
 describe("adapter dispatch by kind", () => {
   it("routes native kinds to the native adapter and WSL to the helper", () => {

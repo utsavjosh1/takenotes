@@ -122,3 +122,28 @@ export type PlatformReport = {
   wayland: boolean;
   shortcuts: Record<string, string>;
 };
+
+export type RecentWorkspaceInfo = {
+  id: string;
+  displayName: string;
+  type: WorkspaceType;
+};
+
+export type DailyNoteInfo = {
+  date: string;
+  relativePath: string;
+  exists: boolean;
+};
+
+export type DailyNoteCreateResult = DailyNoteInfo & {
+  exists: true;
+  revision: FileRevision;
+  content: string;
+};
+
+export type WorkspaceChangeEvent = {
+  workspaceId: string;
+  /** Null means "somewhere in the workspace changed; refresh tree/index". */
+  relativePath: string | null;
+  kind: "changed" | "renamed" | "deleted";
+};

@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "vitest";
 import { CoreNoteService, type CoreWorkspace } from "../../src/core/services/note-service.js";
-import { LocalHostFilesystem } from "../../src/main/workspace/local-host-filesystem.js";
+import { LocalHostFilesystem } from "../../apps/desktop/src/main/workspace/local-host-filesystem.js";
 import { defineNoteBehaviorSuite } from "./note-behavior-contract.js";
 
 function makeTempRoot(): string {

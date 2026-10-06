@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { WorkspaceRegistry } from "../../src/main/workspace/registry";
-import type { FileAdapter } from "../../src/main/workspace/file-adapter";
-import { NoteService, type WslRequest } from "../../src/main/services/note-service";
-import { WorkspaceService } from "../../src/main/services/workspace-service";
+import { WorkspaceRegistry } from "../../apps/desktop/src/main/workspace/registry";
+import type { FileAdapter } from "../../apps/desktop/src/main/workspace/file-adapter";
+import { NoteService, type WslRequest } from "../../apps/desktop/src/main/services/note-service";
+import { WorkspaceService } from "../../apps/desktop/src/main/services/workspace-service";
 
 function nativeStub(): FileAdapter {
   return {

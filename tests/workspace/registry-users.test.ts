@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { WorkspaceRegistry, toWorkspaceInfo } from "../../src/main/workspace/registry";
-import { workspaceKeyFor } from "../../src/main/workspace/drafts";
+import { WorkspaceRegistry, toWorkspaceInfo } from "../../apps/desktop/src/main/workspace/registry";
+import { workspaceKeyFor } from "../../apps/desktop/src/main/workspace/drafts";
 
 describe("WSL per-user workspace identity (acceptance 3)", () => {
   it("same distro+path under two users yields two workspaceIds", () => {

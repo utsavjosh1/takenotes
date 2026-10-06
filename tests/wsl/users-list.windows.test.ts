@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { listDistributions } from "../../src/main/wsl/distributions";
+import { listDistributions } from "../../apps/desktop/src/main/wsl/distributions";
 import { filterCandidateUsers, parsePasswd } from "../../wsl-helper/src/users";
 
 /** Windows-only live evidence (runs in Windows CI, skipped on Linux):

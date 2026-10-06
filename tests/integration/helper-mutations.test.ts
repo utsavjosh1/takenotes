@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync }
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { HelperClient } from "../../src/main/wsl/helper-client";
+import { HelperClient } from "../../apps/desktop/src/main/wsl/helper-client";
 import { PROTOCOL_VERSION } from "../../src/shared/protocol-version";
 
 async function ensureHelperBuilt(): Promise<string> {
