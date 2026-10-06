@@ -63,6 +63,7 @@ export function useFileTree(
   const { toast, errToast } = notify;
   const bumpIndex = useIndexMeta((s) => s.bump);
   const confirmTrash = useSettingsStore((s) => s.settings.confirmTrash);
+  const autoUpdateLinks = useSettingsStore((s) => s.settings.autoUpdateLinks);
   const platform = usePlatform();
 
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
@@ -224,10 +225,16 @@ export function useFileTree(
     const newRel = joinRel(dir, newName);
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }, "Couldn't rename"); setTree((p) => ({ ...p, renaming: null })); return; }
+    // Auto-update off means rename-only: confirm first, then skip the
+    // link rewrite server-side. Links pointing here go stale visibly.
+    if (!autoUpdateLinks && !window.confirm(`Rename "${entry.name}" without updating links that point to it?`)) {
+      setTree((p) => ({ ...p, renaming: null }));
+      return;
+    }
     // Folders rename through directory.rename; files through file.rename.
     const res = entry.kind === "directory"
-      ? await bridge.directory.rename(ws.workspaceId, entry.relativePath, newRel)
-      : await bridge.file.rename(ws.workspaceId, entry.relativePath, newRel);
+      ? await bridge.directory.rename(ws.workspaceId, entry.relativePath, newRel, { autoUpdateLinks })
+      : await bridge.file.rename(ws.workspaceId, entry.relativePath, newRel, { autoUpdateLinks });
     setTree((p) => ({ ...p, renaming: null }));
     if (!res.ok) { errToast(res.error, "Couldn't rename"); return; }
     // Rename remaps open keys in place: baselines survive the rename.
@@ -241,7 +248,7 @@ export function useFileTree(
       if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
     } else await refresh(ws);
     await rebuild(ws);
-  }, [workspace, errToast, refresh, rebuild, docs, bumpIndex]);
+  }, [workspace, errToast, refresh, rebuild, docs, bumpIndex, autoUpdateLinks]);
 
   const deleteDirectory = useCallback(async (entry: DirectoryEntry) => {
     if (!workspace) return;

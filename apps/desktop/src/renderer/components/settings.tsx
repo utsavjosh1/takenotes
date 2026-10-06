@@ -74,7 +74,17 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
               {(control) => <input {...control} type="checkbox" checked={settings.livePreview} onChange={(e) => set("livePreview", e.target.checked)} />}
             </SettingRow>
           </>}
-          {tab === "Files" && <SettingRow label="Search exclusions" description="Always skipped: .git, node_modules, dist, build, coverage." />}
+          {tab === "Files" && <>
+            <SettingRow label="Search exclusions" description="Always skipped: .git, node_modules, dist, build, coverage." />
+            <SettingRow label="Link style" description="How [[ autocomplete writes new links. Shortest uses the bare note name.">
+              {(control) => <select {...control} value={settings.linkFormat} onChange={(e) => set("linkFormat", e.target.value as Settings["linkFormat"])}>
+                <option value="shortest">Shortest</option><option value="relative">Relative</option><option value="absolute">Absolute</option>
+              </select>}
+            </SettingRow>
+            <SettingRow label="Update links on rename" description="Rewrite [[links]] when a note or folder moves. Off asks first and renames only.">
+              {(control) => <input {...control} type="checkbox" checked={settings.autoUpdateLinks} onChange={(e) => set("autoUpdateLinks", e.target.checked)} />}
+            </SettingRow>
+          </>}
           {tab === "Shortcuts" && <ShortcutTable platform={platform} hotkeys={hotkeys} />}
           {tab === "About" && <>
             <div className="about-brand">

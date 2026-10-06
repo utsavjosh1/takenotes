@@ -2,7 +2,8 @@ import { EditorState, RangeSetBuilder, type Extension } from "@codemirror/state"
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, ViewUpdate, keymap, lineNumbers, placeholder } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
+import { wikilinkCompletionSource, type LinkCompleteDeps } from "./complete";
 import { search, searchKeymap } from "@codemirror/search";
 import { wysiwyg } from "./wysiwyg";
 import {
@@ -31,6 +32,8 @@ export type EditorOptions = {
   wordWrap: boolean;
   /** Live preview (default on). Off renders plain markdown source. */
   livePreview?: boolean;
+  /** `[[` file/heading completion (absent = no link completer). */
+  linkCompleter?: LinkCompleteDeps;
   onChange: (content: string) => void;
   onCursor?: (line: number, col: number) => void;
   /** Selection/focus changes for the floating format bubble. */
@@ -162,6 +165,12 @@ export function createEditor(parent: HTMLElement, initialContent: string, opts: 
     // line always reveals raw source; `livePreview: false` shows source
     // everywhere (settings kill-switch).
     wysiwyg({ livePreview: opts.livePreview !== false }),
+    // `[[` file/heading completion (Step 4): files disambiguate by
+    // folder path, `[[file#` completes headings, insertion honors the
+    // link-generation setting. Absent without a completer.
+    ...(opts.linkCompleter
+      ? [autocompletion({ override: [wikilinkCompletionSource(opts.linkCompleter)], activateOnTyping: true })]
+      : []),
     closeBrackets(),
     // Indent guides for nested lists/tasks (Step 1 editor basics).
     indentGuides(),
@@ -191,6 +200,10 @@ export function createEditor(parent: HTMLElement, initialContent: string, opts: 
       ...historyKeymap,
       ...markdownKeymap,
       ...closeBracketsKeymap,
+      // Completion keys (Ctrl+Space open, arrows + Enter accept, Esc
+      // dismiss) only bind when a `[[` completer is present, so global
+      // typing behavior never changes without one.
+      ...(opts.linkCompleter ? completionKeymap : []),
       ...searchKeymap,
     ]),
     EditorView.contentAttributes.of({ spellcheck: "true" }),

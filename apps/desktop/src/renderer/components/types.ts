@@ -1,4 +1,5 @@
 import type { DirectoryEntry, WorkspaceInfo } from "@takenotes/contracts/ipc";
+import type { LinkFormat } from "@takenotes/core/links/completion";
 
 export type TabState = {
   key: string;
@@ -37,6 +38,10 @@ export type Settings = {
   lineNumbers: boolean;
   /** Live preview: render markdown in place, cursor line shows source. Off = plain source. */
   livePreview: boolean;
+  /** `[[` insertion style. Shortest is the default. */
+  linkFormat: LinkFormat;
+  /** Rewrite `[[links]]` after renames. Off prompts for rename-only. */
+  autoUpdateLinks: boolean;
   confirmTrash: boolean;
   /** Opt-in WSL workspaces. Gated on platform WSL support; off → plain notetaking app. */
   wslEnabled: boolean;
@@ -53,6 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   wordWrap: true,
   lineNumbers: false,
   livePreview: true,
+  linkFormat: "shortest",
+  autoUpdateLinks: true,
   confirmTrash: false,
   wslEnabled: false,
   ribbonVisible: true,

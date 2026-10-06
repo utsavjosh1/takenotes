@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } fr
 import type { EditorView } from "@codemirror/view";
 import { openSearchPanel } from "@codemirror/search";
 import { createEditor } from "../editor/create-editor";
+import type { LinkCompleteDeps } from "../editor/complete";
+import { workspaceIndex } from "../index/workspace-index";
+import { fileCandidates, type LinkFormat } from "@takenotes/core/links/completion";
 import {
   applyLinkUrl,
   cmdBold,
@@ -66,9 +69,11 @@ export function PaneView({
   docKey,
   content,
   relativePath,
+  workspaceId,
   lineNumbers,
   wordWrap,
   livePreview,
+  linkFormat,
   fullWidth,
   reportCursor,
   onEdit,
@@ -83,6 +88,9 @@ export function PaneView({
   lineNumbers: boolean;
   wordWrap: boolean;
   livePreview: boolean;
+  /** `[[` insertion style (shortest/relative/absolute). */
+  linkFormat: LinkFormat;
+  workspaceId: string;
   fullWidth: boolean;
   /** Only the active pane reports cursor position to the status strip. */
   reportCursor: boolean;
@@ -124,6 +132,26 @@ export function PaneView({
 
   const sessionKey = `${docKey}|ln${lineNumbers ? 1 : 0}|ww${wordWrap ? 1 : 0}|lp${livePreview ? 1 : 0}`;
 
+  // `[[` completion feeds index-backed candidates through editor-owned
+  // callbacks: files (folder-path disambiguation) + headings of the
+  // resolved file. Context flows through a mutable ref so settings or
+  // title renames never remount the editor mid-typing.
+  const linkCtx = useRef({ workspaceId, relativePath, linkFormat });
+  linkCtx.current = { workspaceId, relativePath, linkFormat };
+  const completerRef = useRef<LinkCompleteDeps | null>(null);
+  if (!completerRef.current) {
+    completerRef.current = {
+      listFiles: () => fileCandidates(workspaceIndex.list(linkCtx.current.workspaceId)),
+      listHeadings: (path) =>
+        (workspaceIndex.get(linkCtx.current.workspaceId, path)?.headings ?? []).map((h) => ({
+          text: h.text,
+          level: h.level,
+        })),
+      activePath: () => linkCtx.current.relativePath,
+      linkFormat: () => linkCtx.current.linkFormat,
+    };
+  }
+
   // Mount / remount when the pane switches documents or toggles settings.
   // `content` here is the prop value at mount time — the base this editor
   // instance renders; later changes arrive via the sync effect below.
@@ -133,10 +161,12 @@ export function PaneView({
     if (!el) return;
     el.replaceChildren();
     renderedRef.current = content;
+    const linkCompleter = completerRef.current;
     const session = createEditor(el, content, {
       lineNumbers,
       wordWrap,
       livePreview,
+      ...(linkCompleter ? { linkCompleter } : {}),
       onChange: (c) => {
         renderedRef.current = c;
         cbRef.current.onEdit(docKey, c);

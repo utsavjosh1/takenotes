@@ -254,14 +254,16 @@ export class NoteService {
     }
   }
 
-  async renamePath(workspaceId: string, oldPath: string, newPath: string): Promise<{ ok: true; linksFailed?: string[] } | { error: AppError }> {
+  async renamePath(workspaceId: string, oldPath: string, newPath: string, options?: { autoUpdateLinks?: boolean }): Promise<{ ok: true; linksFailed?: string[] } | { error: AppError }> {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
+    const autoUpdateLinks = options?.autoUpdateLinks !== false;
     if (r.kind === "native") {
       const before = await this.collectNativeMarkdown(r.root, r.type);
       if ("error" in before) return before;
       const renamed = await this.deps.native.rename(r.root, r.type, oldPath, newPath);
       if ("error" in renamed) return renamed;
+      if (!autoUpdateLinks) return { ok: true };
       const out = await this.rewriteNativeLinksAfterMove({ root: r.root, type: r.type, beforePaths: before.paths, oldPath, newPath, kind: "file" });
       if ("error" in out) return out;
       if (out.linksFailed.length > 0) console.warn(`[note-service] rename succeeded but ${out.linksFailed.length} link(s) failed to rewrite: ${out.linksFailed.join(", ")}`);
@@ -329,14 +331,17 @@ export class NoteService {
     workspaceId: string,
     oldPath: string,
     newPath: string,
+    options?: { autoUpdateLinks?: boolean },
   ): Promise<{ ok: true; linksFailed?: string[] } | { error: AppError }> {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
+    const autoUpdateLinks = options?.autoUpdateLinks !== false;
     if (r.kind === "native") {
       const before = await this.collectNativeMarkdown(r.root, r.type);
       if ("error" in before) return before;
       const renamed = await this.deps.native.renameDirectory(r.root, r.type, oldPath, newPath);
       if ("error" in renamed) return renamed;
+      if (!autoUpdateLinks) return { ok: true };
       const out = await this.rewriteNativeLinksAfterMove({ root: r.root, type: r.type, beforePaths: before.paths, oldPath, newPath, kind: "directory" });
       if ("error" in out) return out;
       if (out.linksFailed.length > 0) console.warn(`[note-service] directory rename succeeded but ${out.linksFailed.length} link(s) failed to rewrite: ${out.linksFailed.join(", ")}`);

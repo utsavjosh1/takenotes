@@ -21,6 +21,7 @@
     "./index/properties": "./src/index/properties.ts",
     "./index/store": "./src/index/store.ts",
     "./links/backlinks": "./src/links/backlinks.ts",
+    "./links/completion": "./src/links/completion.ts",
     "./markdown/render": "./src/markdown/render.ts",
     "./policy/note-policy": "./src/policy/note-policy.ts",
     "./ports/host-filesystem": "./src/ports/host-filesystem.ts",

@@ -570,13 +570,14 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     return { ok: true, result: null };
   });
 
-  ipcMain.handle("directory:rename", async (event, workspaceId: unknown, oldPath: unknown, newPath: unknown) => {
+  ipcMain.handle("directory:rename", async (event, workspaceId: unknown, oldPath: unknown, newPath: unknown, opts: unknown) => {
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
     if (typeof oldPath !== "string" || typeof newPath !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid rename request." } };
     }
+    const autoUpdateLinks = opts === undefined || (typeof opts === "object" && opts !== null && (opts as { autoUpdateLinks?: unknown }).autoUpdateLinks !== false);
     const reg = workspaces.get(wid.workspaceId);
     if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
     if (!isNativeWorkspace(reg)) {
@@ -584,11 +585,11 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       if ("error" in vOld) return { ok: false, error: vOld.error };
       const vNew = normalizeWslRel(newPath, false);
       if ("error" in vNew) return { ok: false, error: vNew.error };
-      const out = await getNotes().renameDirectory(wid.workspaceId, vOld.rel, vNew.rel);
+      const out = await getNotes().renameDirectory(wid.workspaceId, vOld.rel, vNew.rel, { autoUpdateLinks });
       if ("error" in out) return { ok: false, error: out.error };
       return { ok: true, result: null };
     }
-    const out = await getNotes().renameDirectory(wid.workspaceId, toCanonicalRel(oldPath), toCanonicalRel(newPath));
+    const out = await getNotes().renameDirectory(wid.workspaceId, toCanonicalRel(oldPath), toCanonicalRel(newPath), { autoUpdateLinks });
     if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: null };
   });
@@ -745,13 +746,14 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     return { ok: true, result: out.revision };
   });
 
-  ipcMain.handle("file:rename", async (event, workspaceId: unknown, oldPath: unknown, newPath: unknown) => {
+  ipcMain.handle("file:rename", async (event, workspaceId: unknown, oldPath: unknown, newPath: unknown, opts: unknown) => {
     if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
     const wid = validateWorkspaceId(workspaceId);
     if ("error" in wid) return { ok: false, error: wid.error };
     if (typeof oldPath !== "string" || typeof newPath !== "string") {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid rename request." } };
     }
+    const autoUpdateLinks = opts === undefined || (typeof opts === "object" && opts !== null && (opts as { autoUpdateLinks?: unknown }).autoUpdateLinks !== false);
     const reg = workspaces.get(wid.workspaceId);
     if (!reg) return { ok: false, error: { code: "INVALID_REQUEST", message: "Unknown workspace." } };
     if (!isNativeWorkspace(reg)) {
@@ -759,11 +761,11 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       if ("error" in vOld) return { ok: false, error: vOld.error };
       const vNew = normalizeWslRel(newPath, false);
       if ("error" in vNew) return { ok: false, error: vNew.error };
-      const out = await getNotes().renamePath(wid.workspaceId, vOld.rel, vNew.rel);
+      const out = await getNotes().renamePath(wid.workspaceId, vOld.rel, vNew.rel, { autoUpdateLinks });
       if ("error" in out) return { ok: false, error: out.error };
       return { ok: true, result: null };
     }
-    const out = await getNotes().renamePath(wid.workspaceId, toCanonicalRel(oldPath), toCanonicalRel(newPath));
+    const out = await getNotes().renamePath(wid.workspaceId, toCanonicalRel(oldPath), toCanonicalRel(newPath), { autoUpdateLinks });
     if ("error" in out) return { ok: false, error: out.error };
     return { ok: true, result: null };
   });

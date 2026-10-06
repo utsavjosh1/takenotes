@@ -690,6 +690,8 @@ export default function App(): JSX.Element {
                     lineNumbers={settings.lineNumbers}
                     wordWrap={settings.wordWrap}
                     livePreview={settings.livePreview}
+                    linkFormat={settings.linkFormat}
+                    workspaceId={workspace?.workspaceId ?? ""}
                     fullWidth={settings.fullWidth}
                     reportCursor
                     onEdit={docsApi.onEdit}

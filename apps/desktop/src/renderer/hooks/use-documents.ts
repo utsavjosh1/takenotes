@@ -23,6 +23,7 @@ import {
   type PaneLayout,
 } from "../panes";
 import { useIndexMeta } from "../stores/index-meta";
+import { useSettingsStore } from "../stores/settings";
 import { getBridge } from "../bridge";
 import type { Notify } from "./use-notify";
 import type { RecentsApi } from "./use-recents";
@@ -386,7 +387,9 @@ export function useDocuments(
     if (newRel === target.relativePath) return true;
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }, "Couldn't rename note"); return false; }
-    const res = await bridge.file.rename(workspace.workspaceId, target.relativePath, newRel);
+    const autoUpdateLinks = useSettingsStore.getState().settings.autoUpdateLinks;
+    if (!autoUpdateLinks && !window.confirm(`Rename "${fileName(target.relativePath)}" without updating links that point to it?`)) return false;
+    const res = await bridge.file.rename(workspace.workspaceId, target.relativePath, newRel, { autoUpdateLinks });
     if (!res.ok) { errToast(res.error, "Couldn't rename note"); return false; }
     setLayout((l) => applyRename(l, workspace.workspaceId, target.relativePath, newRel));
     workspaceIndex.move(workspace.workspaceId, target.relativePath, newRel);
