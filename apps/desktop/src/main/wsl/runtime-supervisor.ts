@@ -75,6 +75,12 @@ export class WslRuntimeSupervisor {
         if (line.trim()) this.onDiagnostic(`[wsl-runtime] ${line}`);
       }
     });
+    // Lifetime listener: bootstrap cleanup removes its own handler, but a
+    // later `child.kill()` failure emits async `error` with no listener ->
+    // uncaught exception in main. Keep this diagnostic listener for life.
+    child.on("error", (err: Error) => {
+      this.onDiagnostic(`[wsl-runtime] process error: ${err.message}`);
+    });
     child.on("exit", () => {
       if (this.session?.child === child) {
         this.session = null;
