@@ -47,6 +47,8 @@ export type Settings = {
   wslEnabled: boolean;
   /** Step 2: activity-rail visibility. Off hides the ribbon; palette stays available. */
   ribbonVisible: boolean;
+  /** Folder of `.md` template notes, relative to the workspace root. */
+  templateFolder: string;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -63,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmTrash: false,
   wslEnabled: false,
   ribbonVisible: true,
+  templateFolder: "Templates",
 };
 
 export type AppSnapshot = {

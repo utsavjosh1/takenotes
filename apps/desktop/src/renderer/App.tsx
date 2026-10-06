@@ -25,6 +25,7 @@ import { renderMarkdown } from "@takenotes/core/markdown/render";
 import { SearchPanel } from "./components/search";
 import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
 import { CommandMenu } from "./components/palette";
+import { TemplatePicker } from "./components/template-picker";
 import { SettingsDialog } from "./components/settings";
 import { WslDialog } from "./components/wsl-dialog";
 import { UpdateDialog } from "./components/update-dialog";
@@ -99,6 +100,7 @@ export default function App(): JSX.Element {
     });
   }, []);
   const [palette, setPalette] = useState<{ initialQuery: string } | null>(null);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menu, setMenu] = useState<CtxMenu>(null);
   const [focusMode, setFocusMode] = useState(false);
@@ -267,8 +269,37 @@ export default function App(): JSX.Element {
     },
   });
 
+  // Template picker opens via the `template.insert` command (palette,
+  // menu, or keyboard all dispatch `takenotes:open-template-picker`).
+  useEffect(() => {
+    const onOpen = (): void => {
+      if (docsApi.activeTab) setTemplatePickerOpen(true);
+    };
+    window.addEventListener("takenotes:open-template-picker", onOpen);
+    return () => window.removeEventListener("takenotes:open-template-picker", onOpen);
+  }, [docsApi.activeTab]);
+
+  const insertTemplate = useCallback(async (templateRel: string) => {
+    const ws = workspaceApi.workspace;
+    const active = docsApi.activeTab;
+    const bridge = getBridge();
+    if (!ws || !active || !bridge) return;
+    setTemplatePickerOpen(false);
+    const read = await bridge.file.read(ws.workspaceId, templateRel);
+    if (!read.ok) { toast(`Couldn't read template "${templateRel}".`); return; }
+    const { renderNoteTemplate, templateDate, templateTime, templateTitleForPath } = await import("@takenotes/core/productivity/templates");
+    const now = new Date();
+    const rendered = renderNoteTemplate(read.result.content, {
+      title: templateTitleForPath(active.relativePath),
+      date: templateDate(now),
+      time: templateTime(now),
+    });
+    window.dispatchEvent(new CustomEvent("takenotes:insert-template-text", { detail: rendered }));
+    commandsApi.remember("template.insert");
+  }, [workspaceApi.workspace, docsApi.activeTab, toast, commandsApi]);
+
   useGlobalKeyboard({
-    paletteOpen: palette !== null,
+    paletteOpen: palette !== null || templatePickerOpen,
     platform,
     tree: treeApi,
     docs: docsApi,
@@ -776,6 +807,14 @@ export default function App(): JSX.Element {
             })();
           }}
           onClose={() => setPalette(null)}
+        />
+      )}
+      {templatePickerOpen && workspaceApi.workspace && docsApi.activeTab && (
+        <TemplatePicker
+          allPaths={treeApi.entries.filter((e) => e.kind === "file").map((e) => e.relativePath)}
+          templateFolder={settings.templateFolder}
+          onPick={(rel) => void insertTemplate(rel)}
+          onClose={() => setTemplatePickerOpen(false)}
         />
       )}
       {settingsOpen && (

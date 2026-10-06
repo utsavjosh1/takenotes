@@ -27,6 +27,8 @@ export const SettingsSchema = v.object({
   wslEnabled: v.optional(v.boolean()),
   /** Step 2: activity-rail visibility. */
   ribbonVisible: v.optional(v.boolean()),
+  /** Template folder (relative path). Empty string disables template picking. */
+  templateFolder: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256))),
 });
 
 export type ValidatedSettings = v.InferOutput<typeof SettingsSchema>;

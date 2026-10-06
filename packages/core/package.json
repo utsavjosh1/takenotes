@@ -26,6 +26,7 @@
     "./policy/note-policy": "./src/policy/note-policy.ts",
     "./ports/host-filesystem": "./src/ports/host-filesystem.ts",
     "./productivity/daily": "./src/productivity/daily.ts",
+    "./productivity/templates": "./src/productivity/templates.ts",
     "./search/query": "./src/search/query.ts",
     "./search/search": "./src/search/search.ts",
     "./services/note-service": "./src/services/note-service.ts",

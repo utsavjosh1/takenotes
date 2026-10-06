@@ -237,6 +237,22 @@ export function PaneView({
     return () => window.removeEventListener("takenotes:insert-link", onInsertLink);
   }, []);
 
+  // Template insert (productivity step 1): rendered text lands at the
+  // cursor via a CodeMirror transaction, so undo stays a single step.
+  useEffect(() => {
+    const onInsertTemplate = (e: Event): void => {
+      const view = viewRef.current;
+      if (!view || (!view.hasFocus && document.activeElement?.closest(".pane.active") === null)) return;
+      const text = (e as CustomEvent<string>).detail;
+      if (!text || typeof text !== "string") return;
+      const head = view.state.selection.main.head;
+      view.dispatch({ changes: { from: head, to: head, insert: text }, scrollIntoView: true });
+      view.focus();
+    };
+    window.addEventListener("takenotes:insert-template-text", onInsertTemplate);
+    return () => window.removeEventListener("takenotes:insert-template-text", onInsertTemplate);
+  }, []);
+
   // Floating format bubble (Notion-style): select text → bold/italic/list
   // buttons; cursor inside a link → URL field. mousedown is prevented so
   // focus and selection never leave the editor.
