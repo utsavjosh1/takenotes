@@ -26,21 +26,11 @@
       "@takenotes/platform/*": ["packages/platform/src/*"],
       "@takenotes/ui": ["packages/ui/src/index.ts"],
       "@takenotes/ui/*": ["packages/ui/src/*"],
-      "@takenotes/ui/dom.css": ["packages/ui/src/dom/styles.css"],
-      "@takenotes/ui/tokens.css": ["packages/ui/src/tokens.css"],
+      "@takenotes/test-support": ["packages/test-support/src/index.ts"],
       "@takenotes/desktop/*": ["apps/desktop/src/*"],
       "@takenotes/server/*": ["apps/server/src/*"],
       "@takenotes/wsl-helper/*": ["tools/wsl-helper/src/*"]
     }
   },
-  "include": [
-    "apps/**/*",
-    "packages/**/*",
-    "tools/wsl-helper/src/**/*",
-    "tools/scripts/**/*",
-    "tests/**/*",
-    "tools-aliases.ts",
-    "vite.config.ts",
-    "vitest.config.ts"
-  ]
+  "include": ["apps/**/*", "packages/**/*", "tools/wsl-helper/src/**/*", "tests/**/*", "tools/scripts/**/*", "vite.config.ts"]
 }

@@ -32,7 +32,7 @@ function revision(hash: string): FileRevision {
   return { hash, size: 1, mtimeMs: 1 };
 }
 
-/** Same mapping as `recoveryNamespace()` in `src/main/ipc/register.ts`. */
+/** Same mapping as `recoveryNamespace()` in `apps/desktop/src/main/ipc/register.ts`. */
 function namespaceOf(reg: WorkspaceRegistration): string {
   return recoveryKeyForWorkspace({ type: reg.type, root: reg.root, distro: reg.distro, linuxUser: reg.linuxUser });
 }

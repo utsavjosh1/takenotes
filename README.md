@@ -4,8 +4,9 @@ Filesystem-first, Markdown-first, local-first Windows notebook with WSL
 awareness. Your Markdown files stay ordinary files — the app adds an interface
 around them and never makes itself necessary for accessing them.
 
-> Status: **foundation / pre-release (v0.0.1)**. The Windows → WSL round-trip
-> has **NOT been verified on real WSL** yet — see `docs/mvp-status.md`.
+> Status: **foundation / pre-release (v0.0.8)**. The Windows → WSL runtime
+> direction is still being validated and should be tested on real Windows 11 + WSL2
+> before release claims are made.
 
 ## Supported platforms (target)
 
@@ -14,9 +15,16 @@ around them and never makes itself necessary for accessing them.
 
 ## Architecture
 
-React + CodeMirror renderer (no Node) → narrow preload bridge → Electron main
-(workspace registry, Windows fs, WSL supervisor) → `wsl.exe` → bundled Linux
-Node → `helper.cjs` → Linux fs. See `docs/architecture.md`.
+The app is moving toward a structured workspace layout:
+
+- `apps/desktop` / Electron shell
+- `apps/web` / browser renderer entry
+- `apps/server` / host runtime server
+- `packages/*` / contracts, core policy, platform helpers, UI, and test support
+- `tools/*` / build scripts and WSL helper tooling
+
+Long term, WSL should be a first-class host runtime rather than a per-operation
+`wsl.exe` helper bridge.
 
 ## Development
 
@@ -31,10 +39,12 @@ npm run build
 npm run package:win  # Windows installer (Windows host)
 ```
 
-No native toolchains, no second language, no localhost server, no database.
-See `docs/development.md`, `docs/security.md`, `docs/release.md`.
+No native toolchains, no second language, and no database.
+
+Local planning/design notes live under `docs/`. That folder is versioned in
+the GitHub repository but intentionally excluded from the product website.
 
 ## Releases
 
 Unsigned early builds; version source is `package.json`; tag `vX.Y.Z` must
-match. Full flow in `docs/release.md`.
+match.

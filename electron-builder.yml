@@ -7,8 +7,9 @@ afterPack: ./scripts/after-pack-fuses.mjs
 # Per-OS artifact names (§124). ${os}/${arch}/${ext} are electron-builder
 # template variables — one app version across platforms (§187).
 artifactName: takenotes-${version}-${os}-${arch}.${ext}
-# Native icons are exported from `public/takenotes-app-icon-filled.svg`
-# (filled tile, small-size tuned; outline `takenotes-app-icon.svg` stays in-app).
+# Native icons are exported from `public/takenotes-app-icon-light.svg`
+# (light tile) and `public/takenotes-app-icon-dark.svg` (dark tile) —
+# tile pair, small-size tuned; bare `takenotes-symbol-*.svg` marks stay in-app.
 # Electron cannot use SVG for binaries - export once, then packaging is automatic:
 #   build/icon.ico (256px multi-size, Windows) - build/icon.icns (macOS) -
 #   build/icon.png (512px, Linux + BrowserWindow runtime icon).

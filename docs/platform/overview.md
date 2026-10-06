@@ -59,8 +59,9 @@ the platform arrives via the controlled `app:platform` IPC.
 - **Tier 2** (best-effort): Windows ARM64 · newer Ubuntu/Fedora · KDE Plasma ·
   Linux ARM64. Never marketed as fully supported until tested (§8–§9).
 
-Full matrix: `support-matrix.md`. Test results: `test-matrix.md`,
-`keyboard-test-matrix.md`, `final-platform-audit.md`.
+Full matrix: `support-matrix.md`. Test results (archived snapshots):
+`../archive/status/test-matrix.md`, `../archive/status/keyboard-test-matrix.md`,
+`../archive/status/final-platform-audit.md`.
 
 ## Product invariants (all platforms, §221)
 

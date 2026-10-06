@@ -1,0 +1,13 @@
+{
+  "name": "@takenotes/wsl-helper",
+  "version": "0.0.8",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@takenotes/contracts": "0.0.8"
+  },
+  "exports": {
+    "./users": "./src/users.ts",
+    "./*": "./src/*.ts"
+  }
+}

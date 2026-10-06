@@ -1,0 +1,24 @@
+{
+  "name": "@takenotes/server",
+  "version": "0.0.8",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@takenotes/contracts": "0.0.8",
+    "@takenotes/core": "0.0.8",
+    "@takenotes/platform": "0.0.8",
+    "hono": "^4.13.12",
+    "@hono/node-server": "^2.1.1"
+  },
+  "exports": {
+    "./app": "./src/app.ts",
+    "./auth": "./src/auth.ts",
+    "./auth-store": "./src/auth-store.ts",
+    "./client": "./src/client.ts",
+    "./cookies": "./src/cookies.ts",
+    "./linux-host-filesystem": "./src/linux-host-filesystem.ts",
+    "./main": "./src/main.ts",
+    "./web-ui": "./src/web-ui.ts",
+    "./workspace-registry": "./src/workspace-registry.ts"
+  }
+}

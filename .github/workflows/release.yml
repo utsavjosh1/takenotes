@@ -27,9 +27,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run build:server
       - run: npm run build:helper
-      - run: node scripts/fetch-wsl-runtime.mjs
-      - run: node scripts/stage-wsl-runtime.mjs
+      - run: node tools/scripts/fetch-wsl-runtime.mjs
+      - run: node tools/scripts/stage-wsl-runtime.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wsl-runtime
@@ -65,7 +66,7 @@ jobs:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - name: Verify packaged asar boots (renderer + main in app.asar)
-        run: node scripts/verify-packaged.mjs
+        run: node tools/scripts/verify-packaged.mjs
       - name: Verify Electron fuses (packaged binary)
         shell: pwsh
         run: npx --no-install @electron/fuses read --app "release/win-unpacked/takenotes.exe"
@@ -116,7 +117,7 @@ jobs:
         env:
           REQUIRE_INSTALLER: "1"
       - name: Build release notes
-        run: node scripts/release-notes.mjs > release/NOTES.md
+        run: node tools/scripts/release-notes.mjs > release/NOTES.md
       # SPDX SBOM (§13): generated from the locked dependency tree with the
       # npm CLI — no extra runtime dependency. Scope: Node dependencies +
       # Electron runtime version; native installer binaries are checksummed

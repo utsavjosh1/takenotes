@@ -20,7 +20,7 @@ Date: 2026-09-17 · Status: accepted
   capability. IPC shape is platform-neutral so parked platforms reuse it.
 - `electron-builder` stays `--publish never` with `publish: null`: the
   lightweight flow needs no `latest.yml` metadata. This supersedes the
-  "no auto-update in MVP" rule in ADR-0005/`docs/release.md`.
+  "no auto-update in MVP" rule in ADR-0005/`guides/release.md`.
 
 ## Alternatives considered
 
