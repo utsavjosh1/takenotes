@@ -7,6 +7,7 @@ import { usePlatform } from "./hooks/use-platform";
 import { isWslKind } from "@takenotes/platform/filesystem";
 import { TitleBar, ActivityRail, StatusBar, type SidebarView } from "./components/chrome";
 import { PaneView } from "./components/pane-view";
+import { BacklinksPane, OutgoingPane } from "./components/backlinks";
 // NOTE: Single-surface Markdown WYSIWYG (ADR-0015) — the editor surface
 // renders Markdown live (marks hidden, tasks as checkboxes, tables,
 // callouts, code, and media styled in place) and the doc stays plain
@@ -345,6 +346,16 @@ export default function App(): JSX.Element {
     () => (workspace ? workspaceIndex.list(workspace.workspaceId).map(indexedEntryToQuickOpenItem) : []),
     [workspace?.workspaceId, indexVersion],
   );
+
+  // Right-sidebar link panes (Step 4): derived from the typed edge table +
+  // entries, memoised on the index version so every mutation refreshes them.
+  const linkGraph = useMemo(() => {
+    if (!workspace) return null;
+    return { edges: workspaceIndex.edges(workspace.workspaceId), entries: workspaceIndex.list(workspace.workspaceId) };
+  }, [workspace?.workspaceId, indexVersion]);
+  const openLinkTarget = useCallback((rel: string) => {
+    void docsApi.openFile(rel).then(() => void treeApi.reveal(rel));
+  }, [docsApi, treeApi]);
 
   /* ---------- render ---------- */
   // Browser-tab mode: vite serves the same bundle to Electron AND to plain
@@ -701,6 +712,26 @@ export default function App(): JSX.Element {
             );
           })()}
         </main>
+        {!focusMode && workspace && docsApi.activeTab && linkGraph && (
+          <aside className="sidebar right" aria-label="Links">
+            <div className="sidebar-head">
+              <span className="name" title={docsApi.activeTab.relativePath}>Links</span>
+            </div>
+            <div className="sidebar-body">
+              <BacklinksPane
+                activePath={docsApi.activeTab.relativePath}
+                edges={linkGraph.edges}
+                entries={linkGraph.entries}
+                onOpen={openLinkTarget}
+              />
+              <OutgoingPane
+                activePath={docsApi.activeTab.relativePath}
+                edges={linkGraph.edges}
+                onOpen={openLinkTarget}
+              />
+            </div>
+          </aside>
+        )}
       </div>
       {!focusMode && (
         <StatusBar
