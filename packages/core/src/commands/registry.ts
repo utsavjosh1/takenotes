@@ -43,7 +43,8 @@ export type CommandId =
   | "tree.collapseAll"
   | "favorites.addActive"
   | "template.insert"
-  | "task.new";
+  | "task.new"
+  | "today.open";
 
 export type CommandDefinition = {
   id: CommandId;
@@ -119,6 +120,7 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "favorites.addActive", title: "Add Active Note to Favorites", category: "Favorites", scope: "workspace" },
   { id: "template.insert", title: "Insert Template", category: "Note", scope: "editor" },
   { id: "task.new", title: "New task", category: "Tasks", scope: "workspace" },
+  { id: "today.open", title: "Today", category: "View", scope: "workspace" },
 ];
 
 export function commandDefinition(id: CommandId): CommandDefinition {

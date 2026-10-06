@@ -62,7 +62,7 @@ export function TitleBar({
 /* ---------- activity rail ---------- */
 /** Step 2 shell seam: fixed-order left panes. Right sidebar is an empty
  * slot until Steps 3/4/6 fill it; pane drag-reorder deferred. */
-export const SIDEBAR_VIEWS = ["files", "search", "outline", "favorites"] as const;
+export const SIDEBAR_VIEWS = ["files", "search", "outline", "favorites", "today"] as const;
 export type SidebarView = (typeof SIDEBAR_VIEWS)[number];
 
 export function ActivityRail({
@@ -115,6 +115,15 @@ export function ActivityRail({
         aria-pressed={view === "favorites"}
       >
         <Icon name="star" />
+      </button>
+      <button
+        className={`rail-btn${view === "today" ? " active" : ""}`}
+        onClick={() => onView("today")}
+        title="Today"
+        aria-label="Today"
+        aria-pressed={view === "today"}
+      >
+        <Icon name="calendar" />
       </button>
       <span className="spacer" />
       <button className="rail-btn" onClick={onSettings} title={`Settings (${settingsLabel})`} aria-label="Settings">

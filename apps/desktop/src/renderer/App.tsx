@@ -27,6 +27,9 @@ import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
 import { CommandMenu } from "./components/palette";
 import { TemplatePicker } from "./components/template-picker";
 import { TaskDialog, type NewTaskInput } from "./components/task-dialog";
+import { TodayPane } from "./components/today-pane";
+import { collectTodayTasks } from "@takenotes/core/productivity/today";
+import { templateDate } from "@takenotes/core/productivity/templates";
 import { SettingsDialog } from "./components/settings";
 import { WslDialog } from "./components/wsl-dialog";
 import { UpdateDialog } from "./components/update-dialog";
@@ -88,9 +91,9 @@ export default function App(): JSX.Element {
   // Per-pane collapse (Step 2 shell seam): one flag per left pane, persisted.
   const [paneCollapsed, setPaneCollapsed] = useState<Record<SidebarView, boolean>>(() => {
     try {
-      return { files: false, search: false, outline: false, favorites: false, ...JSON.parse(localStorage.getItem("takenotes.paneCollapsed") ?? "{}") };
+      return { files: false, search: false, outline: false, favorites: false, today: false, ...JSON.parse(localStorage.getItem("takenotes.paneCollapsed") ?? "{}") };
     } catch {
-      return { files: false, search: false, outline: false, favorites: false };
+      return { files: false, search: false, outline: false, favorites: false, today: false };
     }
   });
   const togglePaneCollapse = useCallback((v: SidebarView) => {
@@ -460,6 +463,19 @@ export default function App(): JSX.Element {
     [workspace?.workspaceId, indexVersion],
   );
 
+  // Today pane (productivity step 3): overdue + due-today + scheduled-today
+  // derived from the document index, memoised on the index version so every
+  // mutation (typing, capture, drag) refreshes it. No database anywhere.
+  const todayGroups = useMemo(() => {
+    if (!workspace) return null;
+    try {
+      const today = templateDate(new Date());
+      return { today, groups: collectTodayTasks(workspaceIndex.list(workspace.workspaceId), today) };
+    } catch {
+      return null;
+    }
+  }, [workspace?.workspaceId, indexVersion]);
+
   // Right-sidebar link panes (Step 4): derived from the typed edge table +
   // entries, memoised on the index version so every mutation refreshes them.
   const linkGraph = useMemo(() => {
@@ -611,7 +627,7 @@ export default function App(): JSX.Element {
                 }}
               >
                 {paneCollapsed[view] ? (
-                  <div className="panel-title">{view === "files" ? "Explorer" : view === "search" ? "Search" : view === "outline" ? "Outline" : "Favorites"} (collapsed)</div>
+                  <div className="panel-title">{view === "files" ? "Explorer" : view === "search" ? "Search" : view === "outline" ? "Outline" : view === "today" ? "Today" : "Favorites"} (collapsed)</div>
                 ) : view === "files" ? (
                   <>
                     {treeApi.creating && (
@@ -675,6 +691,20 @@ export default function App(): JSX.Element {
                   />
                 ) : view === "outline" ? (
                   <OutlinePane content={docsApi.activeTab?.content ?? null} onNavigate={gotoLine} />
+                ) : view === "today" ? (
+                  todayGroups ? (
+                    <TodayPane
+                      groups={todayGroups.groups}
+                      today={todayGroups.today}
+                      onOpen={(rel, line) => {
+                        void docsApi.openFile(rel).then(() => {
+                          gotoLine(line);
+                        });
+                      }}
+                    />
+                  ) : (
+                    <div className="panel-title">No workspace index yet.</div>
+                  )
                 ) : (
                   <FavoritesPane
                     doc={favoritesApi.doc}
