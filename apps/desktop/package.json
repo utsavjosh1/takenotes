@@ -27,7 +27,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
     "electron": "44.4.3",
-    "vite": "8.3.0"
+    "vite": "8.3.2"
   },
   "exports": {
     "./main/*": "./src/main/*.ts",
