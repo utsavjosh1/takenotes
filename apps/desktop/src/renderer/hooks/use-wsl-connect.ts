@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import type { WorkspaceInfo, WslDistribution, WslLinuxUser } from "@takenotes/contracts/ipc";
 import { getBridge } from "../bridge";
 import type { WslConnectInput } from "@takenotes/core/validation/schemas";
+import { describeWslError } from "../error-text";
 import type { Notify } from "./use-notify";
 
 export type WslDialogState = {
@@ -74,7 +75,15 @@ export function useWslConnect(
       return;
     }
     const res = await bridge.workspace.connectWsl(data.distro, data.linuxUser, data.path || "~/notes");
-    setDialog((cur) => (cur ? { ...cur, connecting: false, error: res.ok ? null : res.error.message } : cur));
+    // Friendly + detail UI (7c): headline + helper message + next-step hint.
+    // The code stays on the result for any future branching; the dialog
+    // renders this composed string.
+    const error = res.ok
+      ? null
+      : describeWslError(res.error.code, res.error.message, {
+          operation: "open", distro: data.distro, linuxUser: data.linuxUser, path: data.path || "~/notes",
+        });
+    setDialog((cur) => (cur ? { ...cur, connecting: false, error } : cur));
     if (res.ok) {
       setDialog(null);
       toast(`Connecting to ${data.distro} as ${data.linuxUser}…`);

@@ -115,6 +115,37 @@ npm run lint -- --quiet
 Results: 18 files passed, 3 windows-gated skipped; 129 passed, 4 skipped.
 Typecheck and lint clean. Live gate still BLOCKED (see below).
 
+## Slice 7c — Friendly path-error hints (this slice)
+
+- Naming decision (recorded, not deferred): wire codes stay canonical
+  (`NOT_FOUND`, `INVALID_REQUEST`, `DISCONNECTED`, … — native parity,
+  contract-stable). The roadmap's `PATH_NOT_FOUND`, `NOT_A_DIRECTORY`,
+  `CONNECTION_FAILED`, `DISTRO_NOT_RUNNING`, `HELPER_FAILED` are UI-facing
+  synonyms produced by the presentation layer — no silent rename, no
+  contract churn. Each mapping is pinned by a test name.
+- `renderer/error-text.ts`: new pure `wslErrorHint(code, ctx)` (null when
+  nothing specific applies; degrades without context, never wrong) +
+  `describeWslError` (`Headline — message. Hint.`, identical to
+  `friendlyError` when no hint). EACCES→`PERMISSION_DENIED` itself was
+  already logic-tested (mode-000 fixture); 7c adds the 700-home/run-as-user
+  guidance copy on top of it. Discovery (list-distros/users) errors stay
+  raw — hints cover the connect/open path only.
+- Wiring: `use-wsl-connect` composes connect failures via
+  `describeWslError` with `{operation: "open", distro, linuxUser, path}`;
+  the dialog renders the composed string unchanged (no dialog/contract change).
+- Tests: `tests/renderer/wsl-error-hint.test.ts`, 12 cases.
+
+## Verification performed here (7c)
+
+```bash
+npx vitest run tests/renderer/
+npm run typecheck
+npm run lint -- --quiet
+```
+
+Results: 15 files, 166 tests passed. Typecheck and lint clean.
+Live gate still BLOCKED (see below).
+
 ## Known gaps / candidates for 7c+ (not changed in 7b)
 
 - Connection record formalization (ADR-0007): `{distro, linuxUser,
