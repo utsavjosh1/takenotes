@@ -26,7 +26,7 @@ for (const f of ["dist-electron/main/index.cjs", "dist-electron/preload/index.cj
 //   takenotes-0.1.10-win-x64.exe (NSIS installer — the in-app updater target)
 //   takenotes-0.1.10-win-x64.zip (portable fallback)
 //   takenotes-0.1.10-mac-x64.dmg / -mac-arm64.dmg
-//   takenotes-0.1.10-linux-x86_64.AppImage / -linux-x64.deb
+//   takenotes-0.1.10-linux-x86_64.AppImage / -linux-amd64.deb
 const releaseFiles = existsSync("release") ? readdirSync("release") : [];
 const has = (re) => releaseFiles.find((f) => re.test(f));
 const winInstaller = has(/\.exe$/);
