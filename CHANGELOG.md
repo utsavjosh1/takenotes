@@ -19,8 +19,10 @@ All notable changes to takenotes.
   find-match colors in both themes. No WCAG-cert claim.
 - WSL Connection record (post-MVP, in progress): explicit `{distro,
   linuxUser, status}` store with one-connection-many-workspaces attach/detach
-  and `connectionId` on WSL workspaces, plus friendly connect-error hints
-  (roadmap path-error names as UI synonyms over canonical wire codes).
+  and `connectionId` on WSL workspaces, friendly connect-error hints
+  (roadmap path-error names as UI synonyms over canonical wire codes),
+  helper operation allowlisting on both ends of the wire, and fail-closed
+  staged-runtime verification before spawn.
   Logic-tested; live Windows gate pending.
 
 ## [0.0.9] - 2026-09-22

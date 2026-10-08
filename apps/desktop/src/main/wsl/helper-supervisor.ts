@@ -4,9 +4,11 @@ import path from "node:path";
 import { app } from "electron";
 import { HelperClient } from "./helper-client.js";
 import { PROTOCOL_VERSION } from "@takenotes/contracts/protocol-version";
+import { isHelperOperation } from "@takenotes/contracts/protocol";
 import type { HandshakeResult } from "@takenotes/contracts/protocol";
 import { appError } from "@takenotes/contracts/errors";
 import { helperEnv, buildWslHelperArgv, resolveWslExe } from "./launch-security.js";
+import { stagedManifestRequired, verifyStagedRuntime } from "./runtime-installer.js";
 
 export type HelperState =
   | "starting"
@@ -76,6 +78,14 @@ export class HelperSupervisor {
    * the helper simply runs with that user's own permissions. */
   async connect(distro: string, linuxUser: string, nodePath: string, helperPath: string): Promise<WslSession> {
     this.disposeSession();
+    // Staged-runtime provenance (7e, fail-closed): a packaged install never
+    // spawns bytes it hasn't verified. Dev (no manifest) logs the skip.
+    const staged = await verifyStagedRuntime(path.dirname(nodePath), { requireManifest: stagedManifestRequired() });
+    if ("error" in staged) {
+      this.onDiagnostic(`staged runtime refused: ${staged.error.message}`);
+      throw new Error(staged.error.message);
+    }
+    this.onDiagnostic(staged.verified ? "staged runtime verified" : "staged manifest absent (dev): proceeding unverified");
     this.setState("starting");
     const child = spawn(resolveWslExe(), buildWslHelperArgv(distro, linuxUser, nodePath, helperPath), {
       shell: false,
@@ -209,6 +219,13 @@ export class HelperSupervisor {
   /** Send an operation to the active helper session.
    * Throws a DISCONNECTED AppError when no session is connected. */
   async request(operation: string, payload: unknown): Promise<unknown> {
+    // Operation allowlist (7e): fail fast without a wire round-trip. Checked
+    // before session state so a programming error names the op even when
+    // disconnected — and a compromised caller can't smuggle planned ops.
+    if (!isHelperOperation(operation)) {
+      this.onDiagnostic(`[wsl-request] rejected disabled operation ${operation} (no session touched)`);
+      throw appError("INVALID_REQUEST", `Unknown or disabled helper operation: ${operation}.`);
+    }
     const active = this.session;
     if (!active || this.state !== "connected") {
       this.onDiagnostic(`[wsl-request] no session for ${operation} (state=${this.state})`);

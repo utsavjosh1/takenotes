@@ -176,6 +176,38 @@ npm run lint -- --quiet
 Results: 33 files passed, 3 windows-gated skipped; 382 passed, 4 skipped.
 Typecheck and lint clean. Live gate still BLOCKED (see below).
 
+## Slice 7e — Operation gating + staged-runtime provenance (this slice)
+
+- `HELPER_OPERATIONS` was declared but enforced nowhere — now both ends:
+  helper rejects anything outside the list at the top of `handle()` (so a
+  future branch added without updating the list still fails closed), and
+  main's `HelperSupervisor.request` rejects before touching the transport
+  (fail fast, names the op). Shared `isHelperOperation` guard in
+  `contracts/protocol.ts`. Planned ops (`file.trash`, `watch.subscribe`,
+  …) and typos fail `INVALID_REQUEST` on both sides.
+- Staged provenance (`wsl/runtime-installer.ts`): new `verifyStagedRuntime`
+  over the `stage-wsl-runtime.mjs` manifest — fields valid, app protocol
+  matches, `node` + `helper.cjs` + `runtime.cjs` hashes match, every
+  failure names the file. Wired fail-closed into both `connect()` paths
+  (helper + runtime supervisors): packaged installs without a valid stage
+  never spawn; dev (no manifest) logs the skip and proceeds unchanged.
+- Tests: `tests/wsl/helper-operations.test.ts` (8: guard vectors + main
+  gate incl. no-session-touched proof), `tests/wsl/staged-manifest.test.ts`
+  (7: intact/tampered/missing/protocol-mismatch/corrupt/dev-skip), plus a
+  helper-side gate case in `helper-mutations.test.ts` against a freshly
+  built bundle (also proves the new contracts import bundles cleanly).
+
+## Verification performed here (7e)
+
+```bash
+npx vitest run tests/wsl/ tests/integration/ tests/ipc/ tests/workspace/ tests/protocol/
+npm run typecheck
+npm run lint -- --quiet
+```
+
+Results: 24 files passed, 3 windows-gated skipped; 161 passed, 4 skipped.
+Typecheck and lint clean. Live gate still BLOCKED (see below).
+
 ## Known gaps / candidates for 7c+ (not changed in 7b)
 
 - Connection record formalization (ADR-0007): `{distro, linuxUser,

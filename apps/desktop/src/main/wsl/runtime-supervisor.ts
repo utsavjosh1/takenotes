@@ -5,6 +5,7 @@ import { app } from "electron";
 import { appError } from "@takenotes/contracts/errors";
 import type { IpcResult } from "@takenotes/contracts/ipc";
 import { buildWslRuntimeArgv, helperEnv, resolveWslExe } from "./launch-security.js";
+import { stagedManifestRequired, verifyStagedRuntime } from "./runtime-installer.js";
 
 export type RuntimeState = "starting" | "connected" | "disconnected" | "failed";
 
@@ -63,6 +64,14 @@ export class WslRuntimeSupervisor {
 
   async connect(distro: string, linuxUser: string, nodePath: string, runtimePath: string): Promise<WslRuntimeSession> {
     this.disconnect(false);
+    // Same staged provenance gate as the helper transport (7e).
+    const staged = await verifyStagedRuntime(path.dirname(nodePath), { requireManifest: stagedManifestRequired() });
+    if ("error" in staged) {
+      this.onDiagnostic(`staged runtime refused: ${staged.error.message}`);
+      this.setState("failed");
+      throw new Error(staged.error.message);
+    }
+    this.onDiagnostic(staged.verified ? "staged runtime verified" : "staged manifest absent (dev): proceeding unverified");
     this.setState("starting");
     const nonce = randomBytes(16).toString("hex");
     const child = spawn(resolveWslExe(), buildWslRuntimeArgv(distro, linuxUser, nodePath, runtimePath, nonce), {
