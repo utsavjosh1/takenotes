@@ -146,6 +146,36 @@ npm run lint -- --quiet
 Results: 15 files, 166 tests passed. Typecheck and lint clean.
 Live gate still BLOCKED (see below).
 
+## Slice 7d — Service-seam parity proof (this slice)
+
+- `tests/workspace/wsl-seam-parity.test.ts`, 3 cases proving WSL
+  workspaces get full Step 0/3/5 behavior through the `NoteService` seam
+  (no native fallback, identity on every call):
+  1. Two-actor `CONFLICT` over the real helper wire (POSIX-gated, direct
+     spawn): stale write fails `CONFLICT` with bytes untouched, fresh
+     read-then-write wins.
+  2. WSL reads index identically: `readFile` through the seam (Ubuntu/utsav
+     identity asserted per call) → `WorkspaceIndex.upsert` → V1 operators
+     (`tag:`, `"phrase"`, `task-todo:`, `task-done:`, word-AND, `path:`,
+     `[status:]`, `file:`) return the WSL-sourced notes.
+  3. Recovery restore on WSL writes back through `notes.writeFile`:
+     `file.write` reaches the helper with the snapshot's `expectedHash` +
+     identity, content lands, and a restore-before snapshot is retained.
+- No prod changes (seam already correct; 7d pins it). Prior coverage this
+  relies on: `wsl-mutations` (routing/identity/mismatch), `recovery-reopen`
+  (per-user isolation), `search.test.ts` wsl parity block.
+
+## Verification performed here (7d)
+
+```bash
+npx vitest run tests/workspace/ tests/index/ tests/search/ tests/wsl/ tests/integration/ tests/ipc/
+npm run typecheck
+npm run lint -- --quiet
+```
+
+Results: 33 files passed, 3 windows-gated skipped; 382 passed, 4 skipped.
+Typecheck and lint clean. Live gate still BLOCKED (see below).
+
 ## Known gaps / candidates for 7c+ (not changed in 7b)
 
 - Connection record formalization (ADR-0007): `{distro, linuxUser,
