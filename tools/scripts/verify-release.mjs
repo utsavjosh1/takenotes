@@ -21,18 +21,28 @@ for (const f of ["dist-electron/main/index.cjs", "dist-electron/preload/index.cj
     process.exit(1);
   }
 }
-// Windows-only release. Installer names come from electron-builder
+// Multi-OS release. Installer names come from electron-builder
 // `artifactName` (takenotes-${version}-${os}-${arch}.${ext}):
-//   takenotes-0.0.1-win-x64.exe (NSIS installer — the in-app updater target)
-//   takenotes-0.0.1-win-x64.zip (portable fallback)
+//   takenotes-0.1.10-win-x64.exe (NSIS installer — the in-app updater target)
+//   takenotes-0.1.10-win-x64.zip (portable fallback)
+//   takenotes-0.1.10-mac-x64.dmg / -mac-arm64.dmg
+//   takenotes-0.1.10-linux-x86_64.AppImage / -linux-x64.deb
 const releaseFiles = existsSync("release") ? readdirSync("release") : [];
 const has = (re) => releaseFiles.find((f) => re.test(f));
 const winInstaller = has(/\.exe$/);
-const winPortable = has(/\.zip$/);
+const winPortable = has(/win.*\.zip$/);
+const macIntel = has(/mac-x64\.dmg$/);
+const macArm = has(/mac-arm64\.dmg$/);
+const linuxAppImage = has(/\.AppImage$/);
+const linuxDeb = has(/\.deb$/);
 if (process.env.REQUIRE_INSTALLER === "1") {
   const missing = [];
   if (!winInstaller) missing.push("*.exe (Windows NSIS)");
-  if (!winPortable) missing.push("*.zip (Windows portable)");
+  if (!winPortable) missing.push("*win*.zip (Windows portable)");
+  if (!macIntel) missing.push("*mac-x64.dmg (macOS Intel)");
+  if (!macArm) missing.push("*mac-arm64.dmg (macOS Apple Silicon)");
+  if (!linuxAppImage) missing.push("*.AppImage (Linux portable)");
+  if (!linuxDeb) missing.push("*.deb (Linux deb)");
   if (missing.length > 0) {
     console.error(`Missing installers in release/: ${missing.join(", ")}. Found: ${releaseFiles.join(", ") || "(empty)"}`);
     process.exit(1);
@@ -40,5 +50,7 @@ if (process.env.REQUIRE_INSTALLER === "1") {
 }
 console.log(
   `Release verification OK for ${pkg.version}. ` +
-    `win-exe=${winInstaller ?? "(not required)"} win-zip=${winPortable ?? "(not required)"}`,
+    `win-exe=${winInstaller ?? "(not required)"} win-zip=${winPortable ?? "(not required)"} ` +
+    `mac-x64=${macIntel ?? "(not required)"} mac-arm64=${macArm ?? "(not required)"} ` +
+    `appimage=${linuxAppImage ?? "(not required)"} deb=${linuxDeb ?? "(not required)"}`,
 );

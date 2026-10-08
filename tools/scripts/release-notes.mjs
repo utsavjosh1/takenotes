@@ -16,14 +16,18 @@ const body = `${section}
 
 ## Downloads
 
-Windows-only release artifacts are attached to this release:
+Installers only — no source archives beyond GitHub's automatic ones:
 
 - **Windows 11 x64:** \`takenotes-${pkg.version}-win-x64.exe\` (NSIS installer, run and follow prompts).
 - **Windows 11 x64 portable:** \`takenotes-${pkg.version}-win-x64.zip\`.
+- **macOS Intel:** \`takenotes-${pkg.version}-mac-x64.dmg\`.
+- **macOS Apple Silicon:** \`takenotes-${pkg.version}-mac-arm64.dmg\`.
+- **Ubuntu/Debian x64:** \`takenotes-${pkg.version}-linux-x86_64.AppImage\` (portable, \`chmod +x\` then run) or \`takenotes-${pkg.version}-linux-x64.deb\`.
 
 WSL features require WSL2 with Ubuntu 22.04 x64 or Ubuntu 24.04 x64.
 Early builds are unsigned: Windows SmartScreen warnings are expected — choose
-Run anyway. In-app updates use GitHub Releases.
+Run anyway. On macOS, right-click the app → Open on first launch (unsigned
+beta — Gatekeeper blocks a plain double-click). In-app updates use GitHub Releases.
 
 ## Checksums & provenance
 

@@ -1,6 +1,6 @@
 {
   "name": "takenotes",
-  "version": "0.0.9",
+  "version": "0.1.10",
   "private": true,
   "description": "takenotes — filesystem-first local Markdown notebook for Windows with WSL awareness.",
   "author": {
@@ -38,7 +38,9 @@
     "audit:deps": "npm audit --omit=dev && npm audit",
     "dev:desktop": "node tools/scripts/dev.mjs",
     "dev:web": "npm --workspace @takenotes/web run dev",
-    "mobile:help": "npm --workspace @takenotes/mobile run help"
+    "mobile:help": "npm --workspace @takenotes/mobile run help",
+    "package:mac": "npm run build && electron-builder --mac dmg --x64 --arm64 --publish never",
+    "package:linux": "npm run build && electron-builder --linux AppImage deb --x64 --publish never"
   },
   "devDependencies": {
     "@electron/fuses": "2.1.3",

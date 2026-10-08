@@ -11,10 +11,9 @@ permissions:
   contents: read
 
 jobs:
-  # Windows-only pipeline: every job runs on windows-latest. The WSL
-  # runtime scripts are Windows-safe (pure-Node fetch; bsdtar `tar`
-  # ships with Windows; chmod is best-effort). Ubuntu/macOS runners were
-  # removed to stop doubling queue time — same logic suite, one OS.
+  # Multi-OS pipeline: Windows installers bundle the WSL runtime
+  # (wsl-runtime -> windows). macOS and Ubuntu build natively on their own
+  # runners with no WSL payload and no runtime download.
   wsl-runtime:
     runs-on: windows-latest
     permissions:
@@ -70,26 +69,82 @@ jobs:
       - name: Verify Electron fuses (packaged binary)
         shell: pwsh
         run: npx --no-install @electron/fuses read --app "release/win-unpacked/takenotes.exe"
-      - name: Generate SHA256SUMS.txt
-        shell: pwsh
-        run: |
-          Get-ChildItem release/*.exe, release/*.zip | ForEach-Object {
-            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
-            "$h  $($_.Name)"
-          } | Out-File release/SHA256SUMS.txt -Encoding ascii
+      # Installers only — the single SHA256SUMS.txt for all OSs is
+      # generated in `publish` so one checksum file covers every asset.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-release
           path: |
             release/*.exe
             release/*.zip
-            release/SHA256SUMS.txt
+
+  macos:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run version:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # WSL runtime is Windows-only: stage an empty dir so the
+      # electron-builder extraResources `from` still resolves.
+      - run: mkdir -p resources/wsl/linux-x64
+      - run: npm run package:mac
+        env:
+          # Unsigned beta: no Apple Developer ID in CI (right-click →
+          # Open on first launch). Stable builds should add signing +
+          # notarization here.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Verify Electron fuses (packaged app bundles)
+        run: |
+          npx --no-install @electron/fuses read --app "release/mac/takenotes.app"
+          npx --no-install @electron/fuses read --app "release/mac-arm64/takenotes.app"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos-release
+          path: |
+            release/*.dmg
+
+  ubuntu:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run version:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # WSL runtime is Windows-only: stage an empty dir so the
+      # electron-builder extraResources `from` still resolves.
+      - run: mkdir -p resources/wsl/linux-x64
+      - run: npm run package:linux
+      - name: Verify Electron fuses (packaged binary)
+        run: npx --no-install @electron/fuses read --app "release/linux-unpacked/takenotes"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ubuntu-release
+          path: |
+            release/*.AppImage
+            release/*.deb
 
   publish:
     runs-on: windows-latest
-    # Windows-only release: a release is complete when the Windows NSIS
-    # installer succeeds. No macOS/Linux jobs exist in this file.
-    needs: [windows]
+    # Multi-OS release: a release ships when Windows + macOS + Ubuntu
+    # installers all succeed. One SHA256SUMS.txt covers every asset.
+    needs: [windows, macos, ubuntu]
     permissions:
       contents: write
       id-token: write
@@ -105,17 +160,31 @@ jobs:
         with:
           name: windows-release
           path: release/
-      # Windows-only release: the .exe + .zip + one SHA256SUMS.txt.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: macos-release
+          path: release/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ubuntu-release
+          path: release/
+      # Installers only: exe + zip (Windows), dmg x64/arm64 (macOS),
+      # AppImage + deb (Ubuntu). No source archives, no unpacked dirs.
       - name: Check artifacts
         shell: bash
         run: |
           ls -la release/
-          test -f release/SHA256SUMS.txt && cat release/SHA256SUMS.txt
       - run: npm run version:check
       - run: npm run build
       - run: npm run release:verify
         env:
           REQUIRE_INSTALLER: "1"
+      - name: Generate SHA256SUMS.txt (one file, every installer)
+        shell: bash
+        run: |
+          cd release
+          sha256sum *.exe *.zip *.dmg *.AppImage *.deb > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       - name: Build release notes
         run: node tools/scripts/release-notes.mjs > release/NOTES.md
       # SPDX SBOM (§13): generated from the locked dependency tree with the
@@ -135,7 +204,7 @@ jobs:
         continue-on-error: true
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: "release/*.exe, release/*.zip"
+          subject-path: "release/*.exe, release/*.zip, release/*.dmg, release/*.AppImage, release/*.deb"
       - name: Create GitHub Release
         # Pinned to v2.3.2: v3.0.3 fails deterministically on the 144MB exe
         # with "Error creating asset temp dir" (issue #12). Re-upgrade only
@@ -145,6 +214,9 @@ jobs:
           files: |
             release/*.exe
             release/*.zip
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
             release/SHA256SUMS.txt
             release/*.spdx.json
           body_path: release/NOTES.md

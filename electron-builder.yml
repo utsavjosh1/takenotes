@@ -74,4 +74,27 @@ nsis:
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
+mac:
+  icon: build/icon.icns
+  category: public.app-category.productivity
+  target:
+    # DMG per arch (Intel + Apple Silicon), x64 only for the updater matrix.
+    # Unsigned beta builds: no Apple Developer ID in CI — users right-click
+    # the app → Open on first launch. Stable builds should add signing +
+    # notarization (see win Authenticode gate above).
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+linux:
+  icon: build/icon.png
+  category: Office
+  target:
+    # AppImage (portable, no install) + deb (Debian/Ubuntu), x64 only.
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
 publish: null

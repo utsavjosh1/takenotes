@@ -26,7 +26,7 @@ import { MCP_APP_NOT_RUNNING, type McpPipeResponse } from "@takenotes/core/mcp/t
 
 export const MCP_PROTOCOL_VERSION = "2024-11-05";
 export const MCP_SERVER_NAME = "takenotes-mcp";
-export const MCP_SERVER_VERSION = "0.0.9";
+export const MCP_SERVER_VERSION = "0.1.10";
 
 export type JsonRpcId = string | number | null;
 

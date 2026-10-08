@@ -4,6 +4,8 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-10-08
+
 ### Fixed
 
 - Renderer production build (`npm run build`) broken since the appearance
