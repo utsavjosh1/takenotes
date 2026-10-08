@@ -17,6 +17,9 @@ All notable changes to takenotes.
 - Measured contrast verification (203-case matrix over the shipped palette),
   12px DOM typography floor, reduced-motion collapse audit, and visible editor
   find-match colors in both themes. No WCAG-cert claim.
+- WSL Connection record (post-MVP, in progress): explicit `{distro,
+  linuxUser, status}` store with one-connection-many-workspaces attach/detach
+  and `connectionId` on WSL workspaces (logic-tested; live Windows gate pending).
 
 ## [0.0.9] - 2026-09-22
 

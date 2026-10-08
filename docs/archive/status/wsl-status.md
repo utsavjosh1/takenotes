@@ -77,7 +77,45 @@ preload surface). Typecheck and lint clean. Full-suite perf flakes
 are machine-load only and pass in isolation — unrelated to this slice
 (docs-only).
 
-## Known gaps / candidates for 7b+ (not changed in 7a)
+## Slice 7b — Connection record (this slice)
+
+- New pure module `apps/desktop/src/main/wsl/connections.ts`: explicit
+  `WslConnection {id, distro, linuxUser, status}` with NUL-joined stable
+  keys (distro names may contain spaces, so space-join would be
+  ambiguous), `ConnectionStore` (ensure → connecting → connected /
+  failed / disconnected / reconnecting / incompatible with an enforced
+  edge matrix; attach/detach workspaces; closing the last workspace never
+  deletes the record), `connectionStatusForHelperState` (covers both the
+  helper supervisor and the runtime supervisor's `failed` state), and
+  `workspaceConnectionFor` (projects onto the renderer
+  `WorkspaceInfo.connection` union: `connecting` → `reconnecting`,
+  `incompatible` → `failed`).
+- Wiring (`ipc/register.ts`): store marked `connecting` before any spawn
+  (both runtime and helper branches), `connected` + workspace attach on
+  open success, `disconnected` on open failure, `failed` on spawn/hello
+  failure; supervisor state callbacks project onto the active record while
+  the string `wsl-state` broadcast payload is unchanged (renderer
+  contract untouched); `workspace:close` detaches but keeps the record.
+  Registry + `WorkspaceInfo` carry optional `connectionId` (native
+  workspaces: absent; existing deep-equal tests unaffected).
+- Tests: `tests/wsl/connections.test.ts`, 13 cases (key vectors +
+  ambiguity/distinctness, hostile-identity rejection, both state mappings,
+  one-connection-many-workspaces, close-keeps-record, per-user isolation,
+  edge-matrix enforcement, unknown-key quiet-ignore). No new IPC surface —
+  no sender-guard changes needed.
+
+## Verification performed here (7b)
+
+```bash
+npx vitest run tests/wsl/ tests/integration/helper-roundtrip.test.ts tests/integration/helper-mutations.test.ts tests/ipc/ tests/workspace/
+npm run typecheck
+npm run lint -- --quiet
+```
+
+Results: 18 files passed, 3 windows-gated skipped; 129 passed, 4 skipped.
+Typecheck and lint clean. Live gate still BLOCKED (see below).
+
+## Known gaps / candidates for 7c+ (not changed in 7b)
 
 - Connection record formalization (ADR-0007): `{distro, linuxUser,
   status}` exists implicitly (supervisor singleton session + per-workspace

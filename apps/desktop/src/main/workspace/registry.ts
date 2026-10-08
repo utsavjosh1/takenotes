@@ -15,6 +15,9 @@ export type WorkspaceRegistration = {
   /** WSL Linux user (P1-03): part of the Connection identity. `Ubuntu /
    * utsav` and `Ubuntu / work` are distinct workspaces even on one distro. */
   linuxUser?: string;
+  /** Stable connection key (`connectionKeyFor`) when this workspace rides
+   * a Connection record (7b). Native workspaces never carry one. */
+  connectionId?: string;
 };
 
 /** Renderer-safe projection (no absolute roots). Distro + Linux user ride
@@ -26,6 +29,7 @@ export function toWorkspaceInfo(reg: WorkspaceRegistration): {
   type: WorkspaceType;
   distro?: string;
   linuxUser?: string;
+  connectionId?: string;
 } {
   return {
     workspaceId: reg.id,
@@ -33,6 +37,7 @@ export function toWorkspaceInfo(reg: WorkspaceRegistration): {
     type: reg.type,
     ...(reg.distro === undefined ? {} : { distro: reg.distro }),
     ...(reg.linuxUser === undefined ? {} : { linuxUser: reg.linuxUser }),
+    ...(reg.connectionId === undefined ? {} : { connectionId: reg.connectionId }),
   };
 }
 
@@ -44,7 +49,7 @@ export function isNativeWorkspace(reg: WorkspaceRegistration): boolean {
 export class WorkspaceRegistry {
   private readonly workspaces = new Map<string, WorkspaceRegistration>();
 
-  register(type: WorkspaceType, displayName: string, root: string, distro?: string, linuxUser?: string): WorkspaceRegistration {
+  register(type: WorkspaceType, displayName: string, root: string, distro?: string, linuxUser?: string, connectionId?: string): WorkspaceRegistration {
     const reg: WorkspaceRegistration = {
       id: randomUUID(),
       type,
@@ -53,6 +58,7 @@ export class WorkspaceRegistry {
       root,
       distro,
       linuxUser,
+      connectionId,
     };
     this.workspaces.set(reg.id, reg);
     return reg;

@@ -17,6 +17,7 @@ import { clearDraft, isDraftStale, loadDraft, MAX_DRAFT_BYTES, saveDraft } from 
 import { RecoveryStore, recoveryKeyForWorkspace } from "../workspace/recovery.js";
 import { HelperSupervisor } from "../wsl/helper-supervisor.js";
 import { WslRuntimeSupervisor } from "../wsl/runtime-supervisor.js";
+import { ConnectionStore, connectionStatusForHelperState } from "../wsl/connections.js";
 import { isValidDistroId, isValidLinuxUser } from "../wsl/launch-security.js";
 import { listWslUsers } from "../wsl/user-discovery.js";
 import { checkForUpdates, downloadAndInstall } from "../update/updater.js";
@@ -62,6 +63,13 @@ const workspaces = new WorkspaceService(
 const nativeAdapter = new NativeFileAdapter((absolutePath) => shell.trashItem(absolutePath));
 let supervisor: HelperSupervisor | null = null;
 let runtimeSupervisor: WslRuntimeSupervisor | null = null;
+/** Explicit Connection records (7b, ADR-0007): one connection → many
+ * workspaces. The singleton transports still own readiness; this store owns
+ * identity + status. Module-owned alongside the transports it tracks. */
+const connections = new ConnectionStore();
+/** Connection key of the live singleton session (if any). State callbacks
+ * project supervisor transitions onto this record. */
+let activeConnectionKey: string | null = null;
 /** Broadcast channel for WSL state events, captured per registerIpc call. */
 let broadcastEvent: ((kind: string, payload: unknown) => void) | null = null;
 // NoteService dispatches by workspace kind: native → FileAdapter, WSL → runtime/helper.
@@ -169,7 +177,12 @@ function getNotes(): NoteService {
 function getSupervisor(onEvent: (kind: string, payload: unknown) => void): HelperSupervisor {
   if (!supervisor) {
     supervisor = new HelperSupervisor(
-      (state) => onEvent("wsl-state", state),
+      (state) => {
+        // Project supervisor transitions onto the Connection record (7b).
+        // String `wsl-state` payload is unchanged (renderer contract).
+        if (activeConnectionKey) connections.setStatusByKey(activeConnectionKey, connectionStatusForHelperState(state));
+        onEvent("wsl-state", state);
+      },
       (line) => console.error(`[wsl-helper] ${line}`),
     );
   }
@@ -179,7 +192,10 @@ function getSupervisor(onEvent: (kind: string, payload: unknown) => void): Helpe
 function getRuntimeSupervisor(onEvent: (kind: string, payload: unknown) => void): WslRuntimeSupervisor {
   if (!runtimeSupervisor) {
     runtimeSupervisor = new WslRuntimeSupervisor(
-      (state) => onEvent("wsl-state", state),
+      (state) => {
+        if (activeConnectionKey) connections.setStatusByKey(activeConnectionKey, connectionStatusForHelperState(state));
+        onEvent("wsl-state", state);
+      },
       (line) => console.error(line),
     );
   }
@@ -440,6 +456,9 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     }
     watcher().stop(v.workspaceId);
     workspaces.close(v.workspaceId);
+    // Detach from its Connection; the record (and status) persists — one
+    // connection outlives any single workspace (7b, ADR-0007).
+    connections.detachWorkspace(v.workspaceId);
     return { ok: true, result: null };
   });
 
@@ -480,6 +499,11 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     if (!pathOk) {
       return { ok: false, error: { code: "INVALID_REQUEST", message: "Invalid WSL connection request." } };
     }
+    // Connection record first (7b): identity + `connecting` status exist
+    // before any spawn, so state callbacks and the close path always have
+    // a record to project onto. Validation above guarantees the key builds.
+    activeConnectionKey = connections.markConnecting(distro as string, linuxUser as string);
+    const connectionId = activeConnectionKey;
     const useRuntime = process.env["TAKENOTES_WSL_RUNTIME"] !== "0";
     if (useRuntime) {
       const runtime = getRuntimeSupervisor(broadcast);
@@ -497,14 +521,18 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
           } catch (openErr) {
             console.error("[wsl-runtime-connect] workspace.open failed", { distro, linuxUser, linuxPath, error: toHelperError(openErr) });
             runtime.disconnect();
+            connections.markDisconnected(distro as string, linuxUser as string);
             return { ok: false, error: toHelperError(openErr) };
           }
           console.error("[wsl-runtime-connect] workspace.open ok", { distro, linuxUser, linuxPath, openedRoot });
           // The desktop workspace id remains renderer-facing; the runtime keeps
           // its own process-local workspace id internally.
-          const reg = workspaces.registerWsl(`${distro}:${linuxUser}:${linuxPath}`, openedRoot, distro, linuxUser);
+          const reg = workspaces.registerWsl(`${distro}:${linuxUser}:${linuxPath}`, openedRoot, distro as string, linuxUser as string, connectionId);
+          connections.attachWorkspace(distro as string, linuxUser as string, reg.id);
+          connections.markConnected(distro as string, linuxUser as string);
           return { ok: true, result: { ...toWorkspaceInfo(reg), connection: "connected" as const } };
         } catch (err) {
+          connections.markFailed(distro as string, linuxUser as string);
           return { ok: false, error: { code: "DISCONNECTED", message: "Could not connect to WSL runtime.", detail: String(err) } };
         }
       }
@@ -525,12 +553,16 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
       } catch (openErr) {
         console.error("[wsl-connect] workspace.open failed", { distro, linuxUser, linuxPath, error: toHelperError(openErr) });
         sup.disconnect();
+        connections.markDisconnected(distro as string, linuxUser as string);
         return { ok: false, error: toHelperError(openErr) };
       }
       console.error("[wsl-connect] workspace.open ok", { distro, linuxUser, linuxPath, openedRoot });
-      const reg = workspaces.registerWsl(`${distro}:${linuxUser}:${linuxPath}`, openedRoot, distro, linuxUser);
+      const reg = workspaces.registerWsl(`${distro}:${linuxUser}:${linuxPath}`, openedRoot, distro as string, linuxUser as string, connectionId);
+      connections.attachWorkspace(distro as string, linuxUser as string, reg.id);
+      connections.markConnected(distro as string, linuxUser as string);
       return { ok: true, result: { ...toWorkspaceInfo(reg), connection: "connected" as const } };
     } catch (err) {
+      connections.markFailed(distro as string, linuxUser as string);
       return { ok: false, error: { code: "DISCONNECTED", message: "Could not connect to WSL helper.", detail: String(err) } };
     }
   });

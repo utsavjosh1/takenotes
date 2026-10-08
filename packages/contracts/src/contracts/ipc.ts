@@ -16,6 +16,9 @@ export type WorkspaceInfo = {
   distro?: string;
   /** WSL Linux user (P1-03). Never a raw root — main resolves those. */
   linuxUser?: string;
+  /** Stable connection key when this workspace rides a Connection record
+   * (7b, ADR-0007). Absent for native workspaces; renderer-optional. */
+  connectionId?: string;
 };
 
 export type RecentWorkspaceInfo = {
