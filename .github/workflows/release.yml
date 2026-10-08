@@ -91,7 +91,11 @@ jobs:
       - run: npm ci
       - run: npm run version:check
       - run: npm run typecheck
-      - run: npm test
+      # No `npm test` here: the suite is gated by CI (Windows) and the
+      # Windows packaging job. `helper-roundtrip users.list` reads
+      # /etc/passwd, which has no human entries on macOS (DirectoryService
+      # users aren't in passwd), so it fails environmentally — unrelated
+      # to the mac artifact. Ubuntu keeps `npm test` (passwd works there).
       - run: npm run build
       # WSL runtime is Windows-only: stage an empty dir so the
       # electron-builder extraResources `from` still resolves.

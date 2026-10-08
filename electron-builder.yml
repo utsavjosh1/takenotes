@@ -3,7 +3,7 @@ productName: takenotes
 # Electron fuses (§8): flipped on every packaged binary via afterPack.
 # Expected state is recorded in docs/audit/electron-fuses.md; CI verifies
 # with `npx @electron/fuses read` after packaging.
-afterPack: ./scripts/after-pack-fuses.mjs
+afterPack: ./tools/scripts/after-pack-fuses.mjs
 # Per-OS artifact names (§124). ${os}/${arch}/${ext} are electron-builder
 # template variables — one app version across platforms (§187).
 artifactName: takenotes-${version}-${os}-${arch}.${ext}
