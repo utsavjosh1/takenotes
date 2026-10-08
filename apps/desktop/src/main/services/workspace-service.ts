@@ -18,8 +18,8 @@ export class WorkspaceService {
     return this.registry.register(kind, displayName, root);
   }
 
-  registerWsl(displayName: string, root: string, distro: string, linuxUser?: string): WorkspaceRegistration {
-    return this.registry.register("windows-wsl", displayName, root, distro, linuxUser);
+  registerWsl(displayName: string, root: string, distro: string, linuxUser?: string, connectionId?: string): WorkspaceRegistration {
+    return this.registry.register("windows-wsl", displayName, root, distro, linuxUser, connectionId);
   }
 
   get(id: string): WorkspaceRegistration | undefined {

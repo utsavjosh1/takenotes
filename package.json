@@ -16,10 +16,11 @@
   "main": "dist-electron/main/index.cjs",
   "scripts": {
     "dev": "node tools/scripts/dev.mjs",
-    "build": "npm run build:renderer && npm run build:electron && npm run build:server && npm run build:helper",
+    "build": "npm run build:renderer && npm run build:electron && npm run build:server && npm run build:helper && npm run build:mcp",
     "build:renderer": "vite build --config vite.config.ts",
     "build:electron": "node tools/scripts/build-main.mjs",
     "build:helper": "node tools/scripts/build-helper.mjs",
+    "build:mcp": "node tools/scripts/build-mcp.mjs",
     "build:server": "node tools/scripts/build-server.mjs",
     "server:start": "node dist-server/server.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",

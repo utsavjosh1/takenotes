@@ -62,7 +62,7 @@ export function TitleBar({
 /* ---------- activity rail ---------- */
 /** Step 2 shell seam: fixed-order left panes. Right sidebar is an empty
  * slot until Steps 3/4/6 fill it; pane drag-reorder deferred. */
-export const SIDEBAR_VIEWS = ["files", "search", "outline", "favorites"] as const;
+export const SIDEBAR_VIEWS = ["files", "search", "outline", "favorites", "today", "calendar", "tags", "properties", "collections", "graph"] as const;
 export type SidebarView = (typeof SIDEBAR_VIEWS)[number];
 
 export function ActivityRail({
@@ -116,6 +116,60 @@ export function ActivityRail({
       >
         <Icon name="star" />
       </button>
+      <button
+        className={`rail-btn${view === "today" ? " active" : ""}`}
+        onClick={() => onView("today")}
+        title="Today"
+        aria-label="Today"
+        aria-pressed={view === "today"}
+      >
+        <Icon name="calendar" />
+      </button>
+      <button
+        className={`rail-btn${view === "calendar" ? " active" : ""}`}
+        onClick={() => onView("calendar")}
+        title="Calendar"
+        aria-label="Calendar"
+        aria-pressed={view === "calendar"}
+      >
+        <Icon name="grid" />
+      </button>
+      <button
+        className={`rail-btn${view === "tags" ? " active" : ""}`}
+        onClick={() => onView("tags")}
+        title="Tags"
+        aria-label="Tags"
+        aria-pressed={view === "tags"}
+      >
+        <Icon name="tag" />
+      </button>
+      <button
+        className={`rail-btn${view === "properties" ? " active" : ""}`}
+        onClick={() => onView("properties")}
+        title="Properties"
+        aria-label="Properties"
+        aria-pressed={view === "properties"}
+      >
+        <Icon name="sliders" />
+      </button>
+      <button
+        className={`rail-btn${view === "collections" ? " active" : ""}`}
+        onClick={() => onView("collections")}
+        title="Collections"
+        aria-label="Collections"
+        aria-pressed={view === "collections"}
+      >
+        <Icon name="table" />
+      </button>
+      <button
+        className={`rail-btn${view === "graph" ? " active" : ""}`}
+        onClick={() => onView("graph")}
+        title="Graph"
+        aria-label="Graph"
+        aria-pressed={view === "graph"}
+      >
+        <Icon name="graph" />
+      </button>
       <span className="spacer" />
       <button className="rail-btn" onClick={onSettings} title={`Settings (${settingsLabel})`} aria-label="Settings">
         <Icon name="settings" />
@@ -156,8 +210,11 @@ export function StatusBar({
   onOpenHistory?: () => void;
 }): JSX.Element {
   if (!workspace) {
+    // Step 9: no live region here — words/cursor update per keystroke and
+    // must never announce. Save/connection states (below) are the only
+    // polite announcements in the strip.
     return (
-      <footer className="statusbar" role="status" aria-live="polite">
+      <footer className="statusbar">
         <span>No workspace</span>
         <span className="right">
           <span>{words} words</span>
@@ -179,15 +236,17 @@ export function StatusBar({
   const badSave = doc === "conflict" || doc === "error";
   const badConn = connection === "disconnected" || connection === "failed";
   return (
-    <footer className="statusbar" role="status" aria-live="polite">
+    <footer className="statusbar">
       <span className="conn-ok" title={`Workspace: ${workspace.displayName}`}>{seg.workspace}</span>
       <span title={isWslKind(workspace.type) ? "WSL connection identity" : "Platform"}>{seg.platform}</span>
-      {seg.save && (
-        <span className={badSave ? "conn-bad" : "save-dot"}>
-          {doc === "dirty" ? `● ${seg.save}` : seg.save}
-        </span>
-      )}
-      <span className={badConn ? "conn-bad" : "conn-ok"}>{seg.connection}</span>
+      <span role="status">
+        {seg.save && (
+          <span className={badSave ? "conn-bad" : "save-dot"}>
+            {doc === "dirty" ? `● ${seg.save}` : seg.save}
+          </span>
+        )}
+        <span className={badConn ? "conn-bad" : "conn-ok"}>{seg.connection}</span>
+      </span>
       <span title="Notes in the Quick-open index">{seg.files}</span>
       {indexWarning && (
         <span className="conn-bad" title={indexWarning} role="note">Index partial</span>

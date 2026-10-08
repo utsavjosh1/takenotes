@@ -7,11 +7,11 @@ import type { FileReadResult } from "@takenotes/contracts/ipc";
 
 const REV = (h: string) => ({ hash: h, size: 50, mtimeMs: 1 });
 
-/** Fixture index (parsed through the real P1-07 parser — search never
- * reparses; it only reads entry fields). File layout:
- *   MCP.md                   fm lines 1-4, `# MCP` L5, body L6, task L7
- *   docs/Guide.md            no fm: `# Guide` L1, body L2
- *   projects/backend/notes.md fm 1-4, `# Notes` L5, body L6-7
+/** Fixture index (parsed through the real parser — search never reparses).
+ *   MCP.md                   fm 1-4 (title/tags/status), `# MCP` L5, body L6, task L7
+ *   docs/Guide.md            no fm: `# Guide` L1, body+block L2
+ *   projects/backend/notes.md fm 1-5 (tags/type/status/priority), `# Notes` L6, body L7-8, done task L8
+ *   projects/alpha.md        type project + status active (G3 demo target)
  *   daily/2026-09-19.md      type daily
  *   event.md                 type event
  *   plain.md                 no tasks, no tags, no type
@@ -19,12 +19,15 @@ const REV = (h: string) => ({ hash: h, size: 50, mtimeMs: 1 });
 function fixture(): WorkspaceIndex {
   const idx = new WorkspaceIndex();
   idx.upsert("ws", "MCP.md",
-    "---\ntitle: MCP Server\ntags: [backend]\n---\n# MCP\nServer design [[MCP#Server|label]].\n- [ ] Wire helper @due(2026-09-25)\n",
+    "---\ntitle: MCP Server\ntags: [backend]\nstatus: active\n---\n# MCP\nServer design [[MCP#Server|label]].\n- [ ] Wire helper @due(2026-09-25)\n",
     REV("h1"));
-  idx.upsert("ws", "docs/Guide.md", "# Guide\nworkspace identity and connections.\n", REV("h2"));
+  idx.upsert("ws", "docs/Guide.md", "# Guide\nworkspace identity and connections ^g1\n", REV("h2"));
   idx.upsert("ws", "projects/backend/notes.md",
-    "---\ntags: [project/takenotes]\ntype: note\n---\n# Notes\nwebsocket work #live\n- [x] Done\n",
+    "---\ntags: [project/takenotes]\ntype: note\nstatus: archived\npriority: 2\n---\n# Notes\nwebsocket work #live\n- [x] Done ^d1\n",
     REV("h3"));
+  idx.upsert("ws", "projects/alpha.md",
+    "---\ntype: project\nstatus: active\n---\n# Alpha\nactive project work\n",
+    REV("h7"));
   idx.upsert("ws", "daily/2026-09-19.md", "---\ntype: daily\ndate: 2026-09-19\n---\n# Today\n", REV("h4"));
   idx.upsert("ws", "event.md", "---\ntype: event\n---\n# Launch\n", REV("h5"));
   idx.upsert("ws", "plain.md", "# Plain\nnothing special\n", REV("h6"));
@@ -61,33 +64,73 @@ describe("plain text + phrase", () => {
     expect(hits[0]).toMatchObject({ relativePath: "docs/Guide.md", line: 2, column: 1 });
     expect(hits[0]!.preview).toContain("workspace identity");
     const phrase = searchContent(fixture(), "ws", q('"server design"'));
-    // MCP.md: fm lines 1-4, `# MCP` L5, phrase on file line 6.
-    expect(phrase[0]).toMatchObject({ relativePath: "MCP.md", line: 6, column: 1 });
+    // MCP.md: fm lines 1-5, `# MCP` L6, phrase on file line 7.
+    expect(phrase[0]).toMatchObject({ relativePath: "MCP.md", line: 7, column: 1 });
   });
 });
 
-describe("file: + path:", () => {
-  it("filename match, nonmatch, quoted multiword, combined with text", () => {
+describe("OR / parens / negation", () => {
+  it("OR unions; parens group; precedence OR < AND", () => {
+    expect(contentPaths(fixture(), "mcp OR websocket").sort()).toEqual(["MCP.md", "projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "(mcp OR websocket) tag:backend")).toEqual(["MCP.md"]);
+    // `a OR b c` parses as `a OR (b AND c)`.
+    expect(contentPaths(fixture(), "mcp OR websocket tag:project/takenotes")).toEqual(["MCP.md", "projects/backend/notes.md"]);
+  });
+
+  it("- negates operands and groups", () => {
+    expect(contentPaths(fixture(), "mcp -server")).toEqual([]);
+    expect(contentPaths(fixture(), "-mcp").sort()).toEqual([
+      "daily/2026-09-19.md",
+      "docs/Guide.md",
+      "event.md",
+      "plain.md",
+      "projects/alpha.md",
+      "projects/backend/notes.md",
+    ]);
+    expect(contentPaths(fixture(), "-(mcp OR websocket)").sort()).toEqual([
+      "daily/2026-09-19.md",
+      "docs/Guide.md",
+      "event.md",
+      "plain.md",
+      "projects/alpha.md",
+    ]);
+  });
+});
+
+describe("regex", () => {
+  it("matches over indexed text; snippet points at the line", () => {
+    expect(contentPaths(fixture(), "/wire\\s+helper/")).toEqual(["MCP.md"]);
+    const hits = searchContent(fixture(), "ws", q("/wire\\s+helper/"));
+    expect(hits[0]).toMatchObject({ relativePath: "MCP.md", line: 8 });
+    expect(contentPaths(fixture(), "/^workspace identity/")).toEqual(["docs/Guide.md"]);
+    expect(contentPaths(fixture(), "/zzz-no-match/")).toEqual([]);
+  });
+});
+
+describe("file: + path: (V2: full query per entry)", () => {
+  it("file: alone selects content now; strict AND still applies", () => {
     const names = (raw: string) => searchFilenames(fixture(), "ws", q(raw)).map((m) => m.relativePath);
     expect(names("file:mcp")).toEqual(["MCP.md"]);
     expect(names("file:nope")).toEqual([]);
-    expect(names("file:notes websocket")).toEqual(["projects/backend/notes.md"]);
-    // A satisfied `file:` earns display; the strict AND still empties Contents.
-    expect(names("file:mcp websocket")).toEqual(["MCP.md"]);
+    expect(contentPaths(fixture(), "file:mcp")).toEqual(["MCP.md"]);
+    // Name-scoped text must also match names: `websocket` is body-only.
+    expect(names("file:notes websocket")).toEqual([]);
     expect(contentPaths(fixture(), "file:mcp websocket")).toEqual([]);
   });
 
-  it("folder and nested filters; path alone selects nothing", () => {
+  it("path: alone selects content; pure filters select no filenames", () => {
     const idx = fixture();
     expect(contentPaths(idx, "path:docs workspace")).toEqual(["docs/Guide.md"]);
     expect(contentPaths(idx, "path:projects/backend websocket")).toEqual(["projects/backend/notes.md"]);
-    expect(contentPaths(idx, "path:docs")).toEqual([]);
+    expect(contentPaths(idx, "path:docs")).toEqual(["docs/Guide.md"]);
     expect(searchFilenames(idx, "ws", q("path:docs"))).toEqual([]);
+    expect(searchFilenames(idx, "ws", q("tag:backend"))).toEqual([]);
+    expect(searchFilenames(idx, "ws", q("content:websocket"))).toEqual([]);
   });
 });
 
 describe("tag: + type:", () => {
-  it("inline, frontmatter, and nested tags (P1-07 normalized)", () => {
+  it("inline, frontmatter, and nested tags (normalized)", () => {
     expect(contentPaths(fixture(), "tag:backend")).toEqual(["MCP.md"]);
     expect(contentPaths(fixture(), "tag:Backend")).toEqual(["MCP.md"]);
     expect(contentPaths(fixture(), "tag:project/takenotes")).toEqual(["projects/backend/notes.md"]);
@@ -98,7 +141,78 @@ describe("tag: + type:", () => {
   it("docType matching; missing type excluded", () => {
     expect(contentPaths(fixture(), "type:daily")).toEqual(["daily/2026-09-19.md"]);
     expect(contentPaths(fixture(), "type:event")).toEqual(["event.md"]);
-    expect(contentPaths(fixture(), "type:project")).toEqual([]);
+    expect(contentPaths(fixture(), "type:project")).toEqual(["projects/alpha.md"]);
+    expect(contentPaths(fixture(), "type:nope")).toEqual([]);
+  });
+});
+
+describe("content: + section: + task: + block: + line:", () => {
+  it("content: searches body text (never a filename)", () => {
+    expect(contentPaths(fixture(), "content:websocket")).toEqual(["projects/backend/notes.md"]);
+    expect(searchFilenames(fixture(), "ws", q("content:websocket"))).toEqual([]);
+  });
+
+  it("section: matches headings and titles", () => {
+    expect(contentPaths(fixture(), "section:guide")).toEqual(["docs/Guide.md"]);
+    expect(contentPaths(fixture(), "section:notes")).toEqual(["projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "section:missing")).toEqual([]);
+  });
+
+  it("task: searches every task description", () => {
+    expect(contentPaths(fixture(), "task:wire")).toEqual(["MCP.md"]);
+    expect(contentPaths(fixture(), "task:done")).toEqual(["projects/backend/notes.md"]);
+  });
+
+  it("task-todo:/task-done: split open from completed", () => {
+    expect(contentPaths(fixture(), "task-todo:")).toEqual(["MCP.md"]);
+    expect(contentPaths(fixture(), "task-todo:wire")).toEqual(["MCP.md"]);
+    expect(contentPaths(fixture(), "task-todo:done")).toEqual([]);
+    expect(contentPaths(fixture(), "task-done:")).toEqual(["projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "task-done:done")).toEqual(["projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "task-done:wire")).toEqual([]);
+  });
+
+  it("block: matches trailing ^ids (general + task anchors)", () => {
+    expect(contentPaths(fixture(), "block:g1")).toEqual(["docs/Guide.md"]);
+    expect(contentPaths(fixture(), "block:d1")).toEqual(["projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "block:nope")).toEqual([]);
+  });
+
+  it("line: matches files with at least n lines", () => {
+    expect(contentPaths(fixture(), "line:8").sort()).toEqual(["MCP.md", "projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "line:9")).toEqual(["projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "line:10")).toEqual([]);
+    expect(contentPaths(fixture(), "line:2").length).toBeGreaterThan(3);
+  });
+});
+
+describe("match-case: + ignore-case:", () => {
+  it("match-case is case-sensitive; ignore-case is not", () => {
+    expect(contentPaths(fixture(), "match-case:MCP")).toEqual(["MCP.md"]);
+    expect(contentPaths(fixture(), "match-case:mcp")).toEqual([]);
+    expect(contentPaths(fixture(), "ignore-case:mcp")).toEqual(["MCP.md"]);
+  });
+});
+
+describe("[prop] + comparators (G3 Collections demo shape)", () => {
+  it("exact, exists, and null", () => {
+    expect(contentPaths(fixture(), "[status:active]").sort()).toEqual(["MCP.md", "projects/alpha.md"]);
+    expect(contentPaths(fixture(), "[status:]").sort()).toEqual(["MCP.md", "projects/alpha.md", "projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "[status:null]").sort()).toEqual(["daily/2026-09-19.md", "docs/Guide.md", "event.md", "plain.md"]);
+    expect(contentPaths(fixture(), "[priority:2]")).toEqual(["projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), '[title:"MCP Server"]')).toEqual(["MCP.md"]);
+  });
+
+  it("comparators compare numerically, else lexicographically", () => {
+    expect(contentPaths(fixture(), "[priority:<5]")).toEqual(["projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "[priority:>5]")).toEqual([]);
+    expect(contentPaths(fixture(), "[priority:>=2]")).toEqual(["projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "[priority:=2]")).toEqual(["projects/backend/notes.md"]);
+    expect(contentPaths(fixture(), "[status:>a]")).toEqual(["MCP.md", "projects/alpha.md", "projects/backend/notes.md"]);
+  });
+
+  it("G3 ship demo: type = project AND status = active", () => {
+    expect(contentPaths(fixture(), "type:project [status:active]")).toEqual(["projects/alpha.md"]);
   });
 });
 
@@ -118,14 +232,14 @@ describe("is:task", () => {
     // Earliest-in-file body line wins: the raw task line, exact column.
     expect(hits[0]).toMatchObject({
       relativePath: "MCP.md",
-      line: 7,
+      line: 8,
       column: 7,
       preview: "- [ ] Wire helper @due(2026-09-25)",
     });
   });
 });
 
-describe("composition + ranking", () => {
+describe("composition + ranking + sort", () => {
   it("all terms/filters AND together, deterministically ordered", () => {
     expect(contentPaths(fixture(), "tag:backend websocket")).toEqual([]);
     expect(contentPaths(fixture(), 'type:daily "today"')).toEqual(["daily/2026-09-19.md"]);
@@ -137,6 +251,14 @@ describe("composition + ranking", () => {
     idx.upsert("ws", "other.md", "# Else\nmentions mcp here\n", REV("b"));
     const files = searchFilenames(idx, "ws", q("mcp")).map((m) => m.relativePath);
     expect(files[0]).toBe("mcp.md");
+  });
+
+  it("sort overrides relevance deterministically", () => {
+    const idx = fixture();
+    const byName = searchContent(idx, "ws", q("is:task"), 1000, { key: "name", dir: "asc" }).map((m) => m.relativePath);
+    expect(byName).toEqual(["MCP.md", "projects/backend/notes.md"]);
+    const byNameDesc = searchContent(idx, "ws", q("is:task"), 1000, { key: "name", dir: "desc" }).map((m) => m.relativePath);
+    expect(byNameDesc).toEqual(["projects/backend/notes.md", "MCP.md"]);
   });
 });
 
@@ -163,6 +285,12 @@ describe("lifecycle + isolation (no rescan on query)", () => {
     expect(searchContent(idx, "A", q("shared")).map((m) => m.relativePath)).toEqual(["same.md"]);
     expect(searchFilenames(idx, "B", q("file:same")).map((m) => m.relativePath)).toEqual(["same.md"]);
     expect(searchContent(idx, "C", q("shared"))).toEqual([]);
+  });
+
+  it("empty queries match nothing (recents own the empty state)", () => {
+    const idx = fixture();
+    expect(searchContent(idx, "ws", q("   "))).toEqual([]);
+    expect(searchFilenames(idx, "ws", q("   "))).toEqual([]);
   });
 
   it("queries perform zero filesystem reads/lists", async () => {

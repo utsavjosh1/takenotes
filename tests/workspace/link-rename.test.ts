@@ -68,6 +68,24 @@ describe("link-aware rename/move through NoteService", () => {
     expect(disk("Ref.md")).toBe("[[Old]] [[Old.md]] [[Other/Old]]\n");
   });
 
+  it("skips the rewrite when auto-update is off (file + directory)", async () => {
+    await write("Old.md", "# Old\n");
+    await write("Ref.md", "[[Old]]\n");
+    mkdirSync(path.join(root, "Docs"), { recursive: true });
+    await write("Docs/Plan.md", "# Plan\n");
+    await write("Ref2.md", "[[Docs/Plan]]\n");
+
+    expect(await notes.renamePath(workspaceId, "Old.md", "New.md", { autoUpdateLinks: false })).toEqual({
+      ok: true,
+    });
+    expect(await notes.renameDirectory(workspaceId, "Docs", "Archive", { autoUpdateLinks: false })).toEqual({
+      ok: true,
+    });
+    expect(disk("Ref.md")).toBe("[[Old]]\n");
+    expect(disk("Ref2.md")).toBe("[[Docs/Plan]]\n");
+    expect(disk("New.md")).toBe("# Old\n");
+  });
+
   it("renames a directory and rewrites path-qualified wikilinks beneath it", async () => {
     mkdirSync(path.join(root, "Projects"), { recursive: true });
     await write("Projects/Plan.md", "# Plan\n");

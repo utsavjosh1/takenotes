@@ -63,9 +63,13 @@ export const COMMANDS: readonly KeymapCommandDefinition[] = [
   { id: "tree.trash", accelerators: { mac: "Command+Backspace", windows: "Delete", linux: "Delete" } },
   { id: "app.quit", accelerators: {}, nativeRole: true },
   { id: "app.toggleFullscreen", accelerators: {}, nativeRole: true },
-  { id: "app.zoomIn", accelerators: {}, nativeRole: true },
-  { id: "app.zoomOut", accelerators: {}, nativeRole: true },
-  { id: "app.zoomReset", accelerators: {}, nativeRole: true },
+  // Step 9 (slice 6b): zoom is a settings-level command, not Chromium
+  // native zoom — one persisted factor applied as CSS, so menu, palette,
+  // and keyboard share a single path and never compound. `=`/`-`/`0`
+  // are single-char Electron accelerators (Ctrl+= is the browser norm).
+  { id: "app.zoomIn", accelerators: ctrl("Command+=", "CommandOrControl+=") },
+  { id: "app.zoomOut", accelerators: ctrl("Command+-", "CommandOrControl+-") },
+  { id: "app.zoomReset", accelerators: ctrl("Command+0", "CommandOrControl+0") },
 ];
 
 const BY_ID = new Map<CommandId, KeymapCommandDefinition>(COMMANDS.map((c) => [c.id, c]));

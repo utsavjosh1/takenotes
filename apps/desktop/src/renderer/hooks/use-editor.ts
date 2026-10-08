@@ -8,7 +8,7 @@ import { createEditor } from "../editor/create-editor";
 export function useCodeMirrorEditor(
   sessionKey: string,
   initialContent: string,
-  opts: { lineNumbers: boolean; wordWrap: boolean; onChange: (c: string) => void; onCursor: (l: number, c: number) => void },
+  opts: { lineNumbers: boolean; wordWrap: boolean; livePreview?: boolean; onChange: (c: string) => void; onCursor: (l: number, c: number) => void },
 ): React.RefObject<HTMLDivElement | null> {
   const ref = useRef<HTMLDivElement | null>(null);
   const optsRef = useRef(opts);
@@ -21,6 +21,7 @@ export function useCodeMirrorEditor(
     const session = createEditor(el, initialContent, {
       lineNumbers: optsRef.current.lineNumbers,
       wordWrap: optsRef.current.wordWrap,
+      livePreview: optsRef.current.livePreview,
       onChange: (c) => optsRef.current.onChange(c),
       onCursor: (l, c) => optsRef.current.onCursor(l, c),
     });

@@ -66,12 +66,12 @@ export type TakeNotesApi = {
   directory: {
     list(workspaceId: string, relativePath: string): Promise<IpcResult<DirectoryEntry[]>>;
     create(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
-    rename(workspaceId: string, oldPath: string, newPath: string): Promise<IpcResult<null>>;
+    rename(workspaceId: string, oldPath: string, newPath: string, opts?: { autoUpdateLinks?: boolean }): Promise<IpcResult<null>>;
     delete(workspaceId: string, relativePath: string, recursive?: boolean): Promise<IpcResult<null>>;
   };
   file: {
     read(workspaceId: string, relativePath: string): Promise<IpcResult<FileReadResult>>;
-    rename(workspaceId: string, oldPath: string, newPath: string): Promise<IpcResult<null>>;
+    rename(workspaceId: string, oldPath: string, newPath: string, opts?: { autoUpdateLinks?: boolean }): Promise<IpcResult<null>>;
     trash(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
     write(args: {
       workspaceId: string;
@@ -82,9 +82,27 @@ export type TakeNotesApi = {
       hadBom: boolean;
     }): Promise<IpcResult<FileRevision>>;
     create(workspaceId: string, relativePath: string): Promise<IpcResult<FileRevision>>;
+    /** Raw-byte attachment import (base64 over IPC; Step 4). */
+    importBinary(args: {
+      workspaceId: string;
+      relativePath: string;
+      base64: string;
+    }): Promise<IpcResult<FileRevision>>;
   };
   shell: {
     reveal(workspaceId: string, relativePath: string): Promise<IpcResult<null>>;
+  };
+  import: {
+    pick(
+      workspaceId: string,
+      options: { mode: "files" | "folder"; attachmentLocation: string; attachmentFolder: string },
+    ): Promise<IpcResult<ImportPreview>>;
+    confirm(workspaceId: string, token: string): Promise<IpcResult<ImportSummary>>;
+  };
+  mcp: {
+    clients(): Promise<IpcResult<McpClientsSummary>>;
+    grant(clientId: string, workspaceId: string): Promise<IpcResult<null>>;
+    revoke(clientId: string, workspaceId?: string): Promise<IpcResult<null>>;
   };
   commands: {
     list(): Promise<IpcResult<CommandListResult>>;
@@ -92,6 +110,10 @@ export type TakeNotesApi = {
   app: {
     version(): Promise<IpcResult<string>>;
     platform(): Promise<IpcResult<PlatformReport>>;
+    /** Stored window-frame preference (`auto` when never set). */
+    frameStyle(): Promise<IpcResult<"auto" | "native">>;
+    /** Persist the frame preference; applies after restart. */
+    setFrameStyle(style: "auto" | "native"): Promise<IpcResult<"auto" | "native">>;
   };
   update: {
     /** Check for a newer stable release. `manual=true` always runs (shows
@@ -105,7 +127,37 @@ export type TakeNotesApi = {
     onUpdateProgress(callback: (progress: UpdateProgress) => void): () => void;
     onCommand(callback: (id: CommandId) => void): () => void;
     onWorkspaceChange(callback: (event: WorkspaceChangeEvent) => void): () => void;
+    onUriAction(callback: (delivery: { ok: boolean; raw: string; payload: unknown }) => void): () => void;
   };
+};
+
+/** Approval-screen model for Settings → Automation (Step 8). Renderer-safe:
+ * ids + display names only, never roots. */
+export type McpClientsSummary = {
+  granted: { clientId: string; grants: { workspaceId: string; displayName: string | null; grantedAt: number }[] }[];
+  /** Denied clients with no grants yet — the approval queue. */
+  pending: string[];
+  workspaces: { id: string; displayName: string }[];
+  activity: { seq: number; at: number; clientId: string; tool: string; workspaceId?: string; ok: boolean; errorCode?: string }[];
+  /** Exact `node "…"` command agents run. */
+  sidecarCommand: string;
+};
+
+/** Import preview/summary for the confirm screen (Step 8). No outside
+ * absolute paths and no bytes cross to the renderer. */
+export type ImportPreview = {
+  token: string;
+  notes: { targetPath: string; sourceRel: string; chars: number }[];
+  attachments: { targetPath: string; sourceRel: string; bytes: number }[];
+  unmapped: { note: string; ref: string }[];
+  warnings: string[];
+  skipped: { rel: string; reason: string }[];
+};
+
+export type ImportSummary = {
+  notes: number;
+  attachments: number;
+  errors: { target: string; message: string }[];
 };
 
 export type DraftSummary = {
@@ -143,19 +195,29 @@ const api: TakeNotesApi = {
   directory: {
     list: (workspaceId, relativePath) => ipcRenderer.invoke("directory:list", workspaceId, relativePath),
     create: (workspaceId, relativePath) => ipcRenderer.invoke("directory:create", workspaceId, relativePath),
-    rename: (workspaceId, oldPath, newPath) => ipcRenderer.invoke("directory:rename", workspaceId, oldPath, newPath),
+    rename: (workspaceId, oldPath, newPath, opts) => ipcRenderer.invoke("directory:rename", workspaceId, oldPath, newPath, opts),
     delete: (workspaceId, relativePath, recursive) =>
       ipcRenderer.invoke("directory:delete", workspaceId, relativePath, recursive),
   },
   file: {
     read: (workspaceId, relativePath) => ipcRenderer.invoke("file:read", workspaceId, relativePath),
-    rename: (workspaceId, oldPath, newPath) => ipcRenderer.invoke("file:rename", workspaceId, oldPath, newPath),
+    rename: (workspaceId, oldPath, newPath, opts) => ipcRenderer.invoke("file:rename", workspaceId, oldPath, newPath, opts),
     trash: (workspaceId, relativePath) => ipcRenderer.invoke("file:trash", workspaceId, relativePath),
     write: (args) => ipcRenderer.invoke("file:write", args),
     create: (workspaceId, relativePath) => ipcRenderer.invoke("file:create", workspaceId, relativePath),
+    importBinary: (args) => ipcRenderer.invoke("file:importBinary", args),
   },
   shell: {
     reveal: (workspaceId, relativePath) => ipcRenderer.invoke("shell:reveal", workspaceId, relativePath),
+  },
+  import: {
+    pick: (workspaceId, options) => ipcRenderer.invoke("import:pick", workspaceId, options),
+    confirm: (workspaceId, token) => ipcRenderer.invoke("import:confirm", workspaceId, token),
+  },
+  mcp: {
+    clients: () => ipcRenderer.invoke("mcp:clients"),
+    grant: (clientId, workspaceId) => ipcRenderer.invoke("mcp:grant", clientId, workspaceId),
+    revoke: (clientId, workspaceId) => ipcRenderer.invoke("mcp:revoke", clientId, workspaceId),
   },
   commands: {
     list: () => ipcRenderer.invoke("commands:list"),
@@ -163,6 +225,8 @@ const api: TakeNotesApi = {
   app: {
     version: () => ipcRenderer.invoke("app:version"),
     platform: () => ipcRenderer.invoke("app:platform"),
+    frameStyle: () => ipcRenderer.invoke("app:frameStyle"),
+    setFrameStyle: (style) => ipcRenderer.invoke("app:setFrameStyle", style),
   },
   update: {
     check: (manual) => ipcRenderer.invoke("update:check", manual),
@@ -188,6 +252,11 @@ const api: TakeNotesApi = {
       const listener = (_event: unknown, payload: WorkspaceChangeEvent) => callback(payload);
       ipcRenderer.on("takenotes:workspace-change", listener as (...args: unknown[]) => void);
       return () => ipcRenderer.removeListener("takenotes:workspace-change", listener as (...args: unknown[]) => void);
+    },
+    onUriAction: (callback) => {
+      const listener = (_event: unknown, delivery: { ok: boolean; raw: string; payload: unknown }) => callback(delivery);
+      ipcRenderer.on("takenotes:uri-action", listener as (...args: unknown[]) => void);
+      return () => ipcRenderer.removeListener("takenotes:uri-action", listener as (...args: unknown[]) => void);
     },
   },
 };

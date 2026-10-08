@@ -58,7 +58,7 @@
   --tn-selection: #e3dcff;
   --tn-code-surface: #f3ecdd;
   --tn-highlight-surface: #ffdf8e;
-  --tn-scrollbar: #cbbfa6;
+  --tn-scrollbar: #8a7d63;
 }
 
 [data-theme="dark"] {
@@ -88,5 +88,5 @@
   --tn-selection: #493968;
   --tn-code-surface: #26211a;
   --tn-highlight-surface: #59451b;
-  --tn-scrollbar: #5a5042;
+  --tn-scrollbar: #857861;
 }

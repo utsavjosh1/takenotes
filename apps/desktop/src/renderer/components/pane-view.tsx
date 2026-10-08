@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } fr
 import type { EditorView } from "@codemirror/view";
 import { openSearchPanel } from "@codemirror/search";
 import { createEditor } from "../editor/create-editor";
+import type { LinkCompleteDeps } from "../editor/complete";
+import { workspaceIndex } from "../index/workspace-index";
+import { aliasCandidates, blockCandidates, fileCandidates, type LinkFormat } from "@takenotes/core/links/completion";
 import {
   applyLinkUrl,
   cmdBold,
@@ -66,9 +69,15 @@ export function PaneView({
   docKey,
   content,
   relativePath,
+  workspaceId,
   lineNumbers,
   wordWrap,
+  livePreview,
+  linkFormat,
+  useWikilinks,
   fullWidth,
+  /** Step 9: inline note-title row. False hides it (tab still names the file). */
+  inlineTitle = true,
   reportCursor,
   onEdit,
   onCursor,
@@ -81,7 +90,14 @@ export function PaneView({
   relativePath: string;
   lineNumbers: boolean;
   wordWrap: boolean;
+  livePreview: boolean;
+  /** `[[` insertion style (shortest/relative/absolute). */
+  linkFormat: LinkFormat;
+  /** Off writes `[label](path.md)` file links instead of `[[…]]`. */
+  useWikilinks: boolean;
+  workspaceId: string;
   fullWidth: boolean;
+  inlineTitle?: boolean;
   /** Only the active pane reports cursor position to the status strip. */
   reportCursor: boolean;
   onEdit: (docKey: string, content: string) => void;
@@ -120,7 +136,34 @@ export function PaneView({
     void onTitleCommit(next);
   };
 
-  const sessionKey = `${docKey}|ln${lineNumbers ? 1 : 0}|ww${wordWrap ? 1 : 0}`;
+  const sessionKey = `${docKey}|ln${lineNumbers ? 1 : 0}|ww${wordWrap ? 1 : 0}|lp${livePreview ? 1 : 0}`;
+
+  // `[[` completion feeds index-backed candidates through editor-owned
+  // callbacks: files (folder-path disambiguation) + aliases, headings and
+  // `^block` ids of the resolved file (`[[#` addresses the active note).
+  // Context flows through a mutable ref so settings or
+  // title renames never remount the editor mid-typing.
+  const linkCtx = useRef({ workspaceId, relativePath, linkFormat, useWikilinks });
+  linkCtx.current = { workspaceId, relativePath, linkFormat, useWikilinks };
+  const completerRef = useRef<LinkCompleteDeps | null>(null);
+  if (!completerRef.current) {
+    completerRef.current = {
+      listFiles: () => fileCandidates(workspaceIndex.list(linkCtx.current.workspaceId)),
+      listHeadings: (path) =>
+        (workspaceIndex.get(linkCtx.current.workspaceId, path)?.headings ?? []).map((h) => ({
+          text: h.text,
+          level: h.level,
+        })),
+      listBlocks: (path) => {
+        const entry = workspaceIndex.get(linkCtx.current.workspaceId, path);
+        return entry ? blockCandidates(entry) : [];
+      },
+      listAliases: () => aliasCandidates(workspaceIndex.list(linkCtx.current.workspaceId)),
+      activePath: () => linkCtx.current.relativePath,
+      linkFormat: () => linkCtx.current.linkFormat,
+      useWikilinks: () => linkCtx.current.useWikilinks,
+    };
+  }
 
   // Mount / remount when the pane switches documents or toggles settings.
   // `content` here is the prop value at mount time — the base this editor
@@ -131,9 +174,12 @@ export function PaneView({
     if (!el) return;
     el.replaceChildren();
     renderedRef.current = content;
+    const linkCompleter = completerRef.current;
     const session = createEditor(el, content, {
       lineNumbers,
       wordWrap,
+      livePreview,
+      ...(linkCompleter ? { linkCompleter } : {}),
       onChange: (c) => {
         renderedRef.current = c;
         cbRef.current.onEdit(docKey, c);
@@ -202,6 +248,28 @@ export function PaneView({
     };
     window.addEventListener("takenotes:insert-link", onInsertLink);
     return () => window.removeEventListener("takenotes:insert-link", onInsertLink);
+  }, []);
+
+  // Template insert (productivity step 1): rendered text lands at the
+  // cursor via a CodeMirror transaction, so undo stays a single step.
+  useEffect(() => {
+    const onInsertText = (e: Event): void => {
+      const view = viewRef.current;
+      if (!view || (!view.hasFocus && document.activeElement?.closest(".pane.active") === null)) return;
+      const text = (e as CustomEvent<string>).detail;
+      if (!text || typeof text !== "string") return;
+      const head = view.state.selection.main.head;
+      view.dispatch({ changes: { from: head, to: head, insert: text }, scrollIntoView: true });
+      view.focus();
+    };
+    // Attachment inserts (Step 4) land exactly like template text: at
+    // the cursor, one undo step, active pane only.
+    window.addEventListener("takenotes:insert-template-text", onInsertText);
+    window.addEventListener("takenotes:insert-attachment-text", onInsertText);
+    return () => {
+      window.removeEventListener("takenotes:insert-template-text", onInsertText);
+      window.removeEventListener("takenotes:insert-attachment-text", onInsertText);
+    };
   }, []);
 
   // Floating format bubble (Notion-style): select text → bold/italic/list
@@ -331,7 +399,7 @@ export function PaneView({
   return (
     <div className="editor-scroll">
       <div className={`editor-col${fullWidth ? " full-width" : ""}`}>
-        <div className="note-title-row">
+        {inlineTitle && <div className="note-title-row">
           <input
             className="note-title-input"
             aria-label="Note title"
@@ -347,7 +415,7 @@ export function PaneView({
               }
             }}
           />
-        </div>
+        </div>}
         <div ref={ref} aria-label={`Editing ${displayPath(relativePath)}`} />
       </div>
       {bubble && (

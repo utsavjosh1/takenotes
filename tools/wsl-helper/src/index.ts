@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { PROTOCOL_VERSION } from "@takenotes/contracts/protocol-version";
+import { HELPER_OPERATIONS } from "@takenotes/contracts/protocol";
 import { filterCandidateUsers, parsePasswd } from "./users.js";
 
 const MAX_FRAME = 16 * 1024 * 1024;
@@ -134,6 +135,12 @@ function classify(name: string): string {
 
 async function handle(operation: string, payload: unknown, sessionId: string): Promise<unknown> {
   const p = (payload ?? {}) as Record<string, unknown>;
+  // Operation allowlist (7e): planned ops (`file.trash`, `watch.subscribe`,
+  // …) and typos fail closed here, before any session or payload handling —
+  // even if a future branch is added without updating the list, the list wins.
+  if (!(HELPER_OPERATIONS as readonly string[]).includes(operation)) {
+    throw err("INVALID_REQUEST", `Unknown or disabled operation: ${operation}.`);
+  }
   if (operation === "hello") {
     const nonce = p["nonce"];
     return {

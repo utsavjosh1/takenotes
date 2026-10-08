@@ -93,7 +93,7 @@ export function commandForKeyEventWithOverrides(
   if (!raw) return null;
   const normalized = normalizeAccelerator(raw);
   for (const [id, accs] of Object.entries(overrides) as [CommandId, string[]][]) {
-    // Skip native-role commands (quit/zoom/fullscreen use OS roles, §57).
+    // Skip native-role commands (quit/fullscreen use OS roles, §57).
     if (COMMANDS.find((c) => c.id === id)?.nativeRole) continue;
     for (const acc of accs) {
       if (normalizeAccelerator(acc) === normalized) return id;

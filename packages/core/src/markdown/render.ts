@@ -1,3 +1,5 @@
+import { parseEmbedFragment, parseEmbedSize } from "../links/embed-params";
+
 export type RenderedMarkdown = {
   html: string;
   /** Footnote ids encountered in body order (explicit [^id] + synthetic inline-N for ^[text]). */
@@ -45,6 +47,7 @@ function newFootnoteCtx(linkDefs = new Map<string, { href: string; title: string
 const AUDIO_EXT = /\.(mp3|wav|ogg|oga|m4a|flac|aac|opus)$/i;
 const VIDEO_EXT = /\.(mp4|webm|mov|mkv|ogv|m4v)$/i;
 const PDF_EXT = /\.pdf$/i;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 
 /** Attachment kind by file extension (query/fragment ignored). Step 1
  * reading view renders local audio/video/PDF beyond plain `<img>`. */
@@ -162,7 +165,8 @@ function renderInline(input: string, ctx: FootnoteCtx): string {
   s = s.replace(/(!?)\[\[([^\]\n]+)\]\]/g, (_m, embed: string, inner: string) => {
     const parts = inner.split("|");
     const target = parts[0]!.trim();
-    const label = (parts[1] ?? target).trim();
+    const aliasRaw = parts[1]?.trim() || undefined;
+    const label = (aliasRaw ?? target).trim();
     if (embed) {
       // Attachment embeds render inline media; note embeds stay anchors
       // the app resolves via data-wikilink.
@@ -170,7 +174,30 @@ function renderInline(input: string, ctx: FootnoteCtx): string {
       const data = `class="md-embed-link" data-wikilink="${escapeAttr(target)}"`;
       if (kind === "audio") return `<audio controls src="${escapeAttr(target)}" ${data}>${escapeHtml(label)}</audio>`;
       if (kind === "video") return `<video controls preload="metadata" src="${escapeAttr(target)}" ${data}>${escapeHtml(label)}</video>`;
-      if (kind === "pdf") return `<embed src="${escapeAttr(target)}" type="application/pdf" ${data}>`;
+      if (kind === "pdf") {
+        // `#page=N` already rides along in src for the viewer; `#height=`
+        // becomes the element height. Other fragments keep legacy output.
+        // `decodeEntities`: inline text arrives entity-escaped, so `&` in
+        // combined params decodes before the single attribute escape.
+        const raw = decodeEntities(target);
+        const frag = raw.split("#").slice(1).join("#");
+        const height = parseEmbedFragment(frag || undefined)?.height;
+        const heightAttr = height === undefined ? "" : ` height="${height}"`;
+        const pdfData = `class="md-embed-link" data-wikilink="${escapeAttr(raw)}"`;
+        return `<embed src="${escapeAttr(raw)}" type="application/pdf"${heightAttr} ${pdfData}>`;
+      }
+      // Sized image embeds (`![[pic.png|100x145]]`) render `<img>` with
+      // width/height; unsized image embeds keep the legacy anchor below.
+      // (Audio/video ignore dims; note embeds keep numeric aliases.)
+      const size = parseEmbedSize(aliasRaw);
+      if (size && IMAGE_EXT.test(target.split(/[?#]/)[0] ?? "")) {
+        const raw = decodeEntities(target);
+        const dims =
+          (size.width === undefined ? "" : ` width="${size.width}"`) +
+          (size.height === undefined ? "" : ` height="${size.height}"`);
+        const imgData = `class="md-embed-link" data-wikilink="${escapeAttr(raw)}"`;
+        return `<img src="${escapeAttr(raw)}" alt="${escapeAttr(raw)}"${dims} loading="lazy" ${imgData}>`;
+      }
     }
     const cls = embed ? "md-embed-link" : "md-wikilink";
     return `<a href="#" class="${cls}" data-wikilink="${escapeAttr(target)}">${escapeHtml(label)}</a>`;

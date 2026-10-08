@@ -25,6 +25,21 @@ describe("settings parsing (localStorage input is untrusted)", () => {
     expect(parseSettings({ wslEnabled: "yes", theme: "dark" })).toEqual({ theme: "dark" });
   });
 
+  it("accepts link style + auto-update and drops corrupt values", () => {
+    expect(parseSettings({ linkFormat: "relative", autoUpdateLinks: false, useWikilinks: false })).toEqual({
+      linkFormat: "relative",
+      autoUpdateLinks: false,
+      useWikilinks: false,
+    });
+    expect(
+      parseSettings({ attachmentLocation: "folder", attachmentFolder: "media", attachmentUnsupported: "skip" }),
+    ).toEqual({ attachmentLocation: "folder", attachmentFolder: "media", attachmentUnsupported: "skip" });
+    expect(parseSettings({ attachmentLocation: "vault", attachmentFolder: "", attachmentUnsupported: "x" })).toEqual({});
+    expect(parseSettings({ linkFormat: "wiki", autoUpdateLinks: "yes", theme: "dark" })).toEqual({
+      theme: "dark",
+    });
+  });
+
   it("yields {} for garbage input", () => {
     expect(parseSettings(null)).toEqual({});
     expect(parseSettings("dark")).toEqual({});

@@ -14,9 +14,13 @@ import { describe, expect, it } from "vitest";
 import type { WorkspaceInfo } from "@takenotes/contracts/ipc";
 import {
   closeWorkspaceFlow,
+  followUnresolvedLinkFlow,
+  linkMentionFlow,
   openWorkspaceFlow,
   refreshWorkspaceFlow,
   resolveWikilinkTarget,
+  type FollowLinkDeps,
+  type LinkMentionDeps,
   type WorkspaceFlowDeps,
 } from "@takenotes/desktop/renderer/workspace-flows";
 
@@ -209,5 +213,172 @@ describe("resolveWikilinkTarget (Step 1 reading-view follow-links)", () => {
     expect(resolveWikilinkTarget("image", FILES)).toBeNull();
     expect(resolveWikilinkTarget("", FILES)).toBeNull();
     expect(resolveWikilinkTarget("Ref", [])).toBeNull();
+  });
+});
+
+describe("followUnresolvedLinkFlow (Step 4 follow-to-create)", () => {
+  type World = {
+    deps: FollowLinkDeps;
+    calls: string[];
+    files: string[];
+    failCreate: Set<string>;
+    failWrite: Set<string>;
+  };
+
+  function makeWorld(files: string[]): World {
+    const world = {} as World;
+    world.calls = [];
+    world.files = [...files];
+    world.failCreate = new Set();
+    world.failWrite = new Set();
+    const rev = (hash: string) => ({ hash, size: 0, mtimeMs: 1 });
+    world.deps = {
+      listFiles: () => [...world.files],
+      createFile: async (rel: string) => {
+        world.calls.push(`create:${rel}`);
+        if (world.failCreate.has(rel)) return { ok: false, error: { code: "PERMISSION_DENIED", message: "denied" } };
+        if (world.files.includes(rel)) return { ok: false, error: { code: "ALREADY_EXISTS", message: "exists" } };
+        world.files.push(rel);
+        return { ok: true, result: rev("h-create") };
+      },
+      writeFile: async (rel: string, content: string, expectedHash: string) => {
+        world.calls.push(`write:${rel}:${content.length}:${expectedHash}`);
+        if (world.failWrite.has(rel)) return { ok: false, error: { code: "CONFLICT", message: "changed" } };
+        return { ok: true, result: rev("h-write") };
+      },
+      upsertIndex: (rel: string) => void world.calls.push(`upsert:${rel}`),
+      openFile: async (rel: string) => void world.calls.push(`open:${rel}`),
+      reveal: (rel: string) => void world.calls.push(`reveal:${rel}`),
+      refresh: async () => void world.calls.push("refresh"),
+    };
+    return world;
+  }
+
+  it("creates beside the source note, then opens + reveals after refresh", async () => {
+    const world = makeWorld(["projects/Other.md"]);
+    const res = await followUnresolvedLinkFlow(world.deps, "Note", "projects/Other.md");
+    expect(res).toEqual({ status: "created", rel: "projects/Note.md" });
+    expect(world.calls).toEqual([
+      "create:projects/Note.md",
+      "write:projects/Note.md:0:h-create",
+      "upsert:projects/Note.md",
+      "refresh",
+      "open:projects/Note.md",
+      "reveal:projects/Note.md",
+    ]);
+  });
+
+  it("opens instead of duplicating when the note appeared since (race)", async () => {
+    const world = makeWorld(["Note.md"]);
+    const res = await followUnresolvedLinkFlow(world.deps, "Note", "hub.md");
+    expect(res).toEqual({ status: "opened-existing", rel: "Note.md" });
+    expect(world.calls).toEqual(["open:Note.md", "reveal:Note.md"]);
+  });
+
+  it("re-resolves on ALREADY_EXISTS instead of failing", async () => {
+    const world = makeWorld(["hub.md"]);
+    // A concurrent creator lands between our listing and our create.
+    let n = 0;
+    const base = world.deps.listFiles;
+    world.deps.listFiles = () => (++n === 1 ? base() : [...base(), "Race.md"]);
+    world.deps.createFile = async (rel: string) => {
+      world.calls.push(`create:${rel}`);
+      return { ok: false, error: { code: "ALREADY_EXISTS", message: "exists" } };
+    };
+    const res = await followUnresolvedLinkFlow(world.deps, "Race", "hub.md");
+    expect(res).toEqual({ status: "opened-existing", rel: "Race.md" });
+    expect(world.calls).toEqual(["create:Race.md", "open:Race.md", "reveal:Race.md"]);
+  });
+
+  it("reports invalid targets without touching the filesystem", async () => {
+    const world = makeWorld(["hub.md"]);
+    expect(await followUnresolvedLinkFlow(world.deps, "../Escape", "a/b.md")).toEqual({ status: "invalid" });
+    expect(await followUnresolvedLinkFlow(world.deps, "pic.png", "hub.md")).toEqual({ status: "invalid" });
+    expect(world.calls).toEqual([]);
+  });
+
+  it("reports failed when create or write is rejected", async () => {
+    const denied = makeWorld(["hub.md"]);
+    denied.failCreate.add("Nope.md");
+    expect(await followUnresolvedLinkFlow(denied.deps, "Nope", "hub.md")).toEqual({ status: "failed", rel: "Nope.md" });
+    expect(denied.calls).toEqual(["create:Nope.md"]);
+
+    const conflict = makeWorld(["hub.md"]);
+    conflict.failWrite.add("Note.md");
+    expect(await followUnresolvedLinkFlow(conflict.deps, "Note", "hub.md")).toEqual({ status: "failed", rel: "Note.md" });
+    expect(conflict.calls).toEqual(["create:Note.md", "write:Note.md:0:h-create"]);
+  });
+});
+
+describe("linkMentionFlow (Step 4 alias action)", () => {
+  type World = {
+    deps: LinkMentionDeps;
+    calls: string[];
+    files: Map<string, { content: string; hash: string }>;
+    conflictOn: Set<string>;
+  };
+
+  function makeWorld(): World {
+    const world = {} as World;
+    world.calls = [];
+    world.files = new Map([["essay.md", { content: "Canon and Cee agree.\n", hash: "h0" }]]);
+    world.conflictOn = new Set();
+    world.deps = {
+      readFile: async (rel: string) => {
+        world.calls.push(`read:${rel}`);
+        const f = world.files.get(rel);
+        if (!f) return { ok: false, error: { code: "NOT_FOUND", message: "missing" } };
+        return { ok: true, result: { content: f.content, revision: { hash: f.hash, size: 1, mtimeMs: 1 }, newlineStyle: "lf", hadBom: false } };
+      },
+      writeFile: async ({ rel, content, expectedHash }) => {
+        world.calls.push(`write:${rel}:${expectedHash}`);
+        const f = world.files.get(rel);
+        if (!f) return { ok: false, error: { code: "NOT_FOUND", message: "missing" } };
+        if (world.conflictOn.has(rel)) return { ok: false, error: { code: "CONFLICT", message: "changed" } };
+        if (f.hash !== expectedHash) return { ok: false, error: { code: "CONFLICT", message: "changed" } };
+        world.files.set(rel, { content, hash: "h1" });
+        return { ok: true, result: { hash: "h1", size: 1, mtimeMs: 2 } };
+      },
+      upsertIndex: (rel: string) => void world.calls.push(`upsert:${rel}`),
+      reconcile: async (rel: string) => void world.calls.push(`reconcile:${rel}`),
+      refresh: async () => void world.calls.push("refresh"),
+      linkFormat: () => "shortest",
+      useWikilinks: () => true,
+    };
+    return world;
+  }
+
+  it("converts the mention with a guarded write, then converges", async () => {
+    const world = makeWorld();
+    const res = await linkMentionFlow(world.deps, "essay.md", "Cee", "Canon.md");
+    expect(res).toEqual({ status: "linked", rel: "essay.md", line: 1 });
+    expect(world.files.get("essay.md")?.content).toBe("Canon and [[Canon|Cee]] agree.\n");
+    expect(world.calls).toEqual(["read:essay.md", "write:essay.md:h0", "upsert:essay.md", "reconcile:essay.md", "refresh"]);
+  });
+
+  it("reports not-found when the mention vanished", async () => {
+    const world = makeWorld();
+    const res = await linkMentionFlow(world.deps, "essay.md", "Ghost", "Ghost.md");
+    expect(res).toEqual({ status: "not-found", rel: "essay.md" });
+    expect(world.calls).toEqual(["read:essay.md"]);
+  });
+
+  it("reports conflict on concurrent edits and failed on missing files", async () => {
+    const world = makeWorld();
+    world.conflictOn.add("essay.md");
+    expect(await linkMentionFlow(world.deps, "essay.md", "Cee", "Canon.md")).toEqual({ status: "conflict", rel: "essay.md" });
+    expect(await linkMentionFlow(world.deps, "gone.md", "Cee", "Canon.md")).toEqual({ status: "failed", rel: "gone.md" });
+  });
+});
+
+describe("arrayBufferToBase64", () => {
+  it("round-trips bytes incl. empty and high-bit content", async () => {
+    const { arrayBufferToBase64 } = await import("@takenotes/desktop/renderer/workspace-flows");
+    const bytes = new Uint8Array([0x89, 0x50, 0x00, 0xff, 0x7f]);
+    const b64 = arrayBufferToBase64(bytes.buffer as ArrayBuffer);
+    expect(Buffer.from(b64, "base64")).toEqual(Buffer.from(bytes));
+    expect(arrayBufferToBase64(new ArrayBuffer(0))).toBe("");
+    // Known vector.
+    expect(arrayBufferToBase64(new TextEncoder().encode("hello").buffer as ArrayBuffer)).toBe("aGVsbG8=");
   });
 });

@@ -27,6 +27,7 @@ export type FileTreeApi = {
   toggleDir: (dir: string) => Promise<void>;
   beginCreate: (dir: string, folder: boolean) => void;
   createUntitledNote: (dir?: string) => Promise<void>;
+  createUntitledCanvas: (dir?: string) => Promise<void>;
   cancelCreate: () => void;
   commitCreate: () => Promise<void>;
   commitRename: (entry: DirectoryEntry, newName: string) => Promise<void>;
@@ -63,6 +64,7 @@ export function useFileTree(
   const { toast, errToast } = notify;
   const bumpIndex = useIndexMeta((s) => s.bump);
   const confirmTrash = useSettingsStore((s) => s.settings.confirmTrash);
+  const autoUpdateLinks = useSettingsStore((s) => s.settings.autoUpdateLinks);
   const platform = usePlatform();
 
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
@@ -224,10 +226,16 @@ export function useFileTree(
     const newRel = joinRel(dir, newName);
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }, "Couldn't rename"); setTree((p) => ({ ...p, renaming: null })); return; }
+    // Auto-update off means rename-only: confirm first, then skip the
+    // link rewrite server-side. Links pointing here go stale visibly.
+    if (!autoUpdateLinks && !window.confirm(`Rename "${entry.name}" without updating links that point to it?`)) {
+      setTree((p) => ({ ...p, renaming: null }));
+      return;
+    }
     // Folders rename through directory.rename; files through file.rename.
     const res = entry.kind === "directory"
-      ? await bridge.directory.rename(ws.workspaceId, entry.relativePath, newRel)
-      : await bridge.file.rename(ws.workspaceId, entry.relativePath, newRel);
+      ? await bridge.directory.rename(ws.workspaceId, entry.relativePath, newRel, { autoUpdateLinks })
+      : await bridge.file.rename(ws.workspaceId, entry.relativePath, newRel, { autoUpdateLinks });
     setTree((p) => ({ ...p, renaming: null }));
     if (!res.ok) { errToast(res.error, "Couldn't rename"); return; }
     // Rename remaps open keys in place: baselines survive the rename.
@@ -241,7 +249,7 @@ export function useFileTree(
       if (res2.ok) setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res2.result) }));
     } else await refresh(ws);
     await rebuild(ws);
-  }, [workspace, errToast, refresh, rebuild, docs, bumpIndex]);
+  }, [workspace, errToast, refresh, rebuild, docs, bumpIndex, autoUpdateLinks]);
 
   const deleteDirectory = useCallback(async (entry: DirectoryEntry) => {
     if (!workspace) return;
@@ -354,6 +362,36 @@ export function useFileTree(
     await docs.openFile(target);
   }, [workspace, allFiles, errToast, refresh, rebuild, docs, bumpIndex, preferredNewNoteDir]);
 
+  // Step 7 Canvas: `Untitled.canvas` siblings next to notes. The file is
+  // created empty, opened as a doc tab, then seeded with `{nodes:[],
+  // edges:[]}` through the normal edit path — so dirty/autosave/CONFLICT
+  // all apply and the index stays canvas-free via `syncFileIndex`.
+  const createUntitledCanvas = useCallback(async (dir = preferredNewNoteDir()) => {
+    if (!workspace) return;
+    const ws = workspace;
+    const bridge = getBridge();
+    if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }); return; }
+    const known = new Set<string>();
+    for (const e of entries) known.add(e.relativePath.toLowerCase());
+    for (const kids of tree.children.values()) for (const e of kids) known.add(e.relativePath.toLowerCase());
+    for (const f of allFiles) known.add(f.relativePath.toLowerCase());
+    let target = joinRel(dir, "Untitled.canvas");
+    for (let i = 1; known.has(target.toLowerCase()); i += 1) target = joinRel(dir, `Untitled ${i}.canvas`);
+    let res = await bridge.file.create(ws.workspaceId, target);
+    for (let i = 1; !res.ok && res.error.code === "ALREADY_EXISTS" && i < 100; i += 1) {
+      target = joinRel(dir, `Untitled ${i}.canvas`);
+      res = await bridge.file.create(ws.workspaceId, target);
+    }
+    if (!res.ok) { errToast(res.error, `Couldn't create "${target}"`); return; }
+    if (dir) {
+      const res2 = await bridge.directory.list(ws.workspaceId, dir);
+      if (res2.ok) setTree((p) => ({ ...p, expanded: new Set(p.expanded).add(dir), children: new Map(p.children).set(dir, res2.result) }));
+    } else await refresh(ws);
+    await docs.openFile(target);
+    const { serializeCanvasDoc, emptyCanvas } = await import("@takenotes/core/canvas/model");
+    docs.onEdit(`${ws.workspaceId}:${target}`, serializeCanvasDoc(emptyCanvas()));
+  }, [workspace, entries, tree.children, allFiles, errToast, refresh, docs, preferredNewNoteDir]);
+
   const visibleRows = useMemo(() => {
     const rows: DirectoryEntry[] = [];
     const walk = (list: DirectoryEntry[]): void => {
@@ -369,7 +407,10 @@ export function useFileTree(
   }, [entries, tree.expanded, tree.children, sort]);
 
   const onTreeKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (tree.renaming || (e.target as HTMLElement).tagName === "INPUT") return;
+    // Step 9: arrows belong to the tree rows only — sort selects, search
+    // fields, and rename inputs keep their native keys.
+    const tag = (e.target as HTMLElement).tagName;
+    if (tree.renaming || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     const i = visibleRows.findIndex((r) => r.relativePath === tree.selected);
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
@@ -377,7 +418,12 @@ export function useFileTree(
       const row = visibleRows[n < 0 ? 0 : n];
       if (row) {
         setTree((p) => ({ ...p, selected: row.relativePath }));
-        document.querySelector(`[data-rel="${CSS.escape(row.relativePath)}"]`)?.scrollIntoView({ block: "nearest" });
+        // Selection and DOM focus travel together (roving tabindex): the
+        // row is focusable via tabIndex -1 even before it becomes the
+        // Tab stop, so arrows never leave focus stranded behind.
+        const target = document.querySelector<HTMLElement>(`[data-rel="${CSS.escape(row.relativePath)}"]`);
+        target?.scrollIntoView({ block: "nearest" });
+        target?.focus({ preventScroll: true });
       }
     } else if (e.key === "ArrowRight" && i >= 0) {
       const row = visibleRows[i]!;
@@ -387,7 +433,10 @@ export function useFileTree(
       if (row.kind === "directory" && tree.expanded.has(row.relativePath)) void toggleDir(row.relativePath);
       else {
         const parent = parentDir(row.relativePath);
-        if (parent) setTree((p) => ({ ...p, selected: parent }));
+        if (parent) {
+          setTree((p) => ({ ...p, selected: parent }));
+          document.querySelector<HTMLElement>(`[data-rel="${CSS.escape(parent)}"]`)?.focus({ preventScroll: true });
+        }
       }
     } else if (e.key === "Enter" && i >= 0) {
       const row = visibleRows[i]!;
@@ -473,7 +522,7 @@ export function useFileTree(
 
   return {
     entries: sortedEntries, allFiles, tree: sortedTree, sidebarLoading, creating, createName, setCreateName,
-    refresh, rebuild, toggleDir, beginCreate, createUntitledNote, cancelCreate, commitCreate, commitRename,
+    refresh, rebuild, toggleDir, beginCreate, createUntitledNote, createUntitledCanvas, cancelCreate, commitCreate, commitRename,
     removeEntry, resetTree, select, beginRename, cancelRename, visibleRows, onTreeKeyDown,
     preferredNewNoteDir, selectedEntry, sort, setSort, reveal, expandAll, collapseAll,
   };

@@ -41,6 +41,10 @@ extraResources:
       - "**/*"
       - "!generated/**"
       - "!**/*.tar.xz"
+  # MCP stdio sidecar (Step 8, ADR-0012): agents run
+  # `node <resources>/mcp/takenotes-mcp.cjs` with a system node.
+  - from: dist-mcp/takenotes-mcp.cjs
+    to: mcp/takenotes-mcp.cjs
 win:
   icon: build/icon.ico
   target:

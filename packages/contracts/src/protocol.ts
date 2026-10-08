@@ -32,7 +32,13 @@ export type HandshakeResult = {
  * mutation set). Planned (not yet implemented, must NOT be sent):
  * file.trash (WSL delete is permanent-delete in P1 — see `file.delete`),
  * file.restore, search.start, search.cancel, watch.subscribe,
- * watch.unsubscribe. */
+ * watch.unsubscribe.
+ *
+ * Enforcement (7e, both ends): the helper rejects anything outside this
+ * list at the top of `handle()`; main's `HelperSupervisor.request`
+ * rejects before touching the transport. Either side alone would suffice
+ * against accidents — both together also stop a compromised peer from
+ * smuggling planned ops across the wire. */
 export const HELPER_OPERATIONS = [
   "hello",
   "workspace.open",
@@ -50,6 +56,13 @@ export const HELPER_OPERATIONS = [
 ] as const;
 
 export type HelperOperation = (typeof HELPER_OPERATIONS)[number];
+
+/** Wire guard: true only for operations the helper implements. Planned
+ * ops (`file.trash`, `watch.subscribe`, …) and typos fail closed here —
+ * never reach a spawn, a frame, or a session. */
+export function isHelperOperation(input: unknown): input is HelperOperation {
+  return typeof input === "string" && (HELPER_OPERATIONS as readonly string[]).includes(input);
+}
 
 /** Encode one frame: 4-byte big-endian length + UTF-8 JSON. */
 export function encodeFrame(payload: unknown): Buffer {

@@ -3,11 +3,11 @@ import tseslint from "typescript-eslint";
 import globals from "globals";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "dist-electron/**", "dist-helper/**", "dist-server/**", "release/**", "coverage/**", "node_modules/**", "reference/**", "resources/wsl/linux-x64/**"] },
+  { ignores: ["dist/**", "dist-electron/**", "dist-helper/**", "dist-server/**", "dist-mcp/**", "release/**", "coverage/**", "node_modules/**", "reference/**", "resources/wsl/linux-x64/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["apps/desktop/src/main/**/*.ts", "apps/desktop/src/preload/**/*.ts", "apps/server/**/*.ts", "tools/wsl-helper/**/*.ts", "tools/scripts/**/*.mjs", "tests/**/*.ts"],
+    files: ["apps/desktop/src/main/**/*.ts", "apps/desktop/src/preload/**/*.ts", "apps/server/**/*.ts", "tools/wsl-helper/**/*.ts", "tools/mcp-sidecar/**/*.ts", "tools/scripts/**/*.mjs", "tests/**/*.ts"],
     languageOptions: {
       globals: { ...globals.node },
     },
@@ -37,6 +37,26 @@ export default tseslint.config(
             { name: "node:http", message: "No network in shipped main/helper code." },
             { name: "node:https", message: "No network in shipped main/helper code." },
             { name: "node:net", message: "No network in shipped main/helper code." },
+            { name: "node:tls", message: "No network in shipped main/helper code." },
+            { name: "node:dgram", message: "No network in shipped main/helper code." },
+          ],
+        },
+      ],
+    },
+  },
+  // MCP pipe transport (ADR-0012) is the one deliberate exception: the
+  // sidecar reaches the running app over a private named pipe / unix
+  // socket. `node:net` here is IPC only — `mcpSocketPath()` never yields
+  // a TCP host/port, and `node:http(s)/tls/dgram` stay banned.
+  {
+    files: ["apps/desktop/src/main/services/mcp-pipe.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            { name: "node:http", message: "No network in shipped main/helper code." },
+            { name: "node:https", message: "No network in shipped main/helper code." },
             { name: "node:tls", message: "No network in shipped main/helper code." },
             { name: "node:dgram", message: "No network in shipped main/helper code." },
           ],

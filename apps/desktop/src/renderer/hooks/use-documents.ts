@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RecoverySnapshotMeta, WorkspaceInfo } from "@takenotes/contracts/ipc";
-import { workspaceIndex } from "../index/workspace-index";
+import { syncFileIndex, workspaceIndex } from "../index/workspace-index";
 import { fileName, joinRel, parentDir } from "../components/types";
 import {
   activateDoc,
@@ -23,6 +23,7 @@ import {
   type PaneLayout,
 } from "../panes";
 import { useIndexMeta } from "../stores/index-meta";
+import { useSettingsStore } from "../stores/settings";
 import { getBridge } from "../bridge";
 import type { Notify } from "./use-notify";
 import type { RecentsApi } from "./use-recents";
@@ -259,7 +260,7 @@ export function useDocuments(
     });
     // File changed → replace exactly this index entry (content + the
     // authoritative post-write revision: zero extra reads).
-    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res.result);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, target.relativePath, target.content, res.result);
     bumpIndex();
     // The file now holds the truth: the recovery draft is obsolete.
     setRecovery((p) => {
@@ -314,7 +315,7 @@ export function useDocuments(
       });
       errToast(res.error, "Couldn't reload from disk"); return; }
     setLayout((l) => resolveDoc(l, target.key, res.result.content, res.result.revision.hash));
-    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, res.result.content, res.result.revision);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, target.relativePath, res.result.content, res.result.revision);
     bumpIndex();
   }, [workspace, layout, errToast, bumpIndex]);
 
@@ -330,7 +331,7 @@ export function useDocuments(
       bumpIndex();
       return;
     }
-    workspaceIndex.upsert(workspace.workspaceId, relativePath, res.result.content, res.result.revision);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, relativePath, res.result.content, res.result.revision);
     bumpIndex();
     if (!target) return;
     if (target.dirty) {
@@ -361,7 +362,7 @@ export function useDocuments(
       return cur && cur.content !== target.content ? updateDocContent(saved, target.key, cur.content) : saved;
     });
     // Conflict resolved by overwrite: the file changed → re-parse it.
-    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res2.result);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, target.relativePath, target.content, res2.result);
     bumpIndex();
   }, [workspace, layout, errToast, bumpIndex]);
 
@@ -386,7 +387,9 @@ export function useDocuments(
     if (newRel === target.relativePath) return true;
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }, "Couldn't rename note"); return false; }
-    const res = await bridge.file.rename(workspace.workspaceId, target.relativePath, newRel);
+    const autoUpdateLinks = useSettingsStore.getState().settings.autoUpdateLinks;
+    if (!autoUpdateLinks && !window.confirm(`Rename "${fileName(target.relativePath)}" without updating links that point to it?`)) return false;
+    const res = await bridge.file.rename(workspace.workspaceId, target.relativePath, newRel, { autoUpdateLinks });
     if (!res.ok) { errToast(res.error, "Couldn't rename note"); return false; }
     setLayout((l) => applyRename(l, workspace.workspaceId, target.relativePath, newRel));
     workspaceIndex.move(workspace.workspaceId, target.relativePath, newRel);
@@ -552,7 +555,7 @@ export function useDocuments(
       return;
     }
     setLayout((l) => resolveDoc(l, doc.key, res.result.content, res.result.revision.hash));
-    workspaceIndex.upsert(workspace.workspaceId, doc.relativePath, res.result.content, res.result.revision);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, doc.relativePath, res.result.content, res.result.revision);
     bumpIndex();
     safeDraftClear(workspace.workspaceId, doc.relativePath);
     setRecovery((p) => {

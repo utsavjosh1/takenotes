@@ -4,6 +4,37 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Renderer production build (`npm run build`) broken since the appearance
+  work landed: `@takenotes/core/appearance/appearance` and
+  `@takenotes/core/search/summary` were imported but missing from the
+  package `exports` map (unit tests resolve via tsconfig paths, so the
+  suite stayed green while the build failed). Both exports added.
+
+### Added
+
+- Appearance controls (Step 9): accent family (violet/blue/graphite), editor font
+  (system/serif/mono, offline-safe), persisted whole-app zoom with View-menu and
+  keyboard quick-adjust, inline note title toggle, window/tab title naming, native
+  window-frame option (restart to apply), and an 800×520 window floor.
+- Accessibility baseline: settings tablist keyboard nav, roving tab strip with
+  Delete-to-close, arrow-navigable context menus with focus return, keyboard-
+  reachable file tree, skip-to-editor link, combobox-pattern palette, single-
+  announcement search status, and live-region scoping so counters never announce.
+- Measured contrast verification (203-case matrix over the shipped palette),
+  12px DOM typography floor, reduced-motion collapse audit, and visible editor
+  find-match colors in both themes. No WCAG-cert claim.
+- WSL staging pipeline executed (fetch with official SHA verify + stage with
+  manifest) and Linux app smoke passes; WSL live Windows gate still pending.
+- WSL Connection record (post-MVP, in progress): explicit `{distro,
+  linuxUser, status}` store with one-connection-many-workspaces attach/detach
+  and `connectionId` on WSL workspaces, friendly connect-error hints
+  (roadmap path-error names as UI synonyms over canonical wire codes),
+  helper operation allowlisting on both ends of the wire, and fail-closed
+  staged-runtime verification before spawn.
+  Logic-tested; live Windows gate pending.
+
 ## [0.0.9] - 2026-09-22
 
 ### Added

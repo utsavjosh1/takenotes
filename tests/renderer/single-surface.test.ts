@@ -6,6 +6,7 @@ import { EditorState } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import {
   collectWysiwygRanges,
+  mediaDimsOnLine,
   mediaSrcOnLine,
   toggleTaskMarkInText,
 } from "../../apps/desktop/src/renderer/editor/wysiwyg";
@@ -189,6 +190,18 @@ describe("single-surface wysiwyg rich constructs", () => {
     expect(mediaSrcOnLine("![](clip.mp3)")).toBe("clip.mp3");
     expect(mediaSrcOnLine("![[movie.mp4]]")).toBe("movie.mp4");
     expect(mediaSrcOnLine("plain text")).toBeNull();
+  });
+
+  it("mediaDimsOnLine reads |WxH and #height= params, else null", () => {
+    expect(mediaDimsOnLine("![[pic.png|100]]")).toEqual({ width: 100 });
+    expect(mediaDimsOnLine("![[a/pic.png|100x145]]")).toEqual({ width: 100, height: 145 });
+    expect(mediaDimsOnLine("![[doc.pdf#height=400]]")).toEqual({ height: 400 });
+    // Mixed syntax degrades: the alias slot is not a clean size, the fragment still applies.
+    expect(mediaDimsOnLine("![[pic.png|100x145#height=50]]")).toEqual({ height: 50 });
+    expect(mediaDimsOnLine("![[movie.mp4]]")).toBeNull();
+    expect(mediaDimsOnLine("![[Note|Alias]]")).toBeNull();
+    expect(mediaDimsOnLine("![[Note#^blk]]")).toBeNull();
+    expect(mediaDimsOnLine("plain text")).toBeNull();
   });
 
   it("footnote refs become superscripts; definition prefixes hide", () => {

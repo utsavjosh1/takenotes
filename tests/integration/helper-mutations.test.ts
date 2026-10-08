@@ -223,4 +223,20 @@ describe.runIf(process.platform !== "win32")("wsl helper mutation parity (P1-04)
       }),
     ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
   });
+
+  it("rejects planned and unknown operations at the helper gate (7e)", async () => {
+    // `file.trash` must NOT be sent (WSL delete is permanent-delete);
+    // `watch.subscribe`/`search.start` are not implemented. All fail closed
+    // with the op named — and the session still works afterwards.
+    for (const op of ["file.trash", "file.restore", "watch.subscribe", "search.start", "bogus.op"]) {
+      const err = await req(op, {}).then(
+        () => null,
+        (e: { code?: string; message?: string }) => e,
+      );
+      expect(err).toMatchObject({ code: "INVALID_REQUEST" });
+      expect(String(err?.message)).toContain(op);
+    }
+    const entries = (await req("directory.list", { relativePath: "" })) as { name: string }[];
+    expect(entries.map((e) => e.name)).toContain("seed.md");
+  });
 });

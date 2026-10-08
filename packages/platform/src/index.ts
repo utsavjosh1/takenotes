@@ -45,5 +45,6 @@ export {
   titlebarStrategy,
   shouldQuitOnAllWindowsClosed,
   coerceWindowGeometry,
+  MAIN_WINDOW_MIN_SIZE,
 } from "./window.js";
 export type { TitlebarStrategy, WindowGeometry } from "./window.js";

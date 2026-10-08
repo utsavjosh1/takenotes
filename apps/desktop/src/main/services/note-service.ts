@@ -254,14 +254,28 @@ export class NoteService {
     }
   }
 
-  async renamePath(workspaceId: string, oldPath: string, newPath: string): Promise<{ ok: true; linksFailed?: string[] } | { error: AppError }> {
+  /** Raw-byte attachment import (Step 4). Native workspaces write through
+   * the adapter's exclusive no-clobber path; WSL workspaces honestly
+   * refuse — the helper protocol is string-based (maintenance-only until
+   * the note-taking app ships), so binary import waits with the rest of
+   * WSL. The renderer surfaces the message verbatim. */
+  async importBinary(workspaceId: string, relativePath: string, bytes: Buffer): Promise<{ revision: FileRevision } | { error: AppError }> {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
+    if (r.kind === "native") return this.deps.native.importBinary(r.root, r.type, relativePath, bytes);
+    return { error: appError("INVALID_REQUEST", "Attachment import is not available for WSL workspaces yet.") };
+  }
+
+  async renamePath(workspaceId: string, oldPath: string, newPath: string, options?: { autoUpdateLinks?: boolean }): Promise<{ ok: true; linksFailed?: string[] } | { error: AppError }> {
+    const r = this.resolve(workspaceId);
+    if ("error" in r) return r;
+    const autoUpdateLinks = options?.autoUpdateLinks !== false;
     if (r.kind === "native") {
       const before = await this.collectNativeMarkdown(r.root, r.type);
       if ("error" in before) return before;
       const renamed = await this.deps.native.rename(r.root, r.type, oldPath, newPath);
       if ("error" in renamed) return renamed;
+      if (!autoUpdateLinks) return { ok: true };
       const out = await this.rewriteNativeLinksAfterMove({ root: r.root, type: r.type, beforePaths: before.paths, oldPath, newPath, kind: "file" });
       if ("error" in out) return out;
       if (out.linksFailed.length > 0) console.warn(`[note-service] rename succeeded but ${out.linksFailed.length} link(s) failed to rewrite: ${out.linksFailed.join(", ")}`);
@@ -329,14 +343,17 @@ export class NoteService {
     workspaceId: string,
     oldPath: string,
     newPath: string,
+    options?: { autoUpdateLinks?: boolean },
   ): Promise<{ ok: true; linksFailed?: string[] } | { error: AppError }> {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;
+    const autoUpdateLinks = options?.autoUpdateLinks !== false;
     if (r.kind === "native") {
       const before = await this.collectNativeMarkdown(r.root, r.type);
       if ("error" in before) return before;
       const renamed = await this.deps.native.renameDirectory(r.root, r.type, oldPath, newPath);
       if ("error" in renamed) return renamed;
+      if (!autoUpdateLinks) return { ok: true };
       const out = await this.rewriteNativeLinksAfterMove({ root: r.root, type: r.type, beforePaths: before.paths, oldPath, newPath, kind: "directory" });
       if ("error" in out) return out;
       if (out.linksFailed.length > 0) console.warn(`[note-service] directory rename succeeded but ${out.linksFailed.length} link(s) failed to rewrite: ${out.linksFailed.join(", ")}`);

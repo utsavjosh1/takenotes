@@ -7,7 +7,8 @@ import { filterCandidateUsers, parsePasswd } from "@takenotes/wsl-helper/users";
  * a real installed distro yields interactive users from its own
  * `/etc/passwd`. This exercises the source data end to end; the helper
  * `users.list` round-trip itself is covered by direct-spawn tests on Linux.
- * Record results in docs/mvp-status.md — do NOT claim verification from Linux. */
+ * Record results in docs/archive/status/wsl-status.md — do NOT claim
+ * verification from Linux. */
 describe.runIf(process.platform === "win32" && process.env["TAKENOTES_LIVE_WSL"] === "1")("linux user discovery against a live distro", () => {
   function runWsl(args: string[], timeoutMs = 30000): Promise<{ code: number | null; output: Buffer }> {
     return new Promise((resolve, reject) => {
