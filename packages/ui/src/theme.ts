@@ -28,7 +28,8 @@ export const colors = {
     selection: "#e3dcff",
     "code-surface": "#f3ecdd",
     "highlight-surface": "#ffdf8e",
-    scrollbar: "#cbbfa6",
+    // 6e: darkened to hold 3:1 (non-text) on every surface incl. hover.
+    scrollbar: "#8a7d63",
   },
   dark: {
     "surface-app": "#151310",
@@ -56,7 +57,8 @@ export const colors = {
     selection: "#493968",
     "code-surface": "#26211a",
     "highlight-surface": "#59451b",
-    scrollbar: "#5a5042",
+    // 6e: lightened to hold 3:1 (non-text) on every surface incl. hover.
+    scrollbar: "#857861",
   },
 } as const;
 

@@ -11,6 +11,7 @@ import {
   renameDirectory,
   renamePath,
   resolveInsideRoot,
+  writeBinaryFile,
 } from "./local-workspace.js";
 import type { ReadResult } from "./local-workspace.js";
 import { LocalHostFilesystem } from "./local-host-filesystem.js";
@@ -38,6 +39,8 @@ export interface FileAdapter {
     hadBom: boolean,
   ): Promise<{ revision: FileRevision } | { error: AppError }>;
   createFile(root: string, kind: WorkspaceKind, relativePath: string, content?: string): Promise<{ revision: FileRevision } | { error: AppError }>;
+  /** Raw-byte import (attachments): exclusive write, no encoding. */
+  importBinary(root: string, kind: WorkspaceKind, relativePath: string, bytes: Buffer): Promise<{ revision: FileRevision } | { error: AppError }>;
   rename(root: string, kind: WorkspaceKind, oldPath: string, newPath: string): Promise<{ ok: true } | { error: AppError }>;
   createDirectory(root: string, kind: WorkspaceKind, relativePath: string): Promise<{ ok: true } | { error: AppError }>;
   deleteDirectory(
@@ -87,6 +90,10 @@ export class NativeFileAdapter implements FileAdapter {
 
   createFile(root: string, kind: WorkspaceKind, relativePath: string, content = ""): Promise<{ revision: FileRevision } | { error: AppError }> {
     return createTextFile(root, kind, relativePath, content);
+  }
+
+  importBinary(root: string, kind: WorkspaceKind, relativePath: string, bytes: Buffer): Promise<{ revision: FileRevision } | { error: AppError }> {
+    return writeBinaryFile(root, kind, relativePath, bytes);
   }
 
   rename(root: string, kind: WorkspaceKind, oldPath: string, newPath: string): Promise<{ ok: true } | { error: AppError }> {

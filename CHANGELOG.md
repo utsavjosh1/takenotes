@@ -4,6 +4,20 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+### Added
+
+- Appearance controls (Step 9): accent family (violet/blue/graphite), editor font
+  (system/serif/mono, offline-safe), persisted whole-app zoom with View-menu and
+  keyboard quick-adjust, inline note title toggle, window/tab title naming, native
+  window-frame option (restart to apply), and an 800×520 window floor.
+- Accessibility baseline: settings tablist keyboard nav, roving tab strip with
+  Delete-to-close, arrow-navigable context menus with focus return, keyboard-
+  reachable file tree, skip-to-editor link, combobox-pattern palette, single-
+  announcement search status, and live-region scoping so counters never announce.
+- Measured contrast verification (203-case matrix over the shipped palette),
+  12px DOM typography floor, reduced-motion collapse audit, and visible editor
+  find-match colors in both themes. No WCAG-cert claim.
+
 ## [0.0.9] - 2026-09-22
 
 ### Added

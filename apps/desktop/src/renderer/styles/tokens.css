@@ -90,6 +90,43 @@
   --shadow-menu: 0 4px 16px rgb(0 0 0 / .32);
   --shadow-overlay: 0 16px 48px rgb(0 0 0 / .45);
 }
+/* Step 9 accents. Source of truth: packages/core/src/appearance/
+ * appearance.ts ACCENT_TOKENS (AAA/AA-verified pairs) — a drift test in
+ * tests/appearance/ asserts these hexes match. Placed after the theme
+ * aliases so equal-specificity source order wins on <html data-accent>. */
+[data-accent="violet"] {
+  --accent: #4f41d6;
+  --accent-hover: #4032ba;
+  --selection: #e3dcff;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+[data-accent="blue"] {
+  --accent: #1f4fd8;
+  --accent-hover: #1a41b4;
+  --selection: #d7e3ff;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+[data-accent="graphite"] {
+  --accent: #4a453c;
+  --accent-hover: #37332c;
+  --selection: #d8d2c4;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+[data-theme="dark"][data-accent="violet"] {
+  --accent: #ad9fff;
+  --accent-hover: #c3b9ff;
+  --selection: #493968;
+}
+[data-theme="dark"][data-accent="blue"] {
+  --accent: #9dbcff;
+  --accent-hover: #bcd2ff;
+  --selection: #2c3d63;
+}
+[data-theme="dark"][data-accent="graphite"] {
+  --accent: #cfc5ae;
+  --accent-hover: #e2d9c2;
+  --selection: #4a4436;
+}
 @media (prefers-reduced-motion: reduce) {
   :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; }
   *, *::before, *::after {

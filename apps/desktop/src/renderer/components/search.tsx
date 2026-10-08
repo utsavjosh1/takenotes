@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import { TextField } from "@takenotes/ui/dom";
+import { searchResultSummary } from "@takenotes/core/search/summary";
 import type { SearchMatch } from "@takenotes/contracts/ipc";
 import { displayPath } from "./types";
 
@@ -35,30 +36,38 @@ export function SearchPanel({
           onChange={(e) => onQuery(e.target.value)}
         />
       </div>
-      {searching && <div className="panel-title">Searching…</div>}
+      {searching && <div className="panel-title" role="status">Searching…</div>}
       {searchError && <div className="panel-title" role="alert">{searchError}</div>}
       {!searching && !searchError && notice && <div className="panel-title" role="note">{notice}</div>}
       {!searching && !searchError && query.trim() === "" && (
         <div className="panel-title">Type to search file names and contents.</div>
       )}
+      {!searching && !searchError && query.trim() !== "" && (filenameHits.length > 0 || contentHits.length > 0) && (
+        <div className="panel-title" role="status">{
+          searchResultSummary(
+            new Set([...filenameHits, ...contentHits].map((m) => m.relativePath)).size,
+            filenameHits.length + contentHits.length,
+          )
+        }</div>
+      )}
       {filenameHits.length > 0 && (
-        <>
-          <div className="panel-title">Files</div>
+        <div role="group" aria-label="Files matching by name">
+          <div className="panel-title" aria-hidden="true">Files</div>
           {filenameHits.map((m) => (
             <SearchRow key={`f:${m.relativePath}`} match={m} onOpen={onOpen} filenameOnly />
           ))}
-        </>
+        </div>
       )}
       {contentHits.length > 0 && (
-        <>
-          <div className="panel-title">Contents</div>
+        <div role="group" aria-label="Files matching by content">
+          <div className="panel-title" aria-hidden="true">Contents</div>
           {contentHits.map((m) => (
             <SearchRow key={`c:${m.relativePath}:${m.line}`} match={m} onOpen={onOpen} query={query} />
           ))}
-        </>
+        </div>
       )}
       {!searching && !searchError && query.trim() !== "" && filenameHits.length === 0 && contentHits.length === 0 && (
-        <div className="panel-title">No matches for “{query.trim()}”.</div>
+        <div className="panel-title" role="status">No matches for “{query.trim()}”.</div>
       )}
     </div>
   );

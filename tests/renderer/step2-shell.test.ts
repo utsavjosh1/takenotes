@@ -6,9 +6,10 @@ import { parseSettings } from "../../packages/core/src/validation/schemas";
 /** Step 2 slice 5 gate: shell seam shape. */
 describe("step2 shell seam", () => {
   it("fixes left-pane order; right sidebar stays an empty slot", () => {
-    // Productivity steps 3/4 append the Today and Calendar panes; order
-    // of the Step 2 panes stays frozen.
-    expect([...SIDEBAR_VIEWS]).toEqual(["files", "search", "outline", "favorites", "today", "calendar"]);
+    // Productivity steps 3/4 append the Today and Calendar panes, Phase 3
+    // (Step 6) appends Tags/Properties/Collections, Phase 4 appends Graph;
+    // order of the Step 2 panes stays frozen.
+    expect([...SIDEBAR_VIEWS]).toEqual(["files", "search", "outline", "favorites", "today", "calendar", "tags", "properties", "collections", "graph"]);
   });
 
   it("shows the ribbon by default and parses the persisted flag", () => {

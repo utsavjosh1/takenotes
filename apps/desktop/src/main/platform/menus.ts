@@ -69,9 +69,12 @@ export function buildMenuTemplate(
     cmd("view.toggleSidebar", mnemonic("Toggle &Sidebar")),
     cmd("view.toggleFocus", mnemonic("Toggle &Focus Mode")),
     { type: "separator" },
-    { label: mnemonic("Zoom &In"), role: "zoomIn" },
-    { label: mnemonic("Zoom &Out"), role: "zoomOut" },
-    { label: mnemonic("Actual &Size"), role: "resetZoom" },
+    // Step 9 (slice 6b): zoom rides the shared command channel into the
+    // renderer's persisted settings factor — never Chromium native zoom,
+    // which used to compound on top of it with no visible level.
+    cmd("app.zoomIn", mnemonic("Zoom &In")),
+    cmd("app.zoomOut", mnemonic("Zoom &Out")),
+    cmd("app.zoomReset", mnemonic("Actual &Size")),
     { type: "separator" },
     { label: mnemonic("Toggle &Full Screen"), role: "togglefullscreen" },
   ];

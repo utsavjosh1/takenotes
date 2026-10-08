@@ -113,6 +113,13 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       "palette.open": () => deps.openPalette(">"),
       "view.toggleSidebar": () => deps.setSidebarOpen((v) => !v),
       "view.toggleFocus": () => deps.toggleFocusMode(),
+      // Step 9 zoom quick-adjust: events keep settings (the persisted
+      // factor) as the single source — App applies them without
+      // remounting editors. Main-menu native roles still compound on top
+      // until slice 6c unifies the zoom path.
+      "app.zoomIn": () => window.dispatchEvent(new CustomEvent("takenotes:zoom-in")),
+      "app.zoomOut": () => window.dispatchEvent(new CustomEvent("takenotes:zoom-out")),
+      "app.zoomReset": () => window.dispatchEvent(new CustomEvent("takenotes:zoom-reset")),
       "view.tab1": () => docs.activateTabByIndex(0),
       "view.tab2": () => docs.activateTabByIndex(1),
       "view.tab3": () => docs.activateTabByIndex(2),
@@ -133,6 +140,12 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       "task.new": () => window.dispatchEvent(new CustomEvent("takenotes:open-task-dialog")),
       "today.open": () => { deps.setView("today"); deps.setSidebarOpen(true); },
       "calendar.open": () => { deps.setView("calendar"); deps.setSidebarOpen(true); },
+      "tags.open": () => { deps.setView("tags"); deps.setSidebarOpen(true); },
+      "properties.open": () => { deps.setView("properties"); deps.setSidebarOpen(true); },
+      "collections.open": () => { deps.setView("collections"); deps.setSidebarOpen(true); },
+      "graph.open": () => { deps.setView("graph"); deps.setSidebarOpen(true); },
+      "canvas.new": () => { void tree.createUntitledCanvas(tree.preferredNewNoteDir()); },
+      "file.import": () => window.dispatchEvent(new CustomEvent("takenotes:open-import-dialog")),
     };
     const whenFor = (id: CommandId): boolean => {
       if (id === "editor.save" || id === "editor.find" || id === "note.close") return activeDoc(docs.layout) !== null;
@@ -149,9 +162,10 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       if (id === "tree.expandAll" || id === "tree.collapseAll") return workspace !== null;
       if (id === "favorites.addActive") return activeDoc(docs.layout) !== null;
       if (id === "template.insert") return workspace !== null && activeDoc(docs.layout) !== null;
-      if (id === "task.new") return workspace !== null;
+      if (id === "task.new" || id === "canvas.new" || id === "file.import") return workspace !== null;
       if (id === "today.open") return workspace !== null;
       if (id === "calendar.open") return workspace !== null;
+      if (id === "tags.open" || id === "properties.open" || id === "collections.open" || id === "graph.open") return workspace !== null;
       return runners[id] !== undefined;
     };
     return new CommandRegistry(

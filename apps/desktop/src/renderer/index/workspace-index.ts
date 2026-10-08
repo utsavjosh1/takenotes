@@ -1,6 +1,8 @@
 import type { AppError } from "@takenotes/contracts/errors";
 import type { DirectoryEntry, FileReadResult, IpcResult, WorkspaceInfo } from "@takenotes/contracts/ipc";
 import { MAX_INDEX_FILE_BYTES, WorkspaceIndex, type IndexInput } from "@takenotes/core/index/store";
+import { isCanvasPath } from "@takenotes/core/canvas/model";
+import type { FileRevision } from "@takenotes/contracts/ipc";
 
 /** Renderer-side workspace index wiring (P1-07).
  *
@@ -24,6 +26,21 @@ import { MAX_INDEX_FILE_BYTES, WorkspaceIndex, type IndexInput } from "@takenote
 
 /** One shared store; entries are namespaced per `workspaceId` inside. */
 export const workspaceIndex = new WorkspaceIndex();
+
+/** Post-write index sync: notes parse into the index, `.canvas` files
+ * never do (JSON would pollute search/backlinks) — a stale canvas entry
+ * drops instead. Callers use this instead of raw `upsert` after any
+ * mutation so canvas files cannot leak into the index. */
+export function syncFileIndex(
+  store: WorkspaceIndex,
+  workspaceId: string,
+  relativePath: string,
+  content: string,
+  revision: FileRevision,
+): void {
+  if (isCanvasPath(relativePath)) store.remove(workspaceId, relativePath);
+  else store.upsert(workspaceId, relativePath, content, revision);
+}
 
 /** Structural slice of the preload API the build consumes (injectable for tests). */
 export type IndexApi = {

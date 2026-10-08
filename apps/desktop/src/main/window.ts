@@ -4,7 +4,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { currentDesktopPlatform } from "@takenotes/platform/platform";
-import { titlebarStrategy } from "@takenotes/platform/window";
+import { MAIN_WINDOW_MIN_SIZE, titlebarStrategy } from "@takenotes/platform/window";
+import { applyFrameStyle, type FrameStyle } from "./platform/frame-style.js";
 import { windowsWindowOptions } from "./platform/windows.js";
 import { macosWindowOptions } from "./platform/macos.js";
 import { linuxWindowOptions, detectWayland } from "./platform/linux.js";
@@ -177,7 +178,7 @@ async function loadRendererWithFallbacks(
   }
 }
 
-function platformWindowOptions(): BrowserWindowConstructorOptions {
+function platformWindowOptions(frameStyle: FrameStyle = "auto"): BrowserWindowConstructorOptions {
   const platform = currentDesktopPlatform();
   const strategy = titlebarStrategy(platform);
   // WORKAROUND-SCOPE(linux/wayland): native frame stays the default on Linux.
@@ -185,11 +186,11 @@ function platformWindowOptions(): BrowserWindowConstructorOptions {
   // overlay styling to Windows/macOS from this branch (§182–§183).
   switch (strategy) {
     case "windows-overlay":
-      return windowsWindowOptions();
+      return applyFrameStyle(windowsWindowOptions(), frameStyle);
     case "mac-hidden-inset":
-      return macosWindowOptions();
+      return applyFrameStyle(macosWindowOptions(), frameStyle);
     case "native-frame":
-      return linuxWindowOptions(detectWayland());
+      return applyFrameStyle(linuxWindowOptions(detectWayland()), frameStyle);
   }
 }
 
@@ -359,12 +360,19 @@ export function resolveRendererDir(opts: {
   return path.join(opts.mainDir, "..", "..", "dist", "renderer");
 }
 
-export function createMainWindow(preloadPath: string, rendererUrl: string | null, rendererFile: string): BrowserWindow {
+export function createMainWindow(
+  preloadPath: string,
+  rendererUrl: string | null,
+  rendererFile: string,
+  frameStyle: FrameStyle = "auto",
+): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 860,
+    minWidth: MAIN_WINDOW_MIN_SIZE.width,
+    minHeight: MAIN_WINDOW_MIN_SIZE.height,
     icon: resolveWindowIcon(),
-    ...platformWindowOptions(),
+    ...platformWindowOptions(frameStyle),
     webPreferences: {
       preload: preloadPath,
       nodeIntegration: false,

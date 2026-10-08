@@ -29,7 +29,9 @@ describe("ipc handler sender audit", () => {
   it("registers the known handler inventory (update this list deliberately)", () => {
     expect(handlers.sort()).toEqual(
       [
+        "app:frameStyle",
         "app:platform",
+        "app:setFrameStyle",
         "app:version",
         "commands:list",
         "daily:createToday",
@@ -42,10 +44,16 @@ describe("ipc handler sender audit", () => {
         "draft:get",
         "draft:put",
         "file:create",
+        "file:importBinary",
         "file:read",
         "file:rename",
         "file:trash",
         "file:write",
+        "import:confirm",
+        "import:pick",
+        "mcp:clients",
+        "mcp:grant",
+        "mcp:revoke",
         "recovery:captureChanged",
         "recovery:list",
         "recovery:read",

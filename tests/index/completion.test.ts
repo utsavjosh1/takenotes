@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "@takenotes/core/index/document";
 import {
+  aliasCandidates,
+  blockCandidates,
   fileCandidates,
+  formatMarkdownLink,
   formatWikilink,
   headingCandidates,
   parseWikilinkContext,
+  resolveCreationPath,
 } from "@takenotes/core/links/completion";
 
 const REV = (hash: string) => ({ hash, size: 10, mtimeMs: 1 });
@@ -60,6 +64,86 @@ describe("headingCandidates", () => {
   });
 });
 
+describe("blockCandidates", () => {
+  it("merges trailing ^ids and task anchors in source order", () => {
+    const e = parseDocument(
+      WS,
+      "n.md",
+      ["# A ^head-blk", "para one ^p1", "- [ ] task @due(2026-01-02) ^t1", "- plain ^p2", "```", "code ^nope", "```"].join("\n"),
+      REV("h1"),
+    );
+    // Heading text stays clean while its block id is still completable.
+    expect(e.headings.map((h) => h.text)).toEqual(["A"]);
+    expect(blockCandidates(e)).toEqual([
+      { id: "head-blk", line: 1 },
+      { id: "p1", line: 2 },
+      { id: "t1", line: 3 },
+      { id: "p2", line: 4 },
+    ]);
+  });
+
+  it("ignores fenced ^ids and mid-line carets", () => {
+    const e = parseDocument(WS, "n.md", ["a ^b c", "^lonely", "x"].join("\n"), REV("h1"));
+    expect(blockCandidates(e)).toEqual([]);
+  });
+});
+
+describe("aliasCandidates", () => {
+  it("offers titles and frontmatter aliases, skipping bare-name echoes", () => {
+    const entries = [
+      parseDocument(WS, "projects/Note.md", "---\naliases: [NB, Note]\n---\n# Fancy Title\n", REV("h1")),
+      parseDocument(WS, "hub.md", "# Hub\n", REV("h2")),
+    ];
+    // "Hub" echoes its own basename (already a file option) so it is skipped.
+    expect(aliasCandidates(entries)).toEqual([
+      { alias: "Fancy Title", path: "projects/Note.md", name: "Note", sub: "projects" },
+      { alias: "NB", path: "projects/Note.md", name: "Note", sub: "projects" },
+    ]);
+  });
+});
+
+describe("formatMarkdownLink", () => {
+  it.each([
+    ["Note.md", "Note", "hub.md", "shortest", "[Note](Note.md)"],
+    ["projects/Plan.md", "Plan", "hub.md", "shortest", "[Plan](Plan.md)"],
+    ["projects/Plan.md", "Plan", "hub.md", "relative", "[Plan](projects/Plan.md)"],
+    ["projects/Plan.md", "Plan", "projects/Other.md", "relative", "[Plan](Plan.md)"],
+    ["projects/Plan.md", "Fancy", "hub.md", "absolute", "[Fancy](projects/Plan.md)"],
+    ["My Notes/Old Note.md", "Old Note", "hub.md", "shortest", "[Old Note](Old%20Note.md)"],
+    ["projects/Note.md", "NB", "hub.md", "shortest", "[NB](Note.md)"],
+    ["notes/Log.txt", "Log", "hub.md", "shortest", "[Log](Log.txt)"],
+  ] as const)("%s as %s from %s (%s) → %s", (target, label, from, format, expected) => {
+    expect(formatMarkdownLink(target, label, from, format)).toBe(expected);
+  });
+
+  it("encodes # so the url never parses as a fragment", () => {
+    expect(formatMarkdownLink("A#B.md", "A#B", "hub.md", "shortest")).toBe("[A#B](A%23B.md)");
+  });
+});
+
+describe("resolveCreationPath", () => {
+  it.each([
+    // [rawTarget, fromPath, expected]
+    ["Note", "hub.md", "Note.md"],
+    ["Note", "projects/Other.md", "projects/Note.md"],
+    ["Note.md", "projects/Other.md", "projects/Note.md"],
+    ["Docs/Note", "projects/Other.md", "Docs/Note.md"],
+    ["Docs/Note.txt", "hub.md", "Docs/Note.txt"],
+    ["Note#Heading", "projects/Other.md", "projects/Note.md"],
+    ["Docs/Note#^blk", "hub.md", "Docs/Note.md"],
+    ["a/./Note", "hub.md", "a/Note.md"],
+  ] as const)("%s from %s → %s", (target, from, expected) => {
+    expect(resolveCreationPath(target, from)).toBe(expected);
+  });
+
+  it.each([["", "hub.md"], ["   ", "hub.md"], ["../Escape", "a/b.md"], ["a/../../Escape", "hub.md"], ["/abs/Note", "hub.md"], ["pic.png", "hub.md"], ["Doc.pdf", "hub.md"], ["#Heading", "hub.md"]])(
+    "%s from %s refuses",
+    (target, from) => {
+      expect(resolveCreationPath(target, from)).toBeNull();
+    },
+  );
+});
+
 describe("parseWikilinkContext", () => {
   it.each([
     ["[[No", { kind: "file", start: 0, frag: "No", embed: false }],
@@ -68,6 +152,10 @@ describe("parseWikilinkContext", () => {
     ["![[pic", { kind: "file", start: 0, frag: "pic", embed: true }],
     ["[[Note#Hea", { kind: "heading", start: 0, fileFrag: "Note", headFrag: "Hea", embed: false }],
     ["[[a/Note#", { kind: "heading", start: 0, fileFrag: "a/Note", headFrag: "", embed: false }],
+    ["[[Note#^bl", { kind: "block", start: 0, fileFrag: "Note", blockFrag: "bl", embed: false }],
+    ["[[a/Note#^", { kind: "block", start: 0, fileFrag: "a/Note", blockFrag: "", embed: false }],
+    ["![[Note#^bl", { kind: "block", start: 0, fileFrag: "Note", blockFrag: "bl", embed: true }],
+    ["[[#^bl", { kind: "block", start: 0, fileFrag: "", blockFrag: "bl", embed: false }],
     ["x [[a]] y [[b", { kind: "file", start: 10, frag: "b", embed: false }],
   ] as const)("%s → %j", (before, expected) => {
     expect(parseWikilinkContext(before)).toEqual(expected);

@@ -118,6 +118,10 @@ export function createEditor(parent: HTMLElement, initialContent: string, opts: 
       ".cm-cursor": { borderLeft: "2px solid var(--accent)" },
       ".cm-placeholder": { color: "var(--text-muted)", opacity: "0.9" },
       ".cm-selectionBackground, ::selection": { backgroundColor: "var(--selection)" },
+      // Step 9 (6e): find matches use the verified highlight pair — the
+      // CodeMirror default wash leaves dark-mode text near-invisible.
+      ".cm-searchMatch": { backgroundColor: "var(--highlight-surface)", color: "var(--text-primary)", outline: "1px solid var(--accent)" },
+      ".cm-searchMatch-selected": { backgroundColor: "var(--highlight-surface)", color: "var(--text-primary)", outline: "2px solid var(--accent)" },
       ".cm-gutters": {
         backgroundColor: "transparent",
         border: "none",

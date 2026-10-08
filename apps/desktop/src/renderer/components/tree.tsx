@@ -38,6 +38,10 @@ export function FileTree({
   onHoverFile?: (rel: string, x: number, y: number) => void;
   onHoverEnd?: () => void;
 }): JSX.Element {
+  // Step 9 roving tabindex: the selected row is the single Tab stop (or
+  // the first row when nothing is selected yet) — arrows then move both
+  // selection and DOM focus via onTreeKeyDown in use-file-tree.
+  const tabbableRel = tree.selected ?? entries[0]?.relativePath ?? null;
   return (
     <div role="tree" aria-label="Files">
       {entries.map((e) => (
@@ -46,6 +50,7 @@ export function FileTree({
           entry={e}
           depth={0}
           tree={tree}
+          tabbableRel={tabbableRel}
           activePath={activePath}
           onToggle={onToggle}
           onOpen={onOpen}
@@ -68,6 +73,7 @@ function TreeNode(props: {
   entry: DirectoryEntry;
   depth: number;
   tree: TreeState;
+  tabbableRel: string | null;
   activePath: string | null;
   onToggle: (dir: string) => void;
   onOpen: (entry: DirectoryEntry) => void;
@@ -98,7 +104,7 @@ function TreeNode(props: {
         role="treeitem"
         aria-expanded={isDir ? expanded : undefined}
         aria-selected={isActive}
-        tabIndex={-1}
+        tabIndex={entry.relativePath === props.tabbableRel ? 0 : -1}
         data-rel={entry.relativePath}
         data-kind={entry.kind}
         className={`tree-row${isActive ? " selected" : ""}${!isDir && !openable ? " non-md" : ""}`}
@@ -156,6 +162,7 @@ function TreeNode(props: {
               entry={k}
               depth={depth + 1}
               tree={tree}
+              tabbableRel={props.tabbableRel}
               activePath={props.activePath}
               onToggle={props.onToggle}
               onOpen={props.onOpen}

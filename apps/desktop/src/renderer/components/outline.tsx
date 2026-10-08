@@ -1,5 +1,6 @@
 /** Step 2 Outline pane (live ATX parse) + shared hover PreviewCard. */
-import type { JSX } from "react";
+import { useRef, useState, type JSX } from "react";
+import { moveRovingIndex } from "@takenotes/ui";
 import { EmptyState } from "@takenotes/ui/dom";
 import { extractAtxHeadings } from "@takenotes/core/outline/extract";
 
@@ -10,6 +11,10 @@ export function OutlinePane({
   content: string | null;
   onNavigate: (line: number) => void;
 }): JSX.Element {
+  const listRef = useRef<HTMLDivElement>(null);
+  // Step 9 roving tabindex: one Tab stop for the whole outline; arrows
+  // move focus only (no scroll-jank while browsing), Enter navigates.
+  const [focused, setFocused] = useState(0);
   if (content === null) {
     return <EmptyState title="No note open" description="Open a note to see its headings." />;
   }
@@ -17,11 +22,29 @@ export function OutlinePane({
   if (headings.length === 0) {
     return <EmptyState title="No headings" description="Headings you add here show up automatically." />;
   }
+  const at = Math.min(focused, headings.length - 1);
   return (
-    <div role="tree" aria-label="Outline">
-      {headings.map((h) => (
-        <div key={`${h.line}:${h.anchor}`} role="treeitem" className="tree-row" style={{ paddingLeft: 12 + (h.level - 1) * 12 }} title={h.text}>
-          <button className="row-label" onClick={() => onNavigate(h.line)}>
+    <div
+      ref={listRef}
+      role="tree"
+      aria-label="Outline"
+      onKeyDown={(e) => {
+        const next = moveRovingIndex(at, headings.length, e.key, "vertical");
+        if (next === null) return;
+        e.preventDefault();
+        setFocused(next);
+        listRef.current?.querySelector<HTMLElement>(`[data-outline-idx="${next}"]`)?.focus();
+      }}
+    >
+      {headings.map((h, i) => (
+        <div key={`${h.line}:${h.anchor}`} role="treeitem" aria-selected={i === at} className="tree-row" style={{ paddingLeft: 12 + (h.level - 1) * 12 }} title={h.text}>
+          <button
+            className="row-label"
+            data-outline-idx={i}
+            tabIndex={i === at ? 0 : -1}
+            onFocus={() => setFocused(i)}
+            onClick={() => { setFocused(i); onNavigate(h.line); }}
+          >
             {h.text}
           </button>
         </div>

@@ -1,5 +1,7 @@
-import type { WorkspaceInfo } from "@takenotes/contracts/ipc";
+import type { FileReadResult, FileRevision, IpcResult, WorkspaceInfo } from "@takenotes/contracts/ipc";
 import { resolveLinkTarget } from "@takenotes/core/index/edges";
+import { linkMentionEdit } from "@takenotes/core/links/backlinks";
+import { resolveCreationPath, type LinkFormat } from "@takenotes/core/links/completion";
 
 /** Minimal domain surface the workspace lifecycle choreography needs.
  * Implemented by the renderer hooks in production (`App.tsx` passes its
@@ -75,4 +77,140 @@ export async function refreshWorkspaceFlow(
  * with exact-case preferred. */
 export function resolveWikilinkTarget(target: string, files: string[]): string | null {
   return resolveLinkTarget(target, files);
+}
+
+/** ArrayBuffer → base64 without blowing the call stack (chunked
+ * `String.fromCharCode`, then `btoa`). Renderer-side encoding for the
+ * `file:importBinary` IPC op, which takes base64. */
+export function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  const CHUNK = 0x8000;
+  let s = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    s += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(s);
+}
+
+export type FollowLinkDeps = {
+  /** Current enumeration for the pre-create existence re-check. */
+  listFiles: () => string[];
+  createFile: (rel: string) => Promise<IpcResult<FileRevision>>;
+  writeFile: (rel: string, content: string, expectedHash: string) => Promise<IpcResult<FileRevision>>;
+  /** Immediate index upsert so backlinks/outgoing converge without a rebuild. */
+  upsertIndex: (rel: string, content: string, revision: FileRevision) => void;
+  openFile: (rel: string) => Promise<void>;
+  reveal: (rel: string) => void | Promise<void>;
+  /** Tree + index convergence after the mutation (bump + refresh). */
+  refresh: () => Promise<void>;
+};
+
+export type FollowLinkResult =
+  | { status: "invalid" }
+  | { status: "created"; rel: string }
+  | { status: "opened-existing"; rel: string }
+  | { status: "failed"; rel: string };
+
+/** Follow a link to a nonexistent note (Step 4 follow-to-create): resolve
+ * the creation path from the link text → create → open → reveal, with the
+ * tree/index converging after. New notes start empty — template wiring for
+ * link-created notes is Step 6 territory. Two races are handled, never by
+ * guessing: a note that appeared since the panes rendered opens instead of
+ * duplicating (`opened-existing`), and `ALREADY_EXISTS` re-resolves before
+ * reporting failure. Unresolvable leftovers (ambiguous duplicates) also
+ * report `failed` rather than creating a second note. */
+export async function followUnresolvedLinkFlow(
+  deps: FollowLinkDeps,
+  rawTarget: string,
+  fromPath: string,
+): Promise<FollowLinkResult> {
+  const rel = resolveCreationPath(rawTarget, fromPath);
+  if (!rel) return { status: "invalid" };
+  const openExisting = async (found: string): Promise<FollowLinkResult> => {
+    await deps.openFile(found);
+    await deps.reveal(found);
+    return { status: "opened-existing", rel: found };
+  };
+  const raced = resolveWikilinkTarget(rawTarget, deps.listFiles());
+  if (raced) return openExisting(raced);
+  const created = await deps.createFile(rel);
+  if (!created.ok) {
+    if (created.error.code === "ALREADY_EXISTS") {
+      const again = resolveWikilinkTarget(rawTarget, deps.listFiles());
+      if (again) return openExisting(again);
+    }
+    return { status: "failed", rel };
+  }
+  // New link-created notes start empty; the write pins the revision the
+  // index upsert and any later mutation guard on.
+  const content = "";
+  const written = await deps.writeFile(rel, content, created.result.hash);
+  if (!written.ok) return { status: "failed", rel };
+  deps.upsertIndex(rel, content, written.result);
+  // Refresh before open+reveal so the tree knows the node being revealed.
+  await deps.refresh();
+  await deps.openFile(rel);
+  await deps.reveal(rel);
+  return { status: "created", rel };
+}
+
+export type LinkMentionDeps = {
+  readFile: (rel: string) => Promise<IpcResult<FileReadResult>>;
+  writeFile: (args: {
+    rel: string;
+    content: string;
+    expectedHash: string;
+    newlineStyle: "lf" | "crlf";
+    hadBom: boolean;
+  }) => Promise<IpcResult<FileRevision>>;
+  /** Immediate index upsert so backlinks converge without a rebuild. */
+  upsertIndex: (rel: string, content: string, revision: FileRevision) => void;
+  /** Open-tab convergence: clean tabs reload, dirty tabs take the Step 0
+   * CONFLICT banner (edits kept, never overwritten). */
+  reconcile: (rel: string) => Promise<void>;
+  /** Tree + index convergence after the mutation (bump + refresh). */
+  refresh: () => Promise<void>;
+  linkFormat: () => LinkFormat;
+  useWikilinks: () => boolean;
+};
+
+export type LinkMentionResult =
+  | { status: "linked"; rel: string; line: number }
+  | { status: "not-found"; rel: string }
+  | { status: "conflict"; rel: string }
+  | { status: "failed"; rel: string };
+
+/** Convert an unlinked mention into a real link (Step 4 alias action):
+ * read the source note → convert its first convertible body occurrence
+ * (`[[Canon|Alias]]`, Markdown form when wikilinks are off) → guarded
+ * write → converge. Failures stay honest: a vanished mention reports
+ * `not-found` (index raced the disk), a concurrent external edit reports
+ * `conflict` with both versions safe, and nothing is ever retried blindly.
+ * Only one occurrence converts per call — repeats re-verify against the
+ * rebuilt index. */
+export async function linkMentionFlow(
+  deps: LinkMentionDeps,
+  from: string,
+  matchedText: string,
+  target: string,
+): Promise<LinkMentionResult> {
+  const read = await deps.readFile(from);
+  if (!read.ok) return { status: "failed", rel: from };
+  const edit = linkMentionEdit(read.result.content, matchedText, target, from, deps.linkFormat(), deps.useWikilinks());
+  if (!edit) return { status: "not-found", rel: from };
+  const written = await deps.writeFile({
+    rel: from,
+    content: edit.content,
+    expectedHash: read.result.revision.hash,
+    newlineStyle: read.result.newlineStyle,
+    hadBom: read.result.hadBom,
+  });
+  if (!written.ok) {
+    if (written.error.code === "CONFLICT") return { status: "conflict", rel: from };
+    return { status: "failed", rel: from };
+  }
+  deps.upsertIndex(from, edit.content, written.result);
+  await deps.reconcile(from);
+  await deps.refresh();
+  return { status: "linked", rel: from, line: edit.line };
 }

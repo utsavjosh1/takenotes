@@ -21,8 +21,19 @@ export const SettingsSchema = v.object({
   lineNumbers: v.optional(v.boolean()),
   livePreview: v.optional(v.boolean()),
   linkFormat: v.optional(v.picklist(["shortest", "relative", "absolute"])),
+  useWikilinks: v.optional(v.boolean()),
   autoUpdateLinks: v.optional(v.boolean()),
   confirmTrash: v.optional(v.boolean()),
+  /** Step 9: accent family for links/focus/selection (default violet). */
+  accent: v.optional(v.picklist(["violet", "blue", "graphite"])),
+  /** Step 9: editor body face; UI chrome stays OS-native system sans. */
+  editorFont: v.optional(v.picklist(["system", "serif", "mono"])),
+  /** Step 9: whole-app zoom factor, 0.8–2. Quick-adjust via View menu. */
+  zoomLevel: v.optional(v.pipe(v.number(), v.minValue(0.8), v.maxValue(2))),
+  /** Step 9: show the inline note-title row above the editor. */
+  inlineTitle: v.optional(v.boolean()),
+  /** Step 9: window frame. `native` forces the OS title bar (restart to apply). */
+  frameStyle: v.optional(v.picklist(["auto", "native"])),
   /** Opt-in WSL workspaces (Windows only). Off → plain notetaking app. */
   wslEnabled: v.optional(v.boolean()),
   /** Step 2: activity-rail visibility. */
@@ -31,6 +42,10 @@ export const SettingsSchema = v.object({
   templateFolder: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256))),
   /** Where the New-task command appends: today's Daily Note or Inbox.md. */
   taskCaptureTarget: v.optional(v.picklist(["daily", "inbox"])),
+  attachmentLocation: v.optional(v.picklist(["root", "same-folder", "subfolder", "folder"])),
+  /** Attachment folder (root-relative, ≤256 chars like the template folder). */
+  attachmentFolder: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256))),
+  attachmentUnsupported: v.optional(v.picklist(["link", "skip"])),
 });
 
 export type ValidatedSettings = v.InferOutput<typeof SettingsSchema>;

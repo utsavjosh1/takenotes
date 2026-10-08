@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { resolveTheme } from "@takenotes/ui";
+import { appearanceVars, clampZoom, stepZoom, type AppearanceTheme } from "@takenotes/core/appearance/appearance";
 import { Button, EmptyState, IconButton, Notice } from "@takenotes/ui/dom";
 import type { DirectoryEntry, WorkspaceInfo } from "@takenotes/contracts/ipc";
 import type { CommandId } from "@takenotes/core/commands/registry";
@@ -12,23 +13,39 @@ import { BacklinksPane, OutgoingPane } from "./components/backlinks";
 // renders Markdown live (marks hidden, tasks as checkboxes, tables,
 // callouts, code, and media styled in place) and the doc stays plain
 // Markdown. There is no read/edit mode and no toggle.
-import { workspaceIndex } from "./index/workspace-index";
+import { buildWorkspaceIndex, syncFileIndex, workspaceIndex } from "./index/workspace-index";
 import { uniqueCopyName, resolveCreateTarget } from "@takenotes/core/explorer/sort";
-import { closeWorkspaceFlow, openWorkspaceFlow, refreshWorkspaceFlow, resolveWikilinkTarget } from "./workspace-flows";
+import {
+  attachmentFileName,
+  buildAttachmentLink,
+  classifyAttachment,
+  pastedFileName,
+  resolveAttachmentDir,
+} from "@takenotes/core/attachments/import";
+import { arrayBufferToBase64, closeWorkspaceFlow, followUnresolvedLinkFlow, linkMentionFlow, openWorkspaceFlow, refreshWorkspaceFlow, resolveWikilinkTarget } from "./workspace-flows";
 import { paneDocs } from "./panes";
 import { indexedEntryToQuickOpenItem } from "@takenotes/core/commands/palette";
 import { FileTree } from "./components/tree";
 import { FavoritesPane } from "./components/favorites";
 import { OutlinePane, PreviewCard } from "./components/outline";
 import { lineForBlockId, lineForHeadingFragment, previewExcerpt } from "@takenotes/core/outline/extract";
+import type { ParsedTakenotesUri } from "@takenotes/core/uri/parse";
 import { renderMarkdown } from "@takenotes/core/markdown/render";
 import { SearchPanel } from "./components/search";
 import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
 import { CommandMenu } from "./components/palette";
 import { TemplatePicker } from "./components/template-picker";
+import { ImportDialog } from "./components/import-dialog";
 import { TaskDialog, type NewTaskInput } from "./components/task-dialog";
 import { TodayPane } from "./components/today-pane";
 import { CalendarPane } from "./components/calendar-pane";
+import { TagsPane } from "./components/tags";
+import { PropertiesPane } from "./components/properties-view";
+import { CollectionsPane } from "./components/collections";
+import { GraphPane } from "./components/graph";
+import { CanvasEditor, isCanvasPath } from "./components/canvas";
+import { loadPropertyRegistry } from "./index/property-registry";
+import { renamePropertyKey } from "@takenotes/core/properties/summary";
 import { collectTodayTasks } from "@takenotes/core/productivity/today";
 import { templateDate } from "@takenotes/core/productivity/templates";
 import { SettingsDialog } from "./components/settings";
@@ -38,6 +55,14 @@ import { HistoryDialog } from "./components/history-dialog";
 import { buildFileMenu, buildSidebarMenu, buildTabMenu, type MenuOps } from "./components/menus";
 import { Icon } from "./components/icons";
 import { getBridge } from "./bridge";
+
+/** Note-class files (imported as notes, never as attachments). */
+const NOTE_FILE_RE = /\.(md|markdown|txt)$/i;
+
+/** MIME subtype for fallback paste names (`image/png` → `png`). */
+function mimeExt(mime: string): string {
+  return (mime.split("/")[1]?.split(";")[0]?.split("+")[0] ?? "").replace(/[^a-z0-9]/gi, "");
+}
 import lockupDarkUrl from "./assets/brand/takenotes-lockup-dark.svg";
 import lockupLightUrl from "./assets/brand/takenotes-lockup-light.svg";
 import { fileName, type CtxMenu } from "./components/types";
@@ -51,6 +76,7 @@ import { useDocuments, type DocumentsApi } from "./hooks/use-documents";
 import { useFileTree, type FileTreeApi } from "./hooks/use-file-tree";
 import { useSearch, type SearchApi } from "./hooks/use-search";
 import { useWslConnect } from "./hooks/use-wsl-connect";
+import { useCollections } from "./hooks/use-collections";
 import { useUpdates } from "./hooks/use-updates";
 import { useCommands } from "./hooks/use-commands";
 import { useFavorites } from "./hooks/use-favorites";
@@ -166,6 +192,7 @@ export default function App(): JSX.Element {
   const docsApi = useDocuments(workspace, notify, recents);
   const treeApi = useFileTree(workspace, docsApi, notify, workspaceApi.reportHealth);
   const favoritesApi = useFavorites(workspace, notify);
+  const collectionsApi = useCollections(workspace, notify);
   const favFilesLower = useMemo(() => new Set(treeApi.allFiles.map((f) => f.relativePath.toLowerCase())), [treeApi.allFiles]);
   const favDirsLower = useMemo(() => {    const s = new Set<string>();
     const walk = (list: DirectoryEntry[]): void => {
@@ -274,6 +301,27 @@ export default function App(): JSX.Element {
       void favoritesApi.addEntry(group, { type: "file", target: tab.relativePath });
     },
   });
+
+  // Import dialog opens via the `file.import` command (palette dispatches
+  // `takenotes:open-import-dialog`). Post-import convergence rebuilds the
+  // tree + index so notes/attachments/backlinks/graph/search all see the
+  // new files; per-file errors already surfaced in the dialog summary.
+  const [importOpen, setImportOpen] = useState(false);
+  useEffect(() => {
+    const onOpen = (): void => {
+      if (workspaceApi.workspace) setImportOpen(true);
+    };
+    window.addEventListener("takenotes:open-import-dialog", onOpen);
+    return () => window.removeEventListener("takenotes:open-import-dialog", onOpen);
+  }, [workspaceApi.workspace]);
+  const convergeImport = useCallback(async () => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) return;
+    await treeApi.refresh(ws);
+    await buildWorkspaceIndex(bridge, workspaceIndex, ws);
+    bumpIndex();
+  }, [workspaceApi.workspace, treeApi, bumpIndex]);
 
   // Template picker opens via the `template.insert` command (palette,
   // menu, or keyboard all dispatch `takenotes:open-template-picker`).
@@ -437,24 +485,80 @@ export default function App(): JSX.Element {
     hotkeyOverrides: hotkeys.overrides,
   });
 
+  // Step 9 appearance application: one effect owns every DOM write from
+  // settings (theme + accent + editor face + zoom + window title), so a
+  // switch never remounts editors or disturbs cursor/scroll/undo —
+  // CodeMirror reads the same `--accent` / `--font-editor` variables.
+  const activeTabPath = docsApi.activeTab?.relativePath;
+  const workspaceName = workspace?.displayName;
   useEffect(() => {
     localStorage.setItem("takenotes.settings", JSON.stringify(settings));
-    document.documentElement.dataset.theme = resolveTheme(settings.theme, window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const theme: AppearanceTheme = resolveTheme(settings.theme, window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.accent = settings.accent;
     const root = document.documentElement.style;
-    root.setProperty("--editor-font-size", `${settings.fontSize}px`);
-    root.setProperty("--editor-line-height", String(settings.lineHeight));
-    root.setProperty("--editor-max-width", `${settings.readableWidth}px`);
+    const vars = appearanceVars({
+      editorFont: settings.editorFont,
+      fontSize: settings.fontSize,
+      lineHeight: settings.lineHeight,
+      readableWidth: settings.readableWidth,
+    });
+    for (const [key, value] of Object.entries(vars)) root.setProperty(key, value);
+    // Whole-app zoom via CSS (persisted in settings, works offline and in
+    // browser mode). Native menu zoom roles compound on top of this — a
+    // known wart unified in slice 6c (single zoom path).
+    root.setProperty("zoom", String(clampZoom(settings.zoomLevel)));
+    // Tab title bar: the OS window/taskbar names the active note, falling
+    // back to the workspace and then the app name. Never a file path.
+    document.title = activeTabPath
+      ? `takenotes — ${fileName(activeTabPath)}`
+      : workspaceName ? `takenotes — ${workspaceName}` : "takenotes";
     localStorage.setItem("takenotes.sidebarWidth", String(sidebarWidth));
-  }, [settings, sidebarWidth]);
+  }, [settings, sidebarWidth, activeTabPath, workspaceName]);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = (): void => {
-      if (settings.theme === "system") document.documentElement.dataset.theme = mq.matches ? "dark" : "light";
+      if (settings.theme !== "system") return;
+      // System flip only re-resolves the theme attribute — accent pairs
+      // are theme-keyed in CSS (`[data-theme="dark"][data-accent]`).
+      document.documentElement.dataset.theme = mq.matches ? "dark" : "light";
     };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, [settings.theme]);
+  }, [settings]);
+
+  // Zoom quick-adjust (`app.zoomIn/Out/Reset` from palette or keyboard):
+  // single path into settings so the factor persists and the effect above
+  // applies it. Reads fresh state so stale closures never lose a step.
+  useEffect(() => {
+    const adjust = (direction: "in" | "out" | "reset"): void => {
+      const current = useSettingsStore.getState().settings;
+      const zoomLevel = direction === "reset" ? 1 : stepZoom(current.zoomLevel, direction);
+      if (zoomLevel !== current.zoomLevel) setSettings({ ...current, zoomLevel });
+    };
+    const onIn = (): void => adjust("in");
+    const onOut = (): void => adjust("out");
+    const onReset = (): void => adjust("reset");
+    window.addEventListener("takenotes:zoom-in", onIn);
+    window.addEventListener("takenotes:zoom-out", onOut);
+    window.addEventListener("takenotes:zoom-reset", onReset);
+    return () => {
+      window.removeEventListener("takenotes:zoom-in", onIn);
+      window.removeEventListener("takenotes:zoom-out", onOut);
+      window.removeEventListener("takenotes:zoom-reset", onReset);
+    };
+  }, [setSettings]);
+
+  // Step 9 frame preference: main reads the stored value before the
+  // renderer exists, so mirror the setting into the profile file (the
+  // sole writer). Idempotent — also heals a missing file on launch.
+  // Silent on failure: the window still opens with the default frame.
+  useEffect(() => {
+    const bridge = getBridge();
+    if (!bridge) return;
+    void bridge.app.setFrameStyle(settings.frameStyle).catch(() => undefined);
+  }, [settings.frameStyle]);
 
   // Mount-only: version label + silent startup update check (ADR-0006).
   // Kept separate from the theme listener above so renders (and theme
@@ -527,9 +631,381 @@ export default function App(): JSX.Element {
     if (!workspace) return null;
     return { edges: workspaceIndex.edges(workspace.workspaceId), entries: workspaceIndex.list(workspace.workspaceId) };
   }, [workspace?.workspaceId, indexVersion]);
+
+  // Phase 3 panes (Step 6): tags / properties / collections read the same
+  // parse-once index, memoised on the index version like every other pane.
+  const phase3Entries = useMemo(
+    () => (workspace ? workspaceIndex.list(workspace.workspaceId) : null),
+    [workspace?.workspaceId, indexVersion],
+  );
+  const activeIndexEntry = useMemo(() => {
+    const rel = docsApi.activeTab?.relativePath;
+    if (!workspace || !rel) return null;
+    return workspaceIndex.get(workspace.workspaceId, rel) ?? null;
+  }, [workspace?.workspaceId, docsApi.activeTab?.relativePath, indexVersion]);
+  const propertyRegistry = useMemo(
+    () => (workspace ? loadPropertyRegistry(undefined, workspace.workspaceId) : {}),
+    [workspace?.workspaceId],
+  );
+  const runSearchQuery = useCallback((query: string) => {
+    setView("search");
+    setSidebarOpen(true);
+    searchApi.setQuery(query);
+  }, [searchApi]);
+
+  // Phase 3 global property rename: every note carrying `oldName` gets a
+  // YAML-preserving key move (refuse-to-clobber per file), written against
+  // its read revision so CONFLICT — never silent overwrite — on races.
+  // Open tabs converge via the Step 0 reconcile contract.
+  const [renamingProp, setRenamingProp] = useState(false);
+  const renamePropertyEverywhere = useCallback(async (oldName: string, newName: string) => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) { toast("Desktop bridge unavailable — open via the Electron app.", "error"); return; }
+    setRenamingProp(true);
+    try {
+      let renamed = 0;
+      let skipped = 0;
+      for (const e of workspaceIndex.list(ws.workspaceId)) {
+        const fm = e.frontmatter;
+        if (!fm || typeof fm !== "object" || !(oldName in (fm as Record<string, unknown>))) continue;
+        const read = await bridge.file.read(ws.workspaceId, e.relativePath);
+        if (!read.ok) { skipped++; continue; }
+        const patched = renamePropertyKey(read.result.content, oldName, newName);
+        if ("error" in patched) { skipped++; continue; }
+        if (patched.content === read.result.content) continue;
+        const written = await bridge.file.write({
+          workspaceId: ws.workspaceId,
+          relativePath: e.relativePath,
+          content: patched.content,
+          expectedHash: read.result.revision.hash,
+          newlineStyle: read.result.newlineStyle,
+          hadBom: read.result.hadBom,
+        });
+        if (!written.ok) { skipped++; continue; }
+        workspaceIndex.upsert(ws.workspaceId, e.relativePath, patched.content, written.result);
+        await docsApi.reconcileExternalChange(e.relativePath);
+        renamed++;
+      }
+      bumpIndex();
+      toast(skipped > 0
+        ? `Renamed ${oldName} → ${newName} in ${renamed} note${renamed === 1 ? "" : "s"} (${skipped} skipped).`
+        : `Renamed ${oldName} → ${newName} in ${renamed} note${renamed === 1 ? "" : "s"}.`);
+    } finally {
+      setRenamingProp(false);
+    }
+  }, [workspaceApi.workspace, docsApi, toast, bumpIndex]);
   const openLinkTarget = useCallback((rel: string) => {
     void docsApi.openFile(rel).then(() => void treeApi.reveal(rel));
   }, [docsApi, treeApi]);
+
+  // Step 4 follow-to-create: a link to a nonexistent note resolves its
+  // creation path from the link text → creates → opens → reveals, with
+  // tree/index converging after. Failures toast honestly; success is silent.
+  const followLink = useCallback(async (rawTarget: string, fromPath: string) => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) { toast("Desktop bridge unavailable — open via the Electron app.", "error"); return; }
+    const result = await followUnresolvedLinkFlow({
+      listFiles: () => treeApi.allFiles.map((f) => f.relativePath),
+      createFile: (rel) => bridge.file.create(ws.workspaceId, rel),
+      writeFile: (rel, content, expectedHash) =>
+        bridge.file.write({ workspaceId: ws.workspaceId, relativePath: rel, content, expectedHash, newlineStyle: "lf", hadBom: false }),
+      upsertIndex: (rel, content, revision) => syncFileIndex(workspaceIndex, ws.workspaceId, rel, content, revision),
+      openFile: (rel) => docsApi.openFile(rel),
+      reveal: (rel) => treeApi.reveal(rel),
+      refresh: async () => {
+        bumpIndex();
+        await refreshWorkspaceFlow({ tree: treeApi, search: searchApi }, ws);
+      },
+    }, rawTarget, fromPath);
+    if (result.status === "invalid") toast(`Can't create a note from "${rawTarget}".`, "error");
+    else if (result.status === "failed") toast(`Couldn't create ${result.rel}.`, "error");
+  }, [workspaceApi.workspace, treeApi, docsApi, searchApi, toast, bumpIndex]);
+
+  // Step 8 URI actions (`takenotes://open/new/daily/search`): external
+  // entry points onto the open workspace. Guardrails (main/uri/handler):
+  // no workspace → notice, never auto-open; `open` never creates
+  // (openFile toasts honestly on missing files); `daily` skips the
+  // in-app create confirm because the URI caller cannot click it — the
+  // fixed Daily path plus the ordinary revision-tracked pipeline are the
+  // guardrails. `x-success`/`x-error` are opaque echoes, never opened.
+  const handleUriAction = useCallback(async (delivery: { ok: boolean; raw: string; payload: unknown }) => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) { toast("Link ignored — open a workspace first.", "error"); return; }
+    if (!delivery.ok) {
+      const message = (delivery.payload as { message?: string } | null)?.message ?? "Malformed link.";
+      toast(`Couldn't handle link: ${message}`, "error");
+      return;
+    }
+    const uri = delivery.payload as ParsedTakenotesUri;
+    const failEcho = uri.errorEcho ? ` (${uri.errorEcho})` : "";
+    if (uri.action.action === "open") {
+      const { path, heading, block } = uri.action;
+      if (!path) { toast("Open needs a file path.", "error"); return; }
+      await docsApi.openFile(path);
+      await treeApi.reveal(path);
+      if (heading ?? block) {
+        const tab = docsRef.current?.activeTab ?? null;
+        const content = tab && tab.relativePath === path && !tab.loadError ? tab.content : null;
+        const line = content
+          ? (heading ? lineForHeadingFragment(content, heading) : lineForBlockId(content, block ?? ""))
+          : null;
+        if (line) gotoLine(line);
+        else toast(`Opened ${path}, but the heading/block wasn't found.${failEcho}`, "error");
+      }
+      return;
+    }
+    if (uri.action.action === "search") { runSearchQuery(uri.action.query); return; }
+    if (uri.action.action === "daily") {
+      const info = await bridge.daily.getToday(ws.workspaceId);
+      if (!info.ok) { toast(`Couldn't open today's note: ${info.error.message}${failEcho}`, "error"); return; }
+      if (info.result.exists) {
+        await docsApi.openFile(info.result.relativePath);
+        await treeApi.reveal(info.result.relativePath);
+        return;
+      }
+      const created = await bridge.daily.createToday(ws.workspaceId);
+      if (!created.ok) { toast(`Couldn't create today's note: ${created.error.message}${failEcho}`, "error"); return; }
+      workspaceIndex.upsert(ws.workspaceId, created.result.relativePath, created.result.content, created.result.revision);
+      bumpIndex();
+      await treeApi.refresh(ws);
+      await treeApi.rebuild(ws);
+      await docsApi.openFile(created.result.relativePath);
+      return;
+    }
+    // `new`: explicit path wins; otherwise the name resolves exactly like
+    // a `[[link]]` (creation-path-from-link honored); bare `new` mints an
+    // untitled note. Content is written only to files this action created —
+    // an existing file opens untouched and says so.
+    const content = uri.action.content ?? "";
+    const openCreated = async (rel: string): Promise<void> => {
+      if (content) {
+        const read = await bridge.file.read(ws.workspaceId, rel);
+        if (read.ok) {
+          const written = await bridge.file.write({
+            workspaceId: ws.workspaceId, relativePath: rel, content,
+            expectedHash: read.result.revision.hash,
+            newlineStyle: read.result.newlineStyle, hadBom: read.result.hadBom,
+          });
+          if (written.ok) {
+            syncFileIndex(workspaceIndex, ws.workspaceId, rel, content, written.result);
+            bumpIndex();
+          }
+        }
+      }
+      await refreshWorkspaceFlow({ tree: treeApi, search: searchApi }, ws);
+      await docsApi.openFile(rel);
+      await treeApi.reveal(rel);
+    };
+    if (uri.action.path) {
+      const created = await bridge.file.create(ws.workspaceId, uri.action.path);
+      if (!created.ok) {
+        if (created.error.code === "ALREADY_EXISTS") {
+          await docsApi.openFile(uri.action.path);
+          await treeApi.reveal(uri.action.path);
+          if (content) toast(`${uri.action.path} already exists — content not written.`, "error");
+        } else {
+          toast(`Couldn't create ${uri.action.path}: ${created.error.message}${failEcho}`, "error");
+        }
+        return;
+      }
+      await openCreated(uri.action.path);
+      return;
+    }
+    if (uri.action.name) {
+      await followLink(uri.action.name, "");
+      if (content) {
+        const tab = docsRef.current?.activeTab ?? null;
+        if (tab && !tab.loadError) {
+          const written = await bridge.file.write({
+            workspaceId: ws.workspaceId, relativePath: tab.relativePath, content,
+            expectedHash: tab.revisionHash, newlineStyle: tab.newlineStyle, hadBom: tab.hadBom,
+          });
+          if (written.ok) {
+            syncFileIndex(workspaceIndex, ws.workspaceId, tab.relativePath, content, written.result);
+            bumpIndex();
+            await docsApi.reconcileExternalChange(tab.relativePath);
+          }
+        }
+      }
+      return;
+    }
+    await treeApi.createUntitledNote();
+    if (content) {
+      const tab = docsRef.current?.activeTab ?? null;
+      if (tab && !tab.loadError) {
+        const written = await bridge.file.write({
+          workspaceId: ws.workspaceId, relativePath: tab.relativePath, content,
+          expectedHash: tab.revisionHash, newlineStyle: tab.newlineStyle, hadBom: tab.hadBom,
+        });
+        if (written.ok) {
+          syncFileIndex(workspaceIndex, ws.workspaceId, tab.relativePath, content, written.result);
+          bumpIndex();
+          await docsApi.reconcileExternalChange(tab.relativePath);
+        }
+      }
+    }
+  }, [workspaceApi.workspace, treeApi, docsApi, searchApi, workspaceIndex, runSearchQuery, followLink, gotoLine, bumpIndex, toast]);
+
+  useEffect(() => {
+    const bridge = getBridge();
+    if (!bridge) return;
+    return bridge.events.onUriAction((delivery) => { void handleUriAction(delivery); });
+  }, [handleUriAction]);
+
+  // Step 4 alias action: convert an unlinked mention into `[[Canon|Alias]]
+  // (Markdown form when wikilinks are off). One occurrence per tap; open
+  // tabs converge via the Step 0 reload-or-CONFLICT contract. Success is
+  // silent — the panes rebuild from the refreshed index.
+  const linkMention = useCallback(async (from: string, matchedText: string, target: string) => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) { toast("Desktop bridge unavailable — open via the Electron app.", "error"); return; }
+    const result = await linkMentionFlow({
+      readFile: (rel) => bridge.file.read(ws.workspaceId, rel),
+      writeFile: ({ rel, content, expectedHash, newlineStyle, hadBom }) =>
+        bridge.file.write({ workspaceId: ws.workspaceId, relativePath: rel, content, expectedHash, newlineStyle, hadBom }),
+      upsertIndex: (rel, content, revision) => syncFileIndex(workspaceIndex, ws.workspaceId, rel, content, revision),
+      reconcile: (rel) => docsApi.reconcileExternalChange(rel),
+      refresh: async () => {
+        bumpIndex();
+        await refreshWorkspaceFlow({ tree: treeApi, search: searchApi }, ws);
+      },
+      linkFormat: () => settings.linkFormat,
+      useWikilinks: () => settings.useWikilinks,
+    }, from, matchedText, target);
+    if (result.status === "conflict") toast(`${result.rel} changed on disk — mention NOT linked. Try again.`, "error");
+    else if (result.status === "not-found") toast(`Mention no longer found in ${result.rel}.`, "error");
+    else if (result.status === "failed") toast(`Couldn't link the mention in ${result.rel}.`, "error");
+  }, [workspaceApi.workspace, treeApi, docsApi, searchApi, settings.linkFormat, settings.useWikilinks, toast, bumpIndex]);
+
+  // Note-file import (Step 2 copy-in, shared by sidebar and editor drops):
+  // markdown/text files land in `dir` with `name 1.md` collision
+  // increment, never overwritten or moved. Returns created rels so editor
+  // drops can link them; sidebar drops ignore the return.
+  const importNoteFiles = useCallback(async (files: File[], dir: string): Promise<string[]> => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) { toast("Desktop bridge unavailable — open via the Electron app.", "error"); return []; }
+    const existing = new Set(treeApi.allFiles.map((f) => f.relativePath.toLowerCase()));
+    const created: string[] = [];
+    let imported = 0;
+    for (const file of Array.from(files)) {
+      const prefix = dir ? `${dir}/`.toLowerCase() : "";
+      const siblings = new Set(
+        [...existing]
+          .filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes("/"))
+          .map((p) => p.slice(prefix.length)),
+      );
+      const name = uniqueCopyName(file.name.replace(/\.[^.]+$/, ".md"), siblings);
+      const rel = dir ? `${dir}/${name}` : name;
+      const made = await bridge.file.create(ws.workspaceId, rel);
+      if (!made.ok) { toast(`Couldn't import "${file.name}".`); continue; }
+      const content = await file.text();
+      const written = await bridge.file.write({ workspaceId: ws.workspaceId, relativePath: rel, content, expectedHash: made.result.hash, newlineStyle: "lf", hadBom: false });
+      if (!written.ok) { toast(`Couldn't import "${file.name}".`); continue; }
+      workspaceIndex.upsert(ws.workspaceId, rel, content, written.result);
+      existing.add(rel.toLowerCase());
+      created.push(rel);
+      imported++;
+    }
+    if (imported > 0) {
+      bumpIndex();
+      await refreshWorkspaceFlow({ tree: treeApi, search: searchApi }, ws);
+    }
+    return created;
+  }, [workspaceApi.workspace, treeApi, searchApi, toast, bumpIndex]);
+
+  // Attachment import (Step 4): pasted/dropped files land per the
+  // attachment location setting with `name 1.ext` collision increment.
+  // Binaries never touch the document index (tree refresh only — the
+  // index build skips non-note classes). Returns insertion texts for
+  // editor drops/pastes; sidebar drops ignore them.
+  const importAttachmentFiles = useCallback(async (files: File[], notePath: string): Promise<string[]> => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) { toast("Desktop bridge unavailable — open via the Electron app.", "error"); return []; }
+    const links: string[] = [];
+    const existing = new Set(treeApi.allFiles.map((f) => f.relativePath.toLowerCase()));
+    let imported = 0;
+    let skipped = 0;
+    for (const file of Array.from(files)) {
+      // Unnamed clipboard items (screenshots) fall back to timestamped names.
+      const rawName = file.name || pastedFileName(mimeExt(file.type));
+      // A dropped name can never escape: basename only, main validates.
+      const base = rawName.replace(/\\/g, "/").split("/").pop()?.trim() || pastedFileName(mimeExt(file.type));
+      const kind = classifyAttachment(base);
+      if (kind === "unsupported" && settings.attachmentUnsupported === "skip") { skipped++; continue; }
+      const dir = resolveAttachmentDir(settings.attachmentLocation, settings.attachmentFolder, notePath);
+      if (dir === null) { toast(`Attachment folder "${settings.attachmentFolder}" is not a valid path.`, "error"); continue; }
+      const prefix = dir ? `${dir}/`.toLowerCase() : "";
+      const siblingsOf = (): Set<string> => new Set(
+        [...existing]
+          .filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes("/"))
+          .map((p) => p.slice(prefix.length)),
+      );
+      let bytes: ArrayBuffer;
+      try {
+        bytes = await file.arrayBuffer();
+      } catch {
+        toast(`Couldn't read "${base}".`, "error");
+        continue;
+      }
+      if (bytes.byteLength === 0) { toast(`"${base}" is empty — skipped.`, "error"); continue; }
+      const base64 = arrayBufferToBase64(bytes);
+      // No-clobber retry: a raced name picks the next `name 1.ext`.
+      const sib = siblingsOf();
+      let name = attachmentFileName(base, sib);
+      let rel = dir ? `${dir}/${name}` : name;
+      let res = await bridge.file.importBinary({ workspaceId: ws.workspaceId, relativePath: rel, base64 });
+      for (let attempt = 0; attempt < 3 && !res.ok && res.error.code === "ALREADY_EXISTS"; attempt++) {
+        sib.add(name.toLowerCase());
+        existing.add(rel.toLowerCase());
+        name = attachmentFileName(base, sib);
+        rel = dir ? `${dir}/${name}` : name;
+        res = await bridge.file.importBinary({ workspaceId: ws.workspaceId, relativePath: rel, base64 });
+      }
+      if (!res.ok) {
+        toast(res.error.code === "TOO_LARGE" ? `"${base}" is too large to import (over 100 MiB).` : `Couldn't import "${base}".`, "error");
+        continue;
+      }
+      existing.add(rel.toLowerCase());
+      imported++;
+      const link = buildAttachmentLink(rel, notePath, settings.linkFormat, settings.useWikilinks, kind, settings.attachmentUnsupported);
+      if (link) links.push(link);
+    }
+    if (imported > 0) {
+      bumpIndex();
+      await refreshWorkspaceFlow({ tree: treeApi, search: searchApi }, ws);
+    }
+    if (skipped > 0) toast(`Skipped ${skipped} unsupported file${skipped === 1 ? "" : "s"}.`, "error");
+    return links;
+  }, [workspaceApi.workspace, treeApi, searchApi, settings.attachmentLocation, settings.attachmentFolder, settings.attachmentUnsupported, settings.linkFormat, settings.useWikilinks, toast, bumpIndex]);
+
+  // Editor drop/paste: note files import + link at the cursor; everything
+  // else imports per the attachment policy + embeds at the cursor.
+  // (The cursor usually sits at the drop point — mousedown precedes drop.)
+  const importEditorFiles = useCallback(async (files: File[], notePath: string) => {
+    const dir = treeApi.preferredNewNoteDir();
+    const notes = files.filter((f) => NOTE_FILE_RE.test(f.name));
+    const rest = files.filter((f) => !NOTE_FILE_RE.test(f.name));
+    if (notes.length > 0) {
+      const rels = await importNoteFiles(notes, dir);
+      // Raw rels: the insert-link handler wraps `[[…]]` itself (same as
+      // internal tree drags, extension included).
+      for (const rel of rels) {
+        window.dispatchEvent(new CustomEvent("takenotes:insert-link", { detail: rel }));
+      }
+    }
+    if (rest.length > 0) {
+      const links = await importAttachmentFiles(rest, notePath);
+      if (links.length > 0) {
+        window.dispatchEvent(new CustomEvent("takenotes:insert-attachment-text", { detail: links.join("\n") }));
+      }
+    }
+  }, [importNoteFiles, importAttachmentFiles, treeApi]);
 
   /* ---------- render ---------- */
   // Browser-tab mode: vite serves the same bundle to Electron AND to plain
@@ -586,6 +1062,16 @@ export default function App(): JSX.Element {
   const healthError = workspaceApi.healthError;
   return (
     <div className="app">
+      {/* Step 9 keyboard entry: hidden until focused, jumps past the rail
+        and sidebar straight to the note surface. */}
+      <a
+        href="#main-content"
+        className="skip-link"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
+      >Skip to editor</a>
       {bridgeBanner}
       {!focusMode && (
         <TitleBar workspace={workspace} platform={platform} wslEnabled={settings.wslEnabled} onQuickOpen={() => commandsApi.executeCommand("quickOpen.open")} onOpenWindows={() => void workspaceApi.openLocal()} onOpenWsl={() => void wslApi.open()} />
@@ -633,46 +1119,22 @@ export default function App(): JSX.Element {
                 onDrop={(e) => {
                   if (!e.dataTransfer.files.length) return;
                   e.preventDefault();
+                  // Sidebar drops import without insertion: notes via the
+                  // Step 2 copy-in, binaries per the attachment policy
+                  // (resolved with no active note — same-folder degrades
+                  // to the drop directory, subfolder nests under it).
                   void (async () => {
-                    const ws = workspaceApi.workspace;
-                    const bridge = getBridge();
-                    if (!ws || !bridge) return;
+                    const files = Array.from(e.dataTransfer.files);
                     const dir = treeApi.preferredNewNoteDir();
-                    const existing = new Set(treeApi.allFiles.map((f) => f.relativePath.toLowerCase()));
-                    let imported = 0;
-                    for (const file of Array.from(e.dataTransfer.files)) {
-                      if (!/\.(md|markdown|txt)$/i.test(file.name)) {
-                        toast(`"${file.name}" skipped — binary import arrives with Step 4 attachments.`);
-                        continue;
-                      }
-                      // Collisions are per-directory: compare against sibling
-                      // basenames, not full workspace-relative paths.
-                      const prefix = dir ? `${dir}/`.toLowerCase() : "";
-                      const siblings = new Set(
-                        [...existing]
-                          .filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes("/"))
-                          .map((p) => p.slice(prefix.length)),
-                      );
-                      const name = uniqueCopyName(file.name.replace(/\.[^.]+$/, ".md"), siblings);
-                      const rel = dir ? `${dir}/${name}` : name;
-                      const created = await bridge.file.create(ws.workspaceId, rel);
-                      if (!created.ok) { toast(`Couldn't import "${file.name}".`); continue; }
-                      const content = await file.text();
-                      const written = await bridge.file.write({ workspaceId: ws.workspaceId, relativePath: rel, content, expectedHash: created.result.hash, newlineStyle: "lf", hadBom: false });
-                      if (!written.ok) { toast(`Couldn't import "${file.name}".`); continue; }
-                      workspaceIndex.upsert(ws.workspaceId, rel, content, written.result);
-                      existing.add(rel.toLowerCase());
-                      imported++;
-                    }
-                    if (imported > 0) {
-                      bumpIndex();
-                      await refreshWorkspaceFlow({ tree: treeApi, search: searchApi }, ws);
-                    }
+                    await importNoteFiles(files.filter((f) => NOTE_FILE_RE.test(f.name)), dir);
+                    // A synthetic in-dir note path: same-folder lands in
+                    // the drop directory, subfolder nests under it.
+                    await importAttachmentFiles(files.filter((f) => !NOTE_FILE_RE.test(f.name)), dir ? `${dir}/_.md` : "");
                   })();
                 }}
               >
                 {paneCollapsed[view] ? (
-                  <div className="panel-title">{view === "files" ? "Explorer" : view === "search" ? "Search" : view === "outline" ? "Outline" : view === "today" ? "Today" : view === "calendar" ? "Calendar" : "Favorites"} (collapsed)</div>
+                  <div className="panel-title">{view === "files" ? "Explorer" : view === "search" ? "Search" : view === "outline" ? "Outline" : view === "today" ? "Today" : view === "calendar" ? "Calendar" : view === "tags" ? "Tags" : view === "properties" ? "Properties" : view === "collections" ? "Collections" : view === "graph" ? "Graph" : "Favorites"} (collapsed)</div>
                 ) : view === "files" ? (
                   <>
                     {treeApi.creating && (
@@ -707,8 +1169,8 @@ export default function App(): JSX.Element {
                         activePath={docsApi.activeTab?.relativePath ?? null}
                         onToggle={(d) => void treeApi.toggleDir(d)}
                         onOpen={(en) => {
-                          if (en.fileClass === "markdown" || en.fileClass === "text") { void docsApi.openFile(en.relativePath).then(() => void treeApi.reveal(en.relativePath)); }
-                          else toast("Only Markdown and text files open in the editor in this MVP.");
+                          if (en.fileClass === "markdown" || en.fileClass === "text" || isCanvasPath(en.relativePath)) { void docsApi.openFile(en.relativePath).then(() => void treeApi.reveal(en.relativePath)); }
+                          else toast("Only Markdown, text, and canvas files open in this MVP.");
                         }}
                         onSelect={(rel) => treeApi.select(rel)}
                         onContext={showFileMenu}
@@ -762,6 +1224,35 @@ export default function App(): JSX.Element {
                       }}
                       onOpenNote={(rel) => openLinkTarget(rel)}
                       onReschedule={(rel, line, targetDate) => void rescheduleTask(rel, line, targetDate)}
+                    />
+                  ) : (
+                    <div className="panel-title">No workspace index yet.</div>
+                  )
+                ) : view === "tags" ? (
+                  <TagsPane entries={phase3Entries} runSearch={runSearchQuery} />
+                ) : view === "properties" ? (
+                  <PropertiesPane
+                    activeEntry={activeIndexEntry}
+                    entries={phase3Entries}
+                    registry={propertyRegistry}
+                    runSearch={runSearchQuery}
+                    onRename={(a, b) => renamePropertyEverywhere(a, b)}
+                    renaming={renamingProp}
+                  />
+                ) : view === "collections" ? (
+                  <CollectionsPane
+                    collections={collectionsApi}
+                    entries={phase3Entries}
+                    onOpen={(rel) => { void docsApi.openFile(rel).then(() => void treeApi.reveal(rel)); }}
+                    runSearch={runSearchQuery}
+                  />
+                ) : view === "graph" ? (
+                  linkGraph ? (
+                    <GraphPane
+                      entries={linkGraph.entries}
+                      edges={linkGraph.edges}
+                      activePath={docsApi.activeTab?.relativePath ?? null}
+                      onOpen={(rel) => { void docsApi.openFile(rel).then(() => void treeApi.reveal(rel)); }}
                     />
                   ) : (
                     <div className="panel-title">No workspace index yet.</div>
@@ -824,7 +1315,7 @@ export default function App(): JSX.Element {
             />
           </>
         )}
-        <main className="main">
+        <main className="main" id="main-content" tabIndex={-1} aria-label="Editor">
           {healthError && (
             <Notice className="pane-notice" tone="danger" announcement="assertive" title="Workspace unavailable"
               actions={<Button onClick={() => refreshWorkspace()}>Reconnect</Button>}>
@@ -839,12 +1330,29 @@ export default function App(): JSX.Element {
               <section
                 className="pane active"
                 aria-label="Editor"
-                onDragOver={(e) => { if (e.dataTransfer.types.includes("takenotes/rel-path")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
+                onDragOver={(e) => { if (e.dataTransfer.types.includes("takenotes/rel-path")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } else if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
                 onDrop={(e) => {
                   const rel = e.dataTransfer.getData("takenotes/rel-path");
-                  if (!rel) return;
+                  if (rel) {
+                    e.preventDefault();
+                    window.dispatchEvent(new CustomEvent("takenotes:insert-link", { detail: rel }));
+                    return;
+                  }
+                  // External files: import + link/embed at the cursor.
+                  // (The cursor usually sits at the drop point — mousedown
+                  // precedes drop.) preventDefault blocks CodeMirror's
+                  // default file-drop handling.
+                  if (e.dataTransfer.files.length === 0 || !doc) return;
                   e.preventDefault();
-                  window.dispatchEvent(new CustomEvent("takenotes:insert-link", { detail: rel }));
+                  void importEditorFiles(Array.from(e.dataTransfer.files), doc.relativePath);
+                }}
+                onPaste={(e) => {
+                  // Pasted files (e.g. screenshots) import like drops;
+                  // plain text paste is untouched.
+                  const files = e.clipboardData ? Array.from(e.clipboardData.files) : [];
+                  if (files.length === 0 || !doc) return;
+                  e.preventDefault();
+                  void importEditorFiles(files, doc.relativePath);
                 }}
               >
                 {!focusMode && (
@@ -886,6 +1394,13 @@ export default function App(): JSX.Element {
                   <EmptyState className="pane-empty" title={`Couldn’t open ${fileName(doc.relativePath)}`}
                     description={`${doc.loadError} Your file is untouched.`}
                     actions={<Button onClick={() => docsApi.closeTab(doc.key)}>Close tab</Button>} />
+                ) : isCanvasPath(doc.relativePath) ? (
+                  <CanvasEditor
+                    docKey={doc.key}
+                    content={doc.content}
+                    onEdit={docsApi.onEdit}
+                    onOpenNote={(rel) => { void docsApi.openFile(rel).then(() => void treeApi.reveal(rel)); }}
+                  />
                 ) : (
                   <PaneView
                     docKey={doc.key}
@@ -895,8 +1410,10 @@ export default function App(): JSX.Element {
                     wordWrap={settings.wordWrap}
                     livePreview={settings.livePreview}
                     linkFormat={settings.linkFormat}
+                    useWikilinks={settings.useWikilinks}
                     workspaceId={workspace?.workspaceId ?? ""}
                     fullWidth={settings.fullWidth}
+                    inlineTitle={settings.inlineTitle}
                     reportCursor
                     onEdit={docsApi.onEdit}
                     onCursor={docsApi.handleCursor}
@@ -906,7 +1423,10 @@ export default function App(): JSX.Element {
                     }}
                     onOpenWikilink={(target) => {
                       const rel = resolveWikilinkTarget(target, treeApi.allFiles.map((f) => f.relativePath));
+                      // Ctrl/Cmd+click on an unresolved wikilink creates the
+                      // note (same follow-to-create as the outgoing pane).
                       if (rel) void docsApi.openFile(rel).then(() => void treeApi.reveal(rel));
+                      else if (doc.relativePath) void followLink(target, doc.relativePath);
                     }}
                     onHoverLink={(target, x, y) => {
                       if (!target) { clearHover(); return; }
@@ -929,11 +1449,15 @@ export default function App(): JSX.Element {
                 edges={linkGraph.edges}
                 entries={linkGraph.entries}
                 onOpen={openLinkTarget}
+                onLinkMention={(from, matched, target) => void linkMention(from, matched, target)}
               />
               <OutgoingPane
                 activePath={docsApi.activeTab.relativePath}
                 edges={linkGraph.edges}
+                entries={linkGraph.entries}
                 onOpen={openLinkTarget}
+                onCreateLink={(target) => void followLink(target, docsApi.activeTab!.relativePath)}
+                onLinkMention={(from, matched, target) => void linkMention(from, matched, target)}
               />
             </div>
           </aside>
@@ -997,8 +1521,17 @@ export default function App(): JSX.Element {
           onClose={() => setTemplatePickerOpen(false)}
         />
       )}
+      {importOpen && workspaceApi.workspace && (
+        <ImportDialog
+          workspaceId={workspaceApi.workspace.workspaceId}
+          attachmentLocation={settings.attachmentLocation}
+          attachmentFolder={settings.attachmentFolder}
+          onClose={() => setImportOpen(false)}
+          onDone={() => void convergeImport()}
+        />
+      )}
       {settingsOpen && (
-        <SettingsDialog settings={settings} onChange={setSettings} version={version} platform={platform} hotkeys={hotkeys} updatesEnabled={platform.capabilities.updates} onCheckUpdates={() => void updatesApi.check(true)} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog settings={settings} onChange={setSettings} version={version} platform={platform} hotkeys={hotkeys} updatesEnabled={platform.capabilities.updates} onCheckUpdates={() => void updatesApi.check(true)} mcp={getBridge()?.mcp} onClose={() => setSettingsOpen(false)} />
       )}
       {docsApi.historyDialog && (
         <HistoryDialog

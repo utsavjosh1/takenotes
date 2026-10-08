@@ -2,6 +2,7 @@ import { EditorSelection, type EditorState, type Extension } from "@codemirror/s
 import { RangeSetBuilder } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { parseEmbedFragment, parseEmbedSize } from "@takenotes/core/links/embed-params";
 
 /**
  * Single-surface Markdown WYSIWYG (ADR-0015): the user types into
@@ -61,6 +62,8 @@ export type PipeRange = { from: number; to: number };
 export type CalloutRange = { from: number; to: number; type: string };
 /** Footnote `[^id]` reference replaced by a superscript widget. */
 export type FootnoteRefRange = { from: number; to: number; id: string };
+/** Note embed `![[target]]` replaced by a target label (`![[`/`]]` hidden). */
+export type EmbedRange = { from: number; to: number; target: string };
 
 export type WysiwygRanges = {
   hide: HiddenRange[];
@@ -70,6 +73,7 @@ export type WysiwygRanges = {
   pipes: PipeRange[];
   callouts: CalloutRange[];
   footnoteRefs: FootnoteRefRange[];
+  embeds: EmbedRange[];
   /** 1-based source lines carrying an image/media reference. */
   mediaLines: Set<number>;
 };
@@ -89,6 +93,7 @@ export const EMPTY_WYSIWYG_RANGES: WysiwygRanges = {
   pipes: [],
   callouts: [],
   footnoteRefs: [],
+  embeds: [],
   mediaLines: new Set<number>(),
 };
 
@@ -128,6 +133,8 @@ const WIKILINK_MEDIA = /![[\s]*([^\]|\]]+?)[\s\]|]/;
 
 /** Footnote reference `[^id]` (not a definition) and definition prefix. */
 const FOOTNOTE_REF = /\[\^([^\]]+)\]/g;
+/** Note embed `![[inner]]` (whole-range replacement shows target). */
+const EMBED_WIKILINK = /!\[\[([^\]\n]+)\]\]/g;
 const FOOTNOTE_DEF_PREFIX = /^(\s*)\[\^([^\]]+)\]:/;
 /** `%%comment%%` — hidden entirely (only complete pairs; unclosed stays). */
 const COMMENT_PAIR = /%%[\s\S]*?%%/g;
@@ -212,7 +219,7 @@ class TaskWidget extends WidgetType {
  * never hide source, so they apply on all lines. */
 export function collectWysiwygRanges(state: EditorState, from: number, to: number, opts?: WysiwygCollectOptions): WysiwygRanges {
   if (opts?.livePreview === false) {
-    return { hide: [], lineClasses: [], tasks: [], bullets: [], pipes: [], callouts: [], footnoteRefs: [], mediaLines: new Set<number>() };
+    return { hide: [], lineClasses: [], tasks: [], bullets: [], pipes: [], callouts: [], footnoteRefs: [], embeds: [], mediaLines: new Set<number>() };
   }
   const active = opts?.activeLines;
   const touchesActive = (rfrom: number, rto: number): boolean => {
@@ -231,6 +238,7 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
   const pipes: PipeRange[] = [];
   const callouts: CalloutRange[] = [];
   const footnoteRefs: FootnoteRefRange[] = [];
+  const embeds: EmbedRange[] = [];
   const tree = ensureSyntaxTree(state, to, 200) ?? syntaxTree(state);
   const lineOf = (pos: number): number => state.doc.lineAt(Math.max(0, Math.min(pos, state.doc.length))).number;
   const literal: { from: number; to: number }[] = [];
@@ -392,6 +400,21 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
         footnoteRefs.push({ from: refFrom, to: refTo, id: ref[1]! });
       }
     }
+    // Note embeds `![[target]]` show the target label (`![[`/`]]` hidden
+    // via the whole-range replacement below). Skip code/literal spans.
+    if (!lineInCode) {
+      EMBED_WIKILINK.lastIndex = 0;
+      let em: RegExpExecArray | null;
+      while ((em = EMBED_WIKILINK.exec(line.text)) !== null) {
+        const emFrom = line.from + em.index;
+        const emTo = emFrom + em[0].length;
+        if (inRanges(literal, emFrom, emTo)) continue;
+        const inner = em[1] ?? "";
+        const target = inner.split("|")[0]!.split("#")[0]!.trim() || inner.trim();
+        if (!target) continue;
+        embeds.push({ from: emFrom, to: emTo, target });
+      }
+    }
     // Media/embed source lines earn a preview block below the source.
     if (!lineInCode) {
       const imgSrc = mediaSrcOnLine(line.text);
@@ -457,10 +480,11 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
   };
   const blocked = (rfrom: number, rto: number): boolean =>
     ownedHides.some((o) => rfrom < o.to && rto > o.from) || touchesActive(rfrom, rto);
-  type WidgetKey = { kind: "task" | "fnref" | "callout" | "bullet" | "pipe"; index: number };
+  type WidgetKey = { kind: "task" | "fnref" | "callout" | "bullet" | "pipe" | "embed"; index: number };
   const rankedWidgets: (Ranked & WidgetKey)[] = [
     ...tasks.map((t, index) => ({ from: t.markerFrom, to: t.markerTo, rank: 0, kind: "task" as const, index })),
     ...footnoteRefs.map((f, index) => ({ from: f.from, to: f.to, rank: 1, kind: "fnref" as const, index })),
+    ...embeds.map((e, index) => ({ from: e.from, to: e.to, rank: 1, kind: "embed" as const, index })),
     ...callouts.map((c, index) => ({ from: c.from, to: c.to, rank: 2, kind: "callout" as const, index })),
     ...bullets.map((b, index) => ({ from: b.from, to: b.to, rank: 3, kind: "bullet" as const, index })),
     ...pipes.map((p, index) => ({ from: p.from, to: p.to, rank: 4, kind: "pipe" as const, index })),
@@ -482,6 +506,7 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
     pipes: pipes.filter((_, i) => kept("pipe", i)),
     callouts: callouts.filter((_, i) => kept("callout", i)),
     footnoteRefs: footnoteRefs.filter((_, i) => kept("fnref", i)),
+    embeds: embeds.filter((_, i) => kept("embed", i)),
     mediaLines,
   };
 }
@@ -493,6 +518,27 @@ export function mediaSrcOnLine(lineText: string): string | null {
   const wiki = WIKILINK_MEDIA.exec(lineText);
   if (wiki) return wiki[1]!.trim() || null;
   return null;
+}
+
+/** `![[target|alias]]` target + alias slots on one source line (either may
+ * be absent — markdown `![alt](src)` images carry no display params). */
+const WIKILINK_EMBED_PARTS = /!\[\[([^\]\n|#]+)(?:#[^\]\n|]*)?(?:\|([^\]\n]*))?\]\]/;
+
+/** Display dimensions for an embed line (`|100x145` alias slot and/or
+ * `#height=` fragment; fragment height wins a conflict). Null when the
+ * line carries no params — the preview renders at natural size. Computed
+ * at widget-creation time from live doc text, so no range-shape change. */
+export function mediaDimsOnLine(lineText: string): { width?: number; height?: number } | null {
+  const m = WIKILINK_EMBED_PARTS.exec(lineText);
+  if (!m) return null;
+  const size = parseEmbedSize(m[2]);
+  const frag = /#([^\]\n|]*)/.exec(m[0]);
+  const fragHeight = parseEmbedFragment(frag?.[1])?.height;
+  // Fragment height wins a conflict; width comes from the alias slot only.
+  const width = size?.width;
+  const height = fragHeight ?? size?.height;
+  if (width === undefined && height === undefined) return null;
+  return { ...(width === undefined ? {} : { width }), ...(height === undefined ? {} : { height }) };
 }
 
 const hideDeco = Decoration.replace({});
@@ -604,17 +650,50 @@ class FootnoteRefWidget extends WidgetType {
   }
 }
 
+/** Note embed: replaces `![[target]]` with a target label.
+ * Deleting it removes the embed from the source. */
+class EmbedWidget extends WidgetType {
+  constructor(
+    readonly target: string,
+    readonly pos: number,
+  ) {
+    super();
+  }
+  eq(other: EmbedWidget): boolean {
+    return other.target === this.target && other.pos === this.pos;
+  }
+  toDOM(view: EditorView): HTMLElement {
+    const el = document.createElement("span");
+    el.className = "wys-embed";
+    el.textContent = this.target;
+    el.setAttribute("aria-label", `Embed ${this.target}`);
+    clickToEdit(el, view, this.pos);
+    return el;
+  }
+}
+
+/** Apply embed display dims (`|100x145`, `#height=`) as element size.
+ * Images and video honor both; audio/PDF previews ignore them. */
+function applyDims(el: HTMLElement, dims: { width?: number; height?: number } | undefined): void {
+  if (!dims) return;
+  if (dims.width !== undefined) el.style.width = `${dims.width}px`;
+  if (dims.height !== undefined) el.style.height = `${dims.height}px`;
+}
+
 /** Additive preview below an image/media source line. The Markdown stays
  * fully editable above; this block never replaces source, so cursor,
  * selection, and undo are unaffected. Remote URLs never load: only
  * relative local paths preview (same-root images); anything else shows
  * a neutral label chip. */
 class MediaPreviewWidget extends WidgetType {
-  constructor(readonly src: string) {
+  constructor(
+    readonly src: string,
+    readonly dims?: { width?: number; height?: number },
+  ) {
     super();
   }
   eq(other: MediaPreviewWidget): boolean {
-    return other.src === this.src;
+    return other.src === this.src && other.dims?.width === this.dims?.width && other.dims?.height === this.dims?.height;
   }
   toDOM(): HTMLElement {
     const wrap = document.createElement("div");
@@ -637,6 +716,7 @@ class MediaPreviewWidget extends WidgetType {
       video.controls = true;
       video.preload = "metadata";
       video.src = this.src;
+      applyDims(video, this.dims);
       wrap.appendChild(video);
       return wrap;
     }
@@ -650,6 +730,7 @@ class MediaPreviewWidget extends WidgetType {
     img.src = this.src;
     img.alt = "";
     img.loading = "lazy";
+    applyDims(img, this.dims);
     img.addEventListener("error", () => {
       wrap.textContent = `\u{1F5BC} ${this.src}`;
     });
@@ -721,6 +802,13 @@ export function buildWysiwygDecorations(view: EditorView, opts?: { livePreview?:
       value: Decoration.replace({ widget: new FootnoteRefWidget(f.id, f.from) }),
     });
   }
+  for (const e of ranges.embeds) {
+    ops.push({
+      from: e.from,
+      to: e.to,
+      value: Decoration.replace({ widget: new EmbedWidget(e.target, e.from) }),
+    });
+  }
   for (const t of ranges.tasks) {
     ops.push({
       from: t.markerFrom,
@@ -734,12 +822,14 @@ export function buildWysiwygDecorations(view: EditorView, opts?: { livePreview?:
     ops.push({ from: pos, to: pos, value: Decoration.line({ class: l.cls }) });
   }
   // Media previews: additive block widgets at end of the source line.
+  // Dims parse from live text (no range-shape change); `eq` covers them
+  // so resizing the params rebuilds the preview.
   for (const lineNo of ranges.mediaLines) {
     if (lineNo < 1 || lineNo > state.doc.lines) continue;
     const line = state.doc.line(lineNo);
     const src = mediaSrcOnLine(line.text);
     if (!src) continue;
-    ops.push({ from: line.to, to: line.to, value: Decoration.widget({ widget: new MediaPreviewWidget(src), side: 1, block: true }) });
+    ops.push({ from: line.to, to: line.to, value: Decoration.widget({ widget: new MediaPreviewWidget(src, mediaDimsOnLine(line.text) ?? undefined), side: 1, block: true }) });
   }
   ops.sort((a, b) => a.from - b.from || a.to - b.to);
   const builder = new RangeSetBuilder<Decoration>();

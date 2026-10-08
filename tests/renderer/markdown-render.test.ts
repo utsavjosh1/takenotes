@@ -224,4 +224,24 @@ describe("reading view markdown renderer", () => {
     expect(emb).toContain("<embed");
     expect(emb).toContain('data-wikilink="Note"');
   });
+
+  it("honors embed dimensions and PDF viewer params", () => {
+    // Sized image embeds render <img> with width/height.
+    expect(renderMarkdown("![[pic.png|100]]\n").html).toContain('<img src="pic.png" alt="pic.png" width="100"');
+    expect(renderMarkdown("![[a/pic.png|100x145]]\n").html).toContain('width="100" height="145"');
+    // Unlabeled sizes are not aliases: the label falls back to the target.
+    expect(renderMarkdown("![[pic.png|100]]\n").html).toContain('data-wikilink="pic.png"');
+    // Unsized image embeds keep the legacy anchor.
+    expect(renderMarkdown("![[pic.png]]\n").html).toContain('class="md-embed-link"');
+    // Note embeds keep numeric aliases (no <img> upgrade).
+    expect(renderMarkdown("![[Note|100]]\n").html).toContain(">100</a>");
+    // PDF: #page rides in src, #height becomes the element height.
+    expect(renderMarkdown("![[doc.pdf#page=2]]\n").html).toContain('<embed src="doc.pdf#page=2"');
+    expect(renderMarkdown("![[doc.pdf#height=400]]\n").html).toContain('height="400"');
+    expect(renderMarkdown("![[doc.pdf#page=3&height=400]]\n").html).toContain('src="doc.pdf#page=3&amp;height=400"');
+    expect(renderMarkdown("![[doc.pdf#page=3&height=400]]\n").html).toContain('height="400"');
+    // Garbage params degrade to the legacy tag, never a broken one.
+    expect(renderMarkdown("![[doc.pdf#page=x]]\n").html).toContain('<embed src="doc.pdf#page=x"');
+    expect(renderMarkdown("![[doc.pdf#page=x]]\n").html).not.toContain("height=");
+  });
 });

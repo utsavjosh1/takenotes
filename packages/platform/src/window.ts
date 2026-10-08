@@ -30,6 +30,11 @@ export function shouldQuitOnAllWindowsClosed(platform: DesktopPlatform): boolean
   return !isMac(platform);
 }
 
+/** Minimum window content size (Step 9 shell, slice 6b): the 800×520
+ * layout floor from the design guide — the sidebar clamps to its minimum
+ * before the editor loses width. Main applies it; tests pin the numbers. */
+export const MAIN_WINDOW_MIN_SIZE = { width: 800, height: 520 } as const;
+
 /** Clamp restored window geometry onto a visible display (§73–§74). */
 export type WindowGeometry = {
   width: number;

@@ -33,6 +33,12 @@ function validateNativeRel(kind: WorkspaceKind, relativePath: string): { relativ
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
+/** Import cap for pasted/dropped attachments (decoded bytes). Videos
+ * routinely exceed the 10 MiB editor cap, so imports get their own
+ * bound: large enough for media, small enough to keep IPC healthy.
+ * Oversize files fail TOO_LARGE with the file untouched. */
+export const MAX_IMPORT_BYTES = 100 * 1024 * 1024;
+
 export type ReadResult = {
   content: string;
   revision: FileRevision;
@@ -311,6 +317,41 @@ export async function createTextFile(
   try {
     await fs.mkdir(pm.dirname(r.absolutePath), { recursive: true });
     await fs.writeFile(r.absolutePath, bytes, { flag: "wx" });
+  } catch (err) {
+    return { error: mapFsError(err as NodeJS.ErrnoException, "file") };
+  }
+  const stat = await fs.stat(r.absolutePath);
+  return { revision: revisionOfBytes(bytes, stat.mtimeMs) };
+}
+
+/** Import raw bytes (pasted/dropped attachments): validate + confine +
+ * mkdir parents + exclusive write + fsync + revision. No encoding, no
+ * newline normalization — bytes land exactly as supplied. The `wx` flag
+ * keeps the no-clobber contract: a raced name fails ALREADY_EXISTS with
+ * nothing overwritten, and the renderer picks the next `name 1.ext`. */
+export async function writeBinaryFile(
+  root: string,
+  kind: WorkspaceKind,
+  relativePath: string,
+  bytes: Buffer,
+): Promise<{ revision: FileRevision } | { error: AppError }> {
+  const v = validateNativeRel(kind, relativePath);
+  if ("error" in v) return v;
+  const r = await resolveInsideRoot(root, kind, v.relativePath);
+  if ("error" in r) return r;
+  if (bytes.length > MAX_IMPORT_BYTES) {
+    return { error: appError("TOO_LARGE", "This file is too large to import (over 100 MiB).") };
+  }
+  const pm = pathModuleFor(kind);
+  try {
+    await fs.mkdir(pm.dirname(r.absolutePath), { recursive: true });
+    await fs.writeFile(r.absolutePath, bytes, { flag: "wx" });
+    const fh = await fs.open(r.absolutePath, "r");
+    try {
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
   } catch (err) {
     return { error: mapFsError(err as NodeJS.ErrnoException, "file") };
   }

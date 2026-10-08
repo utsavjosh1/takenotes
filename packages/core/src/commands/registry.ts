@@ -45,7 +45,13 @@ export type CommandId =
   | "template.insert"
   | "task.new"
   | "today.open"
-  | "calendar.open";
+  | "calendar.open"
+  | "tags.open"
+  | "properties.open"
+  | "collections.open"
+  | "graph.open"
+  | "canvas.new"
+  | "file.import";
 
 export type CommandDefinition = {
   id: CommandId;
@@ -123,6 +129,12 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "task.new", title: "New task", category: "Tasks", scope: "workspace" },
   { id: "today.open", title: "Today", category: "View", scope: "workspace" },
   { id: "calendar.open", title: "Calendar", category: "View", scope: "workspace" },
+  { id: "tags.open", title: "Tags", category: "View", scope: "workspace" },
+  { id: "properties.open", title: "Properties", category: "View", scope: "workspace" },
+  { id: "collections.open", title: "Collections", category: "View", scope: "workspace" },
+  { id: "graph.open", title: "Graph", category: "View", scope: "workspace" },
+  { id: "canvas.new", title: "New Canvas", category: "Note", scope: "workspace" },
+  { id: "file.import", title: "Import Notes…", category: "File", scope: "workspace" },
 ];
 
 export function commandDefinition(id: CommandId): CommandDefinition {

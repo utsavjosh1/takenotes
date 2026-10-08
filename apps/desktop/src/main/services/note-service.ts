@@ -254,6 +254,18 @@ export class NoteService {
     }
   }
 
+  /** Raw-byte attachment import (Step 4). Native workspaces write through
+   * the adapter's exclusive no-clobber path; WSL workspaces honestly
+   * refuse — the helper protocol is string-based (maintenance-only until
+   * the note-taking app ships), so binary import waits with the rest of
+   * WSL. The renderer surfaces the message verbatim. */
+  async importBinary(workspaceId: string, relativePath: string, bytes: Buffer): Promise<{ revision: FileRevision } | { error: AppError }> {
+    const r = this.resolve(workspaceId);
+    if ("error" in r) return r;
+    if (r.kind === "native") return this.deps.native.importBinary(r.root, r.type, relativePath, bytes);
+    return { error: appError("INVALID_REQUEST", "Attachment import is not available for WSL workspaces yet.") };
+  }
+
   async renamePath(workspaceId: string, oldPath: string, newPath: string, options?: { autoUpdateLinks?: boolean }): Promise<{ ok: true; linksFailed?: string[] } | { error: AppError }> {
     const r = this.resolve(workspaceId);
     if ("error" in r) return r;

@@ -94,14 +94,21 @@ export function CommandMenu({
           placeholder={mode === "quickOpen" ? "Type a note name…" : "> Type a command…"}
           value={query}
           aria-label={mode === "quickOpen" ? "Quick open" : "Command palette"}
+          role="combobox"
+          aria-expanded={count > 0}
+          aria-controls="cmd-listbox"
+          aria-activedescendant={count > 0 ? `cmd-opt-${Math.min(index, count - 1)}` : undefined}
+          aria-autocomplete="list"
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") { e.preventDefault(); setIndex((i) => Math.min(i + 1, Math.max(0, count - 1))); }
             else if (e.key === "ArrowUp") { e.preventDefault(); setIndex((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Home") { e.preventDefault(); setIndex(0); }
+            else if (e.key === "End") { e.preventDefault(); setIndex(Math.max(0, count - 1)); }
             else if (e.key === "Enter") { e.preventDefault(); commit({ shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey }); }
           }}
         />
-        <div className="cmd-list" role="listbox">
+        <div className="cmd-list" role="listbox" id="cmd-listbox" aria-label={mode === "quickOpen" ? "Matching notes" : "Matching commands"}>
           {mode === "quickOpen" && query.trim() === "" && <div className="cmd-section">Recent</div>}
           {mode === "quickOpen" &&
             (quickItems.length === 0 ? (
@@ -110,6 +117,7 @@ export function CommandMenu({
               quickItems.map((it, i) => (
                 <div
                   key={`${it.workspaceId}:${it.relativePath}`}
+                  id={`cmd-opt-${i}`}
                   role="option"
                   aria-selected={i === index}
                   className={`cmd-item${i === index ? " selected" : ""}`}
@@ -132,8 +140,10 @@ export function CommandMenu({
               cmdItems.map((c, i) => (
                 <div
                   key={c.id}
+                  id={`cmd-opt-${i}`}
                   role="option"
                   aria-selected={i === index}
+                  aria-disabled={c.enabled === false}
                   className={`cmd-item${i === index ? " selected" : ""}${c.enabled === false ? " disabled" : ""}`}
                   onMouseEnter={() => setIndex(i)}
                   onClick={() => { if (c.enabled !== false) { c.run(); onClose(); } }}

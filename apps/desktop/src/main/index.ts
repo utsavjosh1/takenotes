@@ -23,6 +23,7 @@ try {
 }
 import { currentDesktopPlatform } from "@takenotes/platform/platform";
 import { shouldQuitOnAllWindowsClosed } from "@takenotes/platform/window";
+import { deliverUri, extractUriArg, registerUriProtocol } from "./uri/handler.js";
 import { installAppMenu } from "./platform/menus.js";
 import type { CommandId } from "@takenotes/core/commands/registry";
 
@@ -60,7 +61,14 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, argv) => {
+    // Protocol launch (Windows/Linux): a takenotes:// URL arrives in argv.
+    // A plain second launch just focuses (URI delivery focuses itself).
+    const uri = extractUriArg(argv);
+    if (uri) {
+      deliverUri(uri);
+      return;
+    }
     const win = BrowserWindow.getAllWindows()[0];
     if (win) {
       if (win.isMinimized()) win.restore();
@@ -68,7 +76,20 @@ if (!gotLock) {
     }
   });
 
+  // macOS protocol launch: URLs arrive here, not in argv.
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    deliverUri(url);
+  });
+
   void app.whenReady().then(() => {
+    // First-instance protocol launch (Windows/Linux): the URL sits in the
+    // startup argv. Defer past window creation so delivery finds a window.
+    const startupUri = extractUriArg(process.argv);
+    if (startupUri) {
+      setTimeout(() => deliverUri(startupUri), 1500);
+    }
+    registerUriProtocol();
     try {
       installAppMenu(currentDesktopPlatform(), dispatchCommandToFocused);
     } catch (err) {

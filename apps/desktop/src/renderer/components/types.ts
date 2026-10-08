@@ -40,9 +40,23 @@ export type Settings = {
   livePreview: boolean;
   /** `[[` insertion style. Shortest is the default. */
   linkFormat: LinkFormat;
+  /** Write new links as `[[wikilinks]]`. Off writes `[label](path.md)`
+   * Markdown links instead (file links only — `#heading`/`#^block`
+   * refinements stay `[[…]]`). Reading/following either form always works. */
+  useWikilinks: boolean;
   /** Rewrite `[[links]]` after renames. Off prompts for rename-only. */
   autoUpdateLinks: boolean;
   confirmTrash: boolean;
+  /** Step 9: accent family for links/focus/selection. */
+  accent: "violet" | "blue" | "graphite";
+  /** Step 9: editor body face (UI chrome stays OS-native system sans). */
+  editorFont: "system" | "serif" | "mono";
+  /** Step 9: whole-app zoom factor (View → Zoom In/Out/Actual Size). */
+  zoomLevel: number;
+  /** Step 9: inline note-title row above the editor. */
+  inlineTitle: boolean;
+  /** Step 9: window frame (`native` = OS title bar everywhere, restart to apply). */
+  frameStyle: "auto" | "native";
   /** Opt-in WSL workspaces. Gated on platform WSL support; off → plain notetaking app. */
   wslEnabled: boolean;
   /** Step 2: activity-rail visibility. Off hides the ribbon; palette stays available. */
@@ -51,6 +65,14 @@ export type Settings = {
   templateFolder: string;
   /** Where the New-task command appends: today's Daily Note or Inbox.md. */
   taskCaptureTarget: "daily" | "inbox";
+  /** Default location for imported attachments: workspace root, the
+   * note's folder, a subfolder under it, or the configured folder. */
+  attachmentLocation: "root" | "same-folder" | "subfolder" | "folder";
+  /** Folder for `folder` mode (root-relative) and the subfolder name for
+   * `subfolder` mode. Defaults to `attachments`. */
+  attachmentFolder: string;
+  /** Unsupported file kinds: import + link them, or skip with a toast. */
+  attachmentUnsupported: "link" | "skip";
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -63,12 +85,21 @@ export const DEFAULT_SETTINGS: Settings = {
   lineNumbers: false,
   livePreview: true,
   linkFormat: "shortest",
+  useWikilinks: true,
   autoUpdateLinks: true,
   confirmTrash: false,
+  accent: "violet",
+  editorFont: "system",
+  zoomLevel: 1,
+  inlineTitle: true,
+  frameStyle: "auto",
   wslEnabled: false,
   ribbonVisible: true,
   templateFolder: "Templates",
   taskCaptureTarget: "daily",
+  attachmentLocation: "subfolder",
+  attachmentFolder: "attachments",
+  attachmentUnsupported: "link",
 };
 
 export type AppSnapshot = {

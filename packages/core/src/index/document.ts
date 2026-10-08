@@ -1,5 +1,6 @@
 import { parse as parseYaml } from "yaml";
 import type { FileRevision } from "@takenotes/contracts/ipc";
+import { isAttachmentTarget, parseEmbedFragment, parseEmbedSize } from "../links/embed-params";
 
 /** Parse-once document index entries (P1-07, ADR-0008/ADR-0010).
  *
@@ -35,6 +36,14 @@ export type IndexLink = {
   resolved: false;
 };
 
+export type IndexBlock = {
+  /** Trailing `^id` (`latin-numbers-dashes`) on any body line. The index
+   * preserves existing IDs only — it never assigns them (Step 3 freeze). */
+  id: string;
+  /** 1-based file line. */
+  line: number;
+};
+
 export type IndexTask = {
   description: string;
   completed: boolean;
@@ -48,6 +57,26 @@ export type IndexTask = {
   scheduled?: string;
   priority?: string;
 };
+
+/** Source line behind a 1-based file line, for backlink/outgoing context
+ * rows. Derived from `searchableText` by replicating its construction
+ * (title + aliases + headings + tags + body) — the prefix line count is
+ * computed from the same pieces, so embedded newlines in odd frontmatter
+ * cannot skew the offset. Returns null when the line is out of range.
+ * Trimmed and truncated; never throws. */
+export function bodyLinePreview(entry: DocumentIndexEntry, fileLine: number, maxLen = 120): string | null {
+  if (!Number.isInteger(fileLine) || fileLine < 1) return null;
+  const head = entry.title === undefined ? [] : [entry.title];
+  const prefix = [...head, ...entry.aliases, ...entry.headings.map((h) => h.text), ...entry.tags].join("\n");
+  const prefixLines = prefix.split("\n").length;
+  const idx = prefixLines + (fileLine - entry.bodyStartLine);
+  const lines = entry.searchableText.split("\n");
+  const raw = idx >= 0 && idx < lines.length ? lines[idx] : undefined;
+  if (raw === undefined) return null;
+  const t = raw.trim();
+  if (!t) return null;
+  return t.length > maxLen ? `${t.slice(0, maxLen - 1)}…` : t;
+}
 
 export type DocumentIndexEntry = {
   workspaceId: string;
@@ -74,6 +103,9 @@ export type DocumentIndexEntry = {
   headings: IndexHeading[];
   links: IndexLink[];
   tasks: IndexTask[];
+  /** Trailing `^id` block definitions in source order (task anchors live
+   * on `tasks[].anchor`; general `^id` lines land here). */
+  blocks: IndexBlock[];
   /** Title + aliases + headings + tags + body (frontmatter excluded). */
   searchableText: string;
   /** 1-based file line where the body begins (after frontmatter; 1 when
@@ -275,6 +307,7 @@ export function parseDocument(
   const headings: IndexHeading[] = [];
   const links: IndexLink[] = [];
   const tasks: IndexTask[] = [];
+  const blocks: IndexBlock[] = [];
   const anchorCounts = new Map<string, number>();
   let inFence = false;
 
@@ -287,7 +320,14 @@ export function parseDocument(
     }
     if (inFence) continue;
 
-    const hm = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    // Trailing `^id` is a block definition on any line kind: strip it
+    // before heading/task parsing so `# Title ^blk` keeps clean text.
+    // Task anchors stay on the task; every other line lands in `blocks`.
+    let blockLine = line;
+    const bm = ANCHOR_RE.exec(line);
+    if (bm) blockLine = line.slice(0, bm.index);
+
+    const hm = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(blockLine);
     if (hm) {
       const text = hm[2]!.trim();
       if (text) {
@@ -302,13 +342,22 @@ export function parseDocument(
     for (const s of spans) {
       const bar = s.inner.indexOf("|");
       const targetPart = (bar < 0 ? s.inner : s.inner.slice(0, bar)).trim();
-      const alias = bar < 0 ? undefined : s.inner.slice(bar + 1).trim() || undefined;
+      const aliasRaw = bar < 0 ? undefined : s.inner.slice(bar + 1).trim() || undefined;
+      // Embed display params are presentational, never index data: a
+      // `|100x145` slot on an *attachment* embed is dimensions (not an
+      // alias), and a `#page=N`/`#height=` fragment is viewer params (not
+      // a heading). Note embeds keep numeric aliases (`![[Note|100]]`),
+      // and plain links keep legacy classification entirely.
       const hash = targetPart.indexOf("#");
       const target = (hash < 0 ? targetPart : targetPart.slice(0, hash)).trim();
       const afterHash = hash < 0 ? undefined : targetPart.slice(hash + 1).trim();
       if (!target) continue;
+      const alias =
+        s.embed && isAttachmentTarget(target) && parseEmbedSize(aliasRaw) !== null ? undefined : aliasRaw;
       const blockAnchor = afterHash?.startsWith("^") ? afterHash.slice(1).trim() || undefined : undefined;
-      const heading = blockAnchor !== undefined || afterHash === undefined || afterHash === "" ? undefined : afterHash;
+      const fragmentParams = s.embed && blockAnchor === undefined ? parseEmbedFragment(afterHash) : null;
+      const heading =
+        blockAnchor !== undefined || afterHash === undefined || afterHash === "" || fragmentParams !== null ? undefined : afterHash;
       links.push({
         target,
         ...(alias === undefined ? {} : { alias }),
@@ -322,10 +371,15 @@ export function parseDocument(
 
     for (const t of inlineTags(line, spans)) pushTag(t);
 
-    const task = parseTaskLine(line, lineNo);
+    const task = parseTaskLine(blockLine, lineNo);
     if (task) {
+      // A task's own trailing `^anchor` rides on the task; re-attaching
+      // the stripped suffix keeps `description` clean either way.
+      if (bm && task.anchor === undefined) task.anchor = bm[1];
       tasks.push(task);
       for (const t of task.tags) pushTag(t);
+    } else if (bm) {
+      blocks.push({ id: bm[1]!, line: lineNo });
     }
   }
 
@@ -363,6 +417,7 @@ export function parseDocument(
     headings,
     links,
     tasks,
+    blocks,
     searchableText,
   };
 }

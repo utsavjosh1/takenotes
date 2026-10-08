@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RecoverySnapshotMeta, WorkspaceInfo } from "@takenotes/contracts/ipc";
-import { workspaceIndex } from "../index/workspace-index";
+import { syncFileIndex, workspaceIndex } from "../index/workspace-index";
 import { fileName, joinRel, parentDir } from "../components/types";
 import {
   activateDoc,
@@ -260,7 +260,7 @@ export function useDocuments(
     });
     // File changed → replace exactly this index entry (content + the
     // authoritative post-write revision: zero extra reads).
-    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res.result);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, target.relativePath, target.content, res.result);
     bumpIndex();
     // The file now holds the truth: the recovery draft is obsolete.
     setRecovery((p) => {
@@ -315,7 +315,7 @@ export function useDocuments(
       });
       errToast(res.error, "Couldn't reload from disk"); return; }
     setLayout((l) => resolveDoc(l, target.key, res.result.content, res.result.revision.hash));
-    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, res.result.content, res.result.revision);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, target.relativePath, res.result.content, res.result.revision);
     bumpIndex();
   }, [workspace, layout, errToast, bumpIndex]);
 
@@ -331,7 +331,7 @@ export function useDocuments(
       bumpIndex();
       return;
     }
-    workspaceIndex.upsert(workspace.workspaceId, relativePath, res.result.content, res.result.revision);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, relativePath, res.result.content, res.result.revision);
     bumpIndex();
     if (!target) return;
     if (target.dirty) {
@@ -362,7 +362,7 @@ export function useDocuments(
       return cur && cur.content !== target.content ? updateDocContent(saved, target.key, cur.content) : saved;
     });
     // Conflict resolved by overwrite: the file changed → re-parse it.
-    workspaceIndex.upsert(workspace.workspaceId, target.relativePath, target.content, res2.result);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, target.relativePath, target.content, res2.result);
     bumpIndex();
   }, [workspace, layout, errToast, bumpIndex]);
 
@@ -555,7 +555,7 @@ export function useDocuments(
       return;
     }
     setLayout((l) => resolveDoc(l, doc.key, res.result.content, res.result.revision.hash));
-    workspaceIndex.upsert(workspace.workspaceId, doc.relativePath, res.result.content, res.result.revision);
+    syncFileIndex(workspaceIndex, workspace.workspaceId, doc.relativePath, res.result.content, res.result.revision);
     bumpIndex();
     safeDraftClear(workspace.workspaceId, doc.relativePath);
     setRecovery((p) => {

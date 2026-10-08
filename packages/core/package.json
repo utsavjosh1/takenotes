@@ -10,6 +10,9 @@
     "yaml": "2.9.1"
   },
   "exports": {
+    "./attachments/import": "./src/attachments/import.ts",
+    "./collections/evaluate": "./src/collections/evaluate.ts",
+    "./collections/store": "./src/collections/store.ts",
     "./commands/hotkeys": "./src/commands/hotkeys.ts",
     "./commands/palette": "./src/commands/palette.ts",
     "./commands/registry": "./src/commands/registry.ts",
@@ -22,6 +25,7 @@
     "./index/store": "./src/index/store.ts",
     "./links/backlinks": "./src/links/backlinks.ts",
     "./links/completion": "./src/links/completion.ts",
+    "./links/embed-params": "./src/links/embed-params.ts",
     "./markdown/render": "./src/markdown/render.ts",
     "./policy/note-policy": "./src/policy/note-policy.ts",
     "./ports/host-filesystem": "./src/ports/host-filesystem.ts",
@@ -32,7 +36,19 @@
     "./productivity/calendar": "./src/productivity/calendar.ts",
     "./search/query": "./src/search/query.ts",
     "./search/search": "./src/search/search.ts",
+    "./properties/summary": "./src/properties/summary.ts",
     "./services/note-service": "./src/services/note-service.ts",
+    "./tags/tree": "./src/tags/tree.ts",
+    "./graph/model": "./src/graph/model.ts",
+    "./canvas/model": "./src/canvas/model.ts",
+    "./mcp/activity": "./src/mcp/activity.ts",
+    "./mcp/dispatch": "./src/mcp/dispatch.ts",
+    "./mcp/grants": "./src/mcp/grants.ts",
+    "./mcp/tools": "./src/mcp/tools.ts",
+    "./mcp/transport": "./src/mcp/transport.ts",
+    "./uri/parse": "./src/uri/parse.ts",
+    "./import/html": "./src/import/html.ts",
+    "./import/plan": "./src/import/plan.ts",
     "./validation/schemas": "./src/validation/schemas.ts"
   }
 }

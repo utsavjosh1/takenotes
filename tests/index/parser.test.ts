@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDocument } from "@takenotes/core/index/document";
+import { bodyLinePreview, parseDocument } from "@takenotes/core/index/document";
 
 function parse(body: string, rel = "note.md") {
   return parseDocument("ws1", rel, body, { hash: "h", size: body.length, mtimeMs: 1 });
@@ -131,6 +131,29 @@ describe("links", () => {
     expect(e.links[0]).toMatchObject({ target: "Note", blockAnchor: "blk1", resolved: false });
     expect(e.links[0]!.heading).toBeUndefined();
   });
+
+  it("embed display params never pollute alias/heading classification", () => {
+    const e = parse("![[image.png|100x145]]\n![[doc.pdf#page=2]]\n![[doc.pdf#height=400]]\n![[Note#^blk]]\n");
+    expect(e.links).toMatchObject([
+      { target: "image.png", embed: true, line: 1 },
+      { target: "doc.pdf", embed: true, line: 2 },
+      { target: "doc.pdf", embed: true, line: 3 },
+      { target: "Note", blockAnchor: "blk", embed: true, line: 4 },
+    ]);
+    for (const l of e.links) {
+      expect(l.alias).toBeUndefined();
+      expect(l.heading).toBeUndefined();
+    }
+  });
+
+  it("note embeds and plain links keep numeric aliases and pdf fragments", () => {
+    const e = parse("![[Note|100]]\n[[Note|100]]\n[[doc.pdf#page=2]]\n");
+    expect(e.links).toMatchObject([
+      { target: "Note", alias: "100", embed: true, line: 1 },
+      { target: "Note", alias: "100", embed: false, line: 2 },
+      { target: "doc.pdf", heading: "page=2", embed: false, line: 3 },
+    ]);
+  });
 });
 
 describe("tasks", () => {
@@ -176,5 +199,25 @@ describe("dates are explicit only", () => {
   it("invalid calendar dates are ignored, not indexed", () => {
     const e = parse("---\ndue: 2026-13-40\n---\n");
     expect(e.dates).toEqual({});
+  });
+});
+
+describe("bodyLinePreview (pane context lines)", () => {
+  it("maps file lines through the searchableText prefix", () => {
+    const e = parse("---\ntags: [x]\n---\n# T\nBody here\n");
+    expect(bodyLinePreview(e, 4)).toBe("# T");
+    expect(bodyLinePreview(e, 5)).toBe("Body here");
+  });
+
+  it("returns null out of range and for blank lines", () => {
+    const e = parse("# T\n\nBody\n");
+    expect(bodyLinePreview(e, 0)).toBeNull();
+    expect(bodyLinePreview(e, 99)).toBeNull();
+    expect(bodyLinePreview(e, 2)).toBeNull();
+  });
+
+  it("truncates long lines with an ellipsis", () => {
+    const e = parse(`${"x".repeat(200)}\n`);
+    expect(bodyLinePreview(e, 1)).toBe(`${"x".repeat(119)}…`);
   });
 });
