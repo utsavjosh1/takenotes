@@ -231,21 +231,75 @@ Typecheck and lint clean. Full suite after 7e: 103 files passed, 3 skipped;
   `process.platform === "win32" && TAKENOTES_LIVE_WSL === "1"` and skip
   here by design.
 
-## Live gate — BLOCKED (needs real Windows 11 + WSL2 host)
+## Slice 7f — Live-suite refresh + host runbook (this slice, no prod change)
 
-Prerequisites: Windows 11 + WSL2, Ubuntu with Linux users A+B (distinct
-HOMEs, one `chmod 700` private dir), second distro (e.g. Debian) left
-Stopped. Record `winver`, `wsl --version`, `wsl -l -v` before/after,
-`cat /etc/os-release`, `id A`, `id B`.
+- `tests/wsl/mutations.windows.test.ts` was a placeholder (`whoami`
+  non-empty only) — replaced with the real CLI-level ground-truth matrix
+  (`wsl.exe` only, no Electron, no staged runtime): `-u` identity +
+  unprivileged uid per user, per-user `~` matching passwd homes, and the
+  700-private tree with a positive control (owner reads `secret`, other
+  user denied — the EACCES the helper maps to `PERMISSION_DENIED`).
+  Two-user provisioning is fail-loud: fewer than two non-root interactive
+  users fails with the runbook pointer, never a silent pass.
+- Stale evidence pointers fixed: all three live suites referenced
+  `docs/mvp-status.md`; the gate record is this file.
+- `distro-list` (list-twice no-autostart) and `users-list` (live passwd +
+  filter) suites re-verified current — no API drift.
+
+## Verification performed here (7f)
+
+```bash
+npx vitest run tests/wsl/
+npm run typecheck
+npm run lint -- --quiet
+```
+
+Results: 7 files passed, 3 live suites skipped by design (gated on
+`process.platform === "win32" && TAKENOTES_LIVE_WSL === "1"`); 53 passed,
+6 skipped. Typecheck and lint clean.
+
+## Live gate — BLOCKED (host runbook, needs real Windows 11 + WSL2 host)
+
+### Provision (one-time, on the host)
+
+```powershell
+# Distros: Ubuntu (primary) + Debian left Stopped.
+wsl --install -d Ubuntu
+wsl --install -d Debian
+wsl --terminate Debian
+
+# Two non-root interactive users in Ubuntu (runbook names; tests discover
+# the first two uid>=1000 users generically, so any two names work).
+wsl -d Ubuntu --exec bash -lc "sudo useradd -m wslA 2>/dev/null; sudo useradd -m wslB 2>/dev/null; id wslA; id wslB"
+
+# Repo + deps.
+git clone <repo>; cd takenote; npm ci
+```
+
+### Automated evidence (PowerShell, repo root)
 
 ```powershell
 $env:TAKENOTES_LIVE_WSL="1"; npx vitest run tests/wsl/
-npx vitest run tests/filesystem/directories.test.ts
+npx vitest run tests/filesystem/directories.test.ts  # windows-local suite
 ```
 
-Checklist (all BLOCKED here): list-without-start (stopped distro stays
-stopped), open-as-A vs open-as-B distinct IDs, per-user `~`, 700-home
-`PERMISSION_DENIED` demo, create/rename/move/delete + folders on WSL,
-two-actor `expectedRevision` CONFLICT, recovery list/restore/copy on WSL,
-search V1+ operators over WSL index, second-distro connect, honest
-permanent-delete labels. Until then: WSL milestone stays open.
+Expected: distro list-twice identical with Debian `Stopped` throughout;
+`-u wslA/wslB` whoami match; distinct `$HOME`s matching passwd; 700 probe
+owner-reads/other-denied with cleanup. Any failure pastes the runbook
+pointer from the assertion — provision, don't edit around it.
+
+### Capture with the evidence (paste into this file on the run)
+
+`winver`, `wsl --version`, `wsl -l -v` before AND after the picker run,
+`cat /etc/os-release`, `id wslA`, `id wslB`, full vitest output.
+
+### App-level manual checklist (packaged app, all BLOCKED here)
+
+Open WSL folder via the picker (distro → users with default preselected →
+path → Connect): open-as-A vs open-as-B yield distinct workspace IDs and
+status-strip identities; per-user `~` lands in each home; browsing the
+other user's 700 home shows the friendly denial hint (7c); create/rename/
+move/delete + folders; two-actor `expectedRevision` CONFLICT banner;
+recovery list/restore/copy; search V1+ operators; second-distro connect;
+honest `Permanently delete` labels (never OS-trash wording). Until then:
+WSL milestone stays open.
