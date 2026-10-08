@@ -206,7 +206,8 @@ npm run lint -- --quiet
 ```
 
 Results: 24 files passed, 3 windows-gated skipped; 161 passed, 4 skipped.
-Typecheck and lint clean. Live gate still BLOCKED (see below).
+Typecheck and lint clean. Full suite after 7e: 103 files passed, 3 skipped;
+1159 passed, 6 skipped — zero failures. Live gate still BLOCKED (see below).
 
 ## Known gaps / candidates for 7c+ (not changed in 7b)
 
