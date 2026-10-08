@@ -346,7 +346,11 @@ export async function writeBinaryFile(
   try {
     await fs.mkdir(pm.dirname(r.absolutePath), { recursive: true });
     await fs.writeFile(r.absolutePath, bytes, { flag: "wx" });
-    const fh = await fs.open(r.absolutePath, "r");
+    // Writable handle: fsync on a read-only ("r") handle fails EPERM on
+    // Windows (FlushFileBuffers needs write access) and surfaces as a
+    // bogus PERMISSION_DENIED after a successful write. "r+" opens
+    // read-write without truncating, matching writeTextFile above.
+    const fh = await fs.open(r.absolutePath, "r+");
     try {
       await fh.sync();
     } finally {

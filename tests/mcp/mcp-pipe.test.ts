@@ -46,10 +46,19 @@ function readFrames(socket: Socket): { frames: unknown[]; done: Promise<void> } 
   return { frames, done };
 }
 
+function testSocketPath(dir: string, tag: string): string {
+  // Windows has no unix-socket files: server.listen(fsPath) fails EACCES.
+  // Production already uses a named pipe there (mcpSocketPath); the test
+  // must do the same when injecting an explicit path. Unique per test so
+  // parallel workers never share a pipe.
+  if (process.platform === "win32") return `\\\\.\\pipe\\takenotes-test-${process.pid}-${tag}`;
+  return join(dir, "mcp.sock");
+}
+
 describe("mcp pipe transport", () => {
   it("round-trips a granted call over frames, then denies cleanly", async () => {
     const dir = mkdtempSync(join(tmpdir(), "takenotes-mcppipe-"));
-    const socketPath = join(dir, "mcp.sock");
+    const socketPath = testSocketPath(dir, "roundtrip");
     const grants = emptyGrantStore();
     grantAccess(grants, "codex", "w1", 5);
     const log = emptyActivityLog();
@@ -83,7 +92,7 @@ describe("mcp pipe transport", () => {
 
   it("destroys the connection on an oversized frame", async () => {
     const dir = mkdtempSync(join(tmpdir(), "takenotes-mcppipe-"));
-    const socketPath = join(dir, "mcp.sock");
+    const socketPath = testSocketPath(dir, "oversized");
     const server = await startMcpPipeServer({ socketPath, ports: fakePorts(), grants: emptyGrantStore() });
     try {
       const socket = connect(socketPath);

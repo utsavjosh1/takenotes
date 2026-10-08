@@ -10,7 +10,7 @@
  * must never appear on this boundary (ADR-0012, no HTTP).
  */
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { posix } from "node:path";
 
 export const MCP_PIPE_NAME = "takenotes-mcp";
 
@@ -25,7 +25,11 @@ export function mcpSocketPath(
   if (platform === "win32") return `\\\\.\\pipe\\${MCP_PIPE_NAME}`;
   const runtime = envRuntimeDir?.trim() ?? "";
   const dir = runtime.startsWith("/") ? runtime : tmp;
-  return join(dir, `${MCP_PIPE_NAME}-${uid}.sock`);
+  // POSIX-only join: the non-win32 branch always yields a POSIX socket
+  // path (XDG_RUNTIME_DIR or tmp on linux/darwin). The platform `join`
+  // would emit backslashes when tests pin platform="linux" on a Windows
+  // host, breaking the IPC-only contract the sidecar test pins.
+  return posix.join(dir, `${MCP_PIPE_NAME}-${uid}.sock`);
 }
 
 /** One sidecar → app call. `clientId` is the MCP client's self-reported
