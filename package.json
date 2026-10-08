@@ -40,7 +40,8 @@
     "dev:web": "npm --workspace @takenotes/web run dev",
     "mobile:help": "npm --workspace @takenotes/mobile run help",
     "package:mac": "npm run build && electron-builder --mac dmg --x64 --arm64 --publish never",
-    "package:linux": "npm run build && electron-builder --linux AppImage deb --x64 --publish never"
+    "package:linux": "npm run build && electron-builder --linux AppImage deb --x64 --publish never",
+    "demo:seed": "node tools/scripts/seed-demo-workspace.mjs"
   },
   "devDependencies": {
     "@electron/fuses": "2.1.3",
