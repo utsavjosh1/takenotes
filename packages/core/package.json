@@ -10,6 +10,7 @@
     "yaml": "2.9.1"
   },
   "exports": {
+    "./appearance/appearance": "./src/appearance/appearance.ts",
     "./attachments/import": "./src/attachments/import.ts",
     "./collections/evaluate": "./src/collections/evaluate.ts",
     "./collections/store": "./src/collections/store.ts",
@@ -36,6 +37,7 @@
     "./productivity/calendar": "./src/productivity/calendar.ts",
     "./search/query": "./src/search/query.ts",
     "./search/search": "./src/search/search.ts",
+    "./search/summary": "./src/search/summary.ts",
     "./properties/summary": "./src/properties/summary.ts",
     "./services/note-service": "./src/services/note-service.ts",
     "./tags/tree": "./src/tags/tree.ts",

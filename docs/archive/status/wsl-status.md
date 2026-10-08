@@ -258,7 +258,46 @@ Results: 7 files passed, 3 live suites skipped by design (gated on
 `process.platform === "win32" && TAKENOTES_LIVE_WSL === "1"`); 53 passed,
 6 skipped. Typecheck and lint clean.
 
+## Slice 7g — Host-readiness completion (this slice)
+
+Everything short of a Windows host, executed:
+
+- **Build was broken since the Phase 6 commit — fixed.** The renderer
+  imported `@takenotes/core/appearance/appearance` and
+  `@takenotes/core/search/summary`, but neither was in the package
+  `exports` map (vitest resolves via tsconfig paths, so the suite stayed
+  green while `npm run build` failed). Both exports added; full `npm run
+  build` passes (renderer + electron main + helper + server + mcp) and all
+  five artifacts verified present. The staged `helper.cjs` contains the 7e
+  wire gate.
+- **Full gate green:** `npx vitest run --maxWorkers=4` → 103 files passed,
+  3 skipped; 1159 passed, 8 skipped, 0 failed. Note: unconstrained runs on
+  this loaded box flake (`scale` 10 s budget, handshake spawn timing —
+  each passes in isolation and under constrained workers). The +2 skipped
+  vs 7e are the new `mutations.windows` matrix cases (correctly gated).
+- **Stage 5 pipeline executed for the first time** (open since September):
+  `fetch-wsl-runtime.mjs` downloaded node-v24.19.0-linux-x64 with official
+  SHASUMS256 verification (`14b342e7…4647`), `stage-wsl-runtime.mjs`
+  extracted + copied + wrote `manifest.json` (node `bc17c508…`, helper
+  `8c43ac22…`, runtime `ec60aaf3…`, protocol 1). Artifacts are gitignored
+  release material, not committed.
+- **7e dogfooded on the real stage:** new keeper
+  `tests/wsl/staged-artifacts.test.ts` (runs only when staged bytes exist)
+  proves `verifyStagedRuntime` accepts the genuine manifest and the staged
+  node runs the staged helper with a verified handshake — 2/2 green.
+- **Linux app smoke passes** (`tools/scripts/smoke-linux.mjs` under WSLg):
+  window boots, React mounts, narrow bridge intact, no Node leaks, zero
+  console errors. Fixed one stale assertion (bridge keys predate Step 8's
+  `import` + `mcp`).
+- `version:check` OK (0.0.9). `typecheck`, `lint`, `ui:tokens:check` clean.
+
 ## Live gate — BLOCKED (host runbook, needs real Windows 11 + WSL2 host)
+
+Environment facts, re-probed 2026-10-08: this container is a
+Docker-Desktop-style WSL distro (`/mnt/wsl/docker-desktop*`,
+`WSL_DISTRO_NAME=Ubuntu-24.04`); `/mnt/c` contains only `Users` (no Windows
+system surface); no `wsl.exe`/`powershell.exe` anywhere reachable; WSLg
+sockets exist (display only). Same blocker as P1-11 — nothing here substitutes.
 
 ### Provision (one-time, on the host)
 

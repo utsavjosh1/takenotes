@@ -4,6 +4,14 @@ All notable changes to takenotes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Renderer production build (`npm run build`) broken since the appearance
+  work landed: `@takenotes/core/appearance/appearance` and
+  `@takenotes/core/search/summary` were imported but missing from the
+  package `exports` map (unit tests resolve via tsconfig paths, so the
+  suite stayed green while the build failed). Both exports added.
+
 ### Added
 
 - Appearance controls (Step 9): accent family (violet/blue/graphite), editor font
@@ -17,6 +25,8 @@ All notable changes to takenotes.
 - Measured contrast verification (203-case matrix over the shipped palette),
   12px DOM typography floor, reduced-motion collapse audit, and visible editor
   find-match colors in both themes. No WCAG-cert claim.
+- WSL staging pipeline executed (fetch with official SHA verify + stage with
+  manifest) and Linux app smoke passes; WSL live Windows gate still pending.
 - WSL Connection record (post-MVP, in progress): explicit `{distro,
   linuxUser, status}` store with one-connection-many-workspaces attach/detach
   and `connectionId` on WSL workspaces, friendly connect-error hints

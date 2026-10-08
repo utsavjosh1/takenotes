@@ -88,7 +88,7 @@ console.log(JSON.stringify({ ...checks, consoleErrors: JSON.parse(consoleErrors)
 const pass =
   checks.rootMounted === true &&
   checks.bridgePresent === true &&
-  checks.bridgeKeys === "app,commands,daily,directory,draft,events,file,recovery,shell,update,workspace" &&
+  checks.bridgeKeys === "app,commands,daily,directory,draft,events,file,import,mcp,recovery,shell,update,workspace" &&
   checks.noIpcLeak === true &&
   checks.noRequireLeak === true &&
   checks.noNodeProcessLeak === true;
