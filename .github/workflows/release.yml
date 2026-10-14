@@ -30,7 +30,7 @@ jobs:
       - run: npm run build:helper
       - run: node tools/scripts/fetch-wsl-runtime.mjs
       - run: node tools/scripts/stage-wsl-runtime.mjs
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wsl-runtime
           path: resources/wsl/linux-x64/
@@ -71,7 +71,7 @@ jobs:
         run: npx --no-install @electron/fuses read --app "release/win-unpacked/takenotes.exe"
       # Installers only — the single SHA256SUMS.txt for all OSs is
       # generated in `publish` so one checksum file covers every asset.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-release
           path: |
@@ -110,7 +110,7 @@ jobs:
         run: |
           npx --no-install @electron/fuses read --app "release/mac/takenotes.app"
           npx --no-install @electron/fuses read --app "release/mac-arm64/takenotes.app"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-release
           path: |
@@ -137,7 +137,7 @@ jobs:
       - run: npm run package:linux
       - name: Verify Electron fuses (packaged binary)
         run: npx --no-install @electron/fuses read --app "release/linux-unpacked/takenotes"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ubuntu-release
           path: |
