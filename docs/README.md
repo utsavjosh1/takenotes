@@ -6,6 +6,7 @@ product, architecture, and process documentation.
 ```txt
 docs/
   README.md            ← you are here (index)
+  v2/                  Obsidian rebuild via REA — Pin → Elephant (start at v2/README.md)
   architecture.md      core system design (renderer → main → WSL helper)
   security.md          threat model + filesystem safety rules
   protocol.md          helper IPC / framing contract

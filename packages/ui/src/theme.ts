@@ -30,6 +30,12 @@ export const colors = {
     "highlight-surface": "#ffdf8e",
     // 6e: darkened to hold 3:1 (non-text) on every surface incl. hover.
     scrollbar: "#8a7d63",
+    "graph-1": "#e45649",
+    "graph-2": "#986801",
+    "graph-3": "#50a14f",
+    "graph-4": "#4078f2",
+    "graph-5": "#a626a4",
+    "graph-6": "#0184bc",
   },
   dark: {
     "surface-app": "#151310",
@@ -59,6 +65,12 @@ export const colors = {
     "highlight-surface": "#59451b",
     // 6e: lightened to hold 3:1 (non-text) on every surface incl. hover.
     scrollbar: "#857861",
+    "graph-1": "#e06c75",
+    "graph-2": "#d8a657",
+    "graph-3": "#98c379",
+    "graph-4": "#61afef",
+    "graph-5": "#c678dd",
+    "graph-6": "#56b6c2",
   },
 } as const;
 

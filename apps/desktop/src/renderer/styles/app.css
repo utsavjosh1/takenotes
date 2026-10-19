@@ -372,8 +372,10 @@ input, select, textarea { font: inherit; color: inherit; }
   padding: var(--sp-4) var(--sp-8); border-radius: var(--radius-control);
   font-size: 13px; color: var(--text-secondary); text-align: left; white-space: nowrap;
 }
-button.link-row:hover { background: var(--surface-hover); color: var(--text-primary); }
-button.link-row .label { overflow: hidden; text-overflow: ellipsis; }
+button.link-row:hover, .link-row.clickable:hover { background: var(--surface-hover); color: var(--text-primary); }
+.link-row.clickable { cursor: pointer; }
+.link-row.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.link-row .label { overflow: hidden; text-overflow: ellipsis; }
 .link-row .link-sub { flex: none; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .link-row .link-detail { flex: none; margin-left: auto; font-size: 12px; color: var(--text-muted); }
 .link-row.unresolved { color: var(--text-muted); }
@@ -510,10 +512,10 @@ kbd.k { font-family: var(--font-ui); font-size: 12px; background: var(--surface-
 .tags-pane, .properties-pane, .collections-pane, .graph-pane { display: flex; flex-direction: column; gap: 4px; padding: 8px 0 16px; }
 .graph-pane .graph-depth { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
 .graph-pane .graph-depth input[type="range"] { width: 90px; }
-.graph-group { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-small); padding: 2px 6px; }
+.graph-group { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); padding: 2px 6px; }
 .graph-group button { border: 0; background: transparent; cursor: pointer; color: var(--text-muted); }
 .graph-swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.graph-svg { width: 100%; min-height: 380px; height: 46vh; background: var(--surface-subtle, transparent); border-top: 1px solid var(--border-subtle); touch-action: none; cursor: grab; }
+.graph-svg { width: 100%; min-height: 380px; height: 46vh; background: transparent; border-top: 1px solid var(--border-subtle); touch-action: none; cursor: grab; }
 .graph-svg:active { cursor: grabbing; }
 .g-link { stroke: var(--border-strong, #999); stroke-width: 1.2; color: var(--border-strong, #999); }
 .g-link.dim, .g-node.dim { opacity: 0.2; }
@@ -521,9 +523,9 @@ kbd.k { font-family: var(--font-ui); font-size: 12px; background: var(--surface-
 
 /* ---------- Phase 4 Canvas (Step 7 minimal) ---------- */
 .canvas-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.canvas-svg { flex: 1; min-height: 320px; width: 100%; background: var(--surface-subtle, transparent); border-top: 1px solid var(--border-subtle); touch-action: none; cursor: grab; }
+.canvas-svg { flex: 1; min-height: 320px; width: 100%; background: transparent; border-top: 1px solid var(--border-subtle); touch-action: none; cursor: grab; }
 .canvas-svg:active { cursor: grabbing; }
-.c-card { fill: var(--surface, #fff); stroke: var(--border-strong, #999); stroke-width: 1.2; }
+.c-card { fill: var(--surface-overlay); stroke: var(--border-control); stroke-width: 1.2; }
 .c-group { fill: color-mix(in srgb, var(--accent) 6%, transparent); stroke: var(--border-strong, #999); stroke-width: 1.2; stroke-dasharray: 6 4; }
 .c-group-label { fill: var(--text-secondary); font-size: 12px; }
 .c-node.selected .c-card, .c-node.selected .c-group { stroke: var(--accent); stroke-width: 2.5; }
@@ -545,7 +547,7 @@ kbd.k { font-family: var(--font-ui); font-size: 12px; background: var(--surface-
 .panel-section { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; }
 .panel-section .panel-title { padding: 4px 12px; }
 .pane-hint { padding: 4px 12px; color: var(--text-secondary); font-size: 12px; }
-.seg { display: inline-flex; border: 1px solid var(--border-subtle); border-radius: var(--radius-small); overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); overflow: hidden; }
 .seg button { border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; padding: 4px 10px; cursor: pointer; }
 .seg button.active { background: var(--surface-selected); color: var(--text-primary); }
 button.tag-row, button.prop-row .prop-main { cursor: pointer; }

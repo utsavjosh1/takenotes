@@ -1,4 +1,4 @@
-import { EditorSelection, type EditorState, type Extension } from "@codemirror/state";
+import { EditorSelection, StateField, type EditorState, type Extension } from "@codemirror/state";
 import { RangeSetBuilder } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
@@ -821,16 +821,13 @@ export function buildWysiwygDecorations(view: EditorView, opts?: { livePreview?:
     const pos = state.doc.line(l.line).from;
     ops.push({ from: pos, to: pos, value: Decoration.line({ class: l.cls }) });
   }
-  // Media previews: additive block widgets at end of the source line.
-  // Dims parse from live text (no range-shape change); `eq` covers them
-  // so resizing the params rebuilds the preview.
-  for (const lineNo of ranges.mediaLines) {
-    if (lineNo < 1 || lineNo > state.doc.lines) continue;
-    const line = state.doc.line(lineNo);
-    const src = mediaSrcOnLine(line.text);
-    if (!src) continue;
-    ops.push({ from: line.to, to: line.to, value: Decoration.widget({ widget: new MediaPreviewWidget(src, mediaDimsOnLine(line.text) ?? undefined), side: 1, block: true }) });
-  }
+  // NOTE: media previews (block widgets) intentionally live OUTSIDE this
+  // ViewPlugin. CodeMirror forbids block decorations via plugin-provided
+  // (dynamic) decoration sets — TileUpdate throws "Block decorations may
+  // not be specified via plugins" at EditorView creation (App.tsx:1405
+  // PaneView crash on any note with an image/media line). They are
+  // provided via a StateField below (`mediaPreviewField`), whose RangeSet
+  // value counts as static and may carry block widgets.
   ops.sort((a, b) => a.from - b.from || a.to - b.to);
   const builder = new RangeSetBuilder<Decoration>();
   for (const op of ops) builder.add(op.from, op.to, op.value);
@@ -845,6 +842,39 @@ export function buildWysiwygDecorations(view: EditorView, opts?: { livePreview?:
  * Decoration rebuilds pause during IME composition so the composition
  * session is never disturbed. Pass `{ livePreview: false }` for plain
  * source (the `editor.livePreview` kill-switch). */
+/** State-only media-preview decorations (full doc, no viewport/selection
+ * dependency — previews never hide source so cursor-line reveal skips
+ * them). Provided as a StateField VALUE (not a view function), which is
+ * the only channel CodeMirror allows block widgets through. Rebuilds on
+ * document change only; selection/viewport movement never touches it. */
+export function buildMediaPreviewDecorations(state: EditorState): DecorationSet {
+  const ranges = collectWysiwygRanges(state, 0, state.doc.length);
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const lineNo of ranges.mediaLines) {
+    if (lineNo < 1 || lineNo > state.doc.lines) continue;
+    const line = state.doc.line(lineNo);
+    const src = mediaSrcOnLine(line.text);
+    if (!src) continue;
+    // Dims parse from live text (no range-shape change); `eq` covers
+    // them so resizing the params rebuilds the preview.
+    builder.add(line.to, line.to, Decoration.widget({ widget: new MediaPreviewWidget(src, mediaDimsOnLine(line.text) ?? undefined), side: 1, block: true }));
+  }
+  return builder.finish();
+}
+
+function mediaPreviewField(enabled: boolean): Extension {
+  const field = StateField.define<DecorationSet>({
+    create: (state) => (enabled ? buildMediaPreviewDecorations(state) : Decoration.none),
+    update: (deco, tr) => {
+      if (!enabled) return Decoration.none;
+      if (!tr.docChanged) return deco.map(tr.changes);
+      return buildMediaPreviewDecorations(tr.state);
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  });
+  return field;
+}
+
 export function wysiwyg(opts?: { livePreview?: boolean }): Extension {
   const enabled = opts?.livePreview !== false;
   const plugin = ViewPlugin.fromClass(
@@ -871,5 +901,5 @@ export function wysiwyg(opts?: { livePreview?: boolean }): Extension {
     },
     { decorations: (v) => v.decorations },
   );
-  return [plugin, rawClipboardHandlers()];
+  return [plugin, mediaPreviewField(enabled), rawClipboardHandlers()];
 }

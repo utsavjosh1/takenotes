@@ -1,5 +1,4 @@
 import type { JSX } from "react";
-import { Button } from "@takenotes/ui/dom";
 import { Icon } from "./icons";
 import appMarkUrl from "../assets/brand/takenotes-symbol-violet.svg";
 import type { WorkspaceInfo } from "@takenotes/contracts/ipc";
@@ -11,18 +10,11 @@ import type { PlatformState } from "../hooks/use-platform";
 export function TitleBar({
   workspace,
   platform,
-  wslEnabled,
   onQuickOpen,
-  onOpenWindows,
-  onOpenWsl,
 }: {
   workspace: WorkspaceInfo | null;
   platform: PlatformState;
-  /** Settings opt-in: WSL entry points render only when true (and supported). */
-  wslEnabled: boolean;
   onQuickOpen: () => void;
-  onOpenWindows: () => void;
-  onOpenWsl: () => void;
 }): JSX.Element {
   const quickOpen = platform.shortcutLabel("quickOpen.open");
   return (
@@ -47,14 +39,6 @@ export function TitleBar({
         <span>Quick open…</span>
         <kbd>{quickOpen}</kbd>
       </button>
-      {!workspace && (
-        <span style={{ display: "flex", gap: 8, WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-          <Button onClick={onOpenWindows}>Open folder</Button>
-          {platform.capabilities.wsl && wslEnabled && (
-            <Button onClick={onOpenWsl}>Open WSL folder</Button>
-          )}
-        </span>
-      )}
     </header>
   );
 }
