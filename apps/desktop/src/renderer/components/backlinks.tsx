@@ -107,10 +107,26 @@ function Row({
       </button>
     );
   }
+  // Outer is a div (not a button): unlinked-mention rows carry BOTH onOpen
+  // and onAction, and <button> inside <button> is invalid HTML (React
+  // validateDOMNesting warning). The div keeps button semantics + keyboard
+  // activation; the inner action stays a real button with stopPropagation.
   return (
-    <button className="link-row" onClick={onOpen} title={fullPath ?? sub ?? title}>
+    <div
+      className="link-row clickable"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen?.();
+        }
+      }}
+      title={fullPath ?? sub ?? title}
+    >
       {body}
-    </button>
+    </div>
   );
 }
 

@@ -59,6 +59,12 @@
   --tn-code-surface: #f3ecdd;
   --tn-highlight-surface: #ffdf8e;
   --tn-scrollbar: #8a7d63;
+  --tn-graph-1: #e45649;
+  --tn-graph-2: #986801;
+  --tn-graph-3: #50a14f;
+  --tn-graph-4: #4078f2;
+  --tn-graph-5: #a626a4;
+  --tn-graph-6: #0184bc;
 }
 
 [data-theme="dark"] {
@@ -89,4 +95,10 @@
   --tn-code-surface: #26211a;
   --tn-highlight-surface: #59451b;
   --tn-scrollbar: #857861;
+  --tn-graph-1: #e06c75;
+  --tn-graph-2: #d8a657;
+  --tn-graph-3: #98c379;
+  --tn-graph-4: #61afef;
+  --tn-graph-5: #c678dd;
+  --tn-graph-6: #56b6c2;
 }

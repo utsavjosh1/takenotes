@@ -4,7 +4,9 @@
  * Presentational — bulk rename executes in App (file writes + index
  * upserts), this pane only collects the target name.
  */
-import { useMemo, useState, type JSX } from "react";
+import { useMemo, useRef, useState, type JSX } from "react";
+import { moveRovingIndex } from "@takenotes/ui";
+import { EmptyState } from "@takenotes/ui/dom";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import { cellDisplay } from "@takenotes/core/collections/evaluate";
 import {
@@ -43,12 +45,24 @@ export function PropertiesPane({
   const [sort, setSort] = useState<PropertySort>("name");
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  // One roving Tab stop per section (search/tags pattern): arrows/Home/End
+  // walk the section's buttons in order — main + rename alike. Rename
+  // inputs keep native keys (same INPUT guard as the file tree).
+  const fileRef = useRef<HTMLDivElement>(null);
+  const allRef = useRef<HTMLDivElement>(null);
+  const [fileFocused, setFileFocused] = useState(0);
+  const [allFocused, setAllFocused] = useState(0);
 
   const summaries = useMemo(
     () => sortPropertySummaries(summarizeProperties(entries ?? [], registry), sort),
     [entries, registry, sort],
   );
   const activeRows = useMemo(() => (activeEntry ? frontmatterRows(activeEntry) : null), [activeEntry]);
+  // While a rename input is open the row loses its rename button, so the
+  // static index map drifts from DOM order: fall back to native Tab order
+  // (arrows still walk the live DOM via the query below).
+  const allRoving = renamingKey === null;
+  const allAt = Math.min(allFocused, summaries.length * 2 - 1);
 
   const commitRename = (): void => {
     if (!renamingKey) return;
@@ -65,23 +79,38 @@ export function PropertiesPane({
       <div className="panel-section">
         <p className="panel-title">File properties</p>
         {activeRows === null ? (
-          <p className="pane-hint">No active note.</p>
+          <EmptyState title="No active note" description="Open a note to see its properties." />
         ) : activeRows.length === 0 ? (
-          <p className="pane-hint">No properties in this note.</p>
+          <EmptyState title="No properties in this note" description="Frontmatter properties you add here show up automatically." />
         ) : (
-          activeRows.map((r) => (
-            <button
-              key={r.name}
-              className="tree-row prop-row"
-              style={{ paddingLeft: 12 }}
-              title={`Search [${r.name}]`}
-              onClick={() => runSearch(propertySearchQuery(r.name))}
-            >
-              <span className="prop-name">{r.name}</span>
-              <span className="prop-type">{resolvePropertyType(registry, r.name)}</span>
-              <span className="prop-value">{r.display || "—"}</span>
-            </button>
-          ))
+          <div
+            ref={fileRef}
+            onKeyDown={(e) => {
+              const at = Math.min(fileFocused, activeRows.length - 1);
+              const next = moveRovingIndex(at, activeRows.length, e.key, "vertical");
+              if (next === null) return;
+              e.preventDefault();
+              setFileFocused(next);
+              fileRef.current?.querySelector<HTMLElement>(`[data-prop-idx="${next}"]`)?.focus();
+            }}
+          >
+            {activeRows.map((r, i) => (
+              <button
+                key={r.name}
+                className="tree-row prop-row"
+                style={{ paddingLeft: 12 }}
+                data-prop-idx={i}
+                tabIndex={i === Math.min(fileFocused, activeRows.length - 1) ? 0 : -1}
+                onFocus={() => setFileFocused(i)}
+                title={`Search [${r.name}]`}
+                onClick={() => runSearch(propertySearchQuery(r.name))}
+              >
+                <span className="prop-name">{r.name}</span>
+                <span className="prop-type">{resolvePropertyType(registry, r.name)}</span>
+                <span className="prop-value">{r.display || "—"}</span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
       <div className="panel-section">
@@ -95,14 +124,31 @@ export function PropertiesPane({
           </label>
         </div>
         {entries === null ? (
-          <p className="pane-hint">No workspace index yet.</p>
+          <EmptyState title="No workspace index yet" description="Properties appear once the workspace index builds." />
         ) : summaries.length === 0 ? (
-          <p className="pane-hint">No properties in this workspace.</p>
+          <EmptyState title="No properties in this workspace" description="Frontmatter properties you add to any note show up automatically." />
         ) : (
-          summaries.map((s) => (
+          <div
+            ref={allRef}
+            onKeyDown={(e) => {
+              // Rename inputs keep caret keys; arrows resume once focus leaves.
+              if ((e.target as HTMLElement).tagName === "INPUT") return;
+              const ctrls = Array.from(allRef.current?.querySelectorAll<HTMLElement>("[data-allprop-idx]") ?? []);
+              const cur = ctrls.indexOf(e.target as HTMLElement);
+              const next = moveRovingIndex(cur < 0 ? 0 : cur, ctrls.length, e.key, "vertical");
+              if (next === null) return;
+              e.preventDefault();
+              setAllFocused(next);
+              ctrls[next]?.focus();
+            }}
+          >
+          {summaries.map((s, si) => (
             <div key={s.name} className="tree-row prop-row" style={{ paddingLeft: 12 }}>
               <button
                 className="prop-main"
+                data-allprop-idx={si * 2}
+                tabIndex={!allRoving || si * 2 === allAt ? 0 : -1}
+                onFocus={() => setAllFocused(si * 2)}
                 title={`Search [${s.name}] (${s.files} note${s.files === 1 ? "" : "s"})`}
                 onClick={() => runSearch(propertySearchQuery(s.name))}
               >
@@ -128,6 +174,9 @@ export function PropertiesPane({
               ) : (
                 <button
                   className="prop-rename"
+                  data-allprop-idx={si * 2 + 1}
+                  tabIndex={!allRoving || si * 2 + 1 === allAt ? 0 : -1}
+                  onFocus={() => setAllFocused(si * 2 + 1)}
                   title={`Rename ${s.name} everywhere`}
                   disabled={renaming}
                   onClick={() => {
@@ -139,7 +188,8 @@ export function PropertiesPane({
                 </button>
               )}
             </div>
-          ))
+          ))}
+          </div>
         )}
       </div>
     </div>

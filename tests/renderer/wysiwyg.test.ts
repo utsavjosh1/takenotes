@@ -3,6 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { history, undoDepth } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import {
+  buildMediaPreviewDecorations,
   collectWysiwygRanges,
   rawCopyText,
   selectionActiveLines,
@@ -229,5 +230,24 @@ describe("live preview fuzz", () => {
         expect(sorted[k]!.from).toBeGreaterThanOrEqual(sorted[k - 1]!.to);
       }
     }
+  });
+});
+
+describe("media block previews (PaneView RangeError regression)", () => {
+  // Regression: MediaPreviewWidget is a block widget. CodeMirror forbids
+  // block decorations via ViewPlugin (dynamic) sets and throws
+  // "RangeError: Block decorations may not be specified via plugins" at
+  // EditorView creation — the <PaneView> crash in App.tsx:1405 on any note
+  // with an image/media line. Previews must come from the StateField
+  // channel (buildMediaPreviewDecorations), never the ViewPlugin path.
+  it("emits one block widget per media line, none for plain text", () => {
+    expect(buildMediaPreviewDecorations(stateOf("hello\n")).size).toBe(0);
+    expect(buildMediaPreviewDecorations(stateOf("![](photo.png)\n")).size).toBe(1);
+    expect(buildMediaPreviewDecorations(stateOf("![[photo.png]]\n")).size).toBe(1);
+    expect(buildMediaPreviewDecorations(stateOf("hello\n\n![](a.png)\n\ntext\n![](b.mp4)\n")).size).toBe(2);
+  });
+
+  it("skips media syntax inside fenced code", () => {
+    expect(buildMediaPreviewDecorations(stateOf("```\n![](photo.png)\n```\n")).size).toBe(0);
   });
 });

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from "react";
+import { moveRovingIndex } from "@takenotes/ui";
 import { TextField } from "@takenotes/ui/dom";
 import { searchResultSummary } from "@takenotes/core/search/summary";
 import type { SearchMatch } from "@takenotes/contracts/ipc";
@@ -25,6 +26,20 @@ export function SearchPanel({
    * bounds (file-count cap, oversized skips) may have omitted notes. */
   notice: string | null;
 }): JSX.Element {
+  const total = filenameHits.length + contentHits.length;
+  const listRef = useRef<HTMLDivElement>(null);
+  // Shared roving-index pattern (tree/outline/menus): one Tab stop for the
+  // whole result list; arrows/Home/End move DOM focus, Enter/Space opens
+  // via the native button. Focus follows selection via onFocus sync.
+  const [focused, setFocused] = useState(0);
+  const at = total === 0 ? 0 : Math.min(focused, total - 1);
+  const onResultsKeyDown = (e: React.KeyboardEvent): void => {
+    const next = moveRovingIndex(at, total, e.key, "vertical");
+    if (next === null) return;
+    e.preventDefault();
+    setFocused(next);
+    listRef.current?.querySelector<HTMLElement>(`[data-search-idx="${next}"]`)?.focus();
+  };
   return (
     <div>
       <div className="panel-title">Search</div>
@@ -50,20 +65,27 @@ export function SearchPanel({
           )
         }</div>
       )}
-      {filenameHits.length > 0 && (
-        <div role="group" aria-label="Files matching by name">
-          <div className="panel-title" aria-hidden="true">Files</div>
-          {filenameHits.map((m) => (
-            <SearchRow key={`f:${m.relativePath}`} match={m} onOpen={onOpen} filenameOnly />
-          ))}
-        </div>
-      )}
-      {contentHits.length > 0 && (
-        <div role="group" aria-label="Files matching by content">
-          <div className="panel-title" aria-hidden="true">Contents</div>
-          {contentHits.map((m) => (
-            <SearchRow key={`c:${m.relativePath}:${m.line}`} match={m} onOpen={onOpen} query={query} />
-          ))}
+      {total > 0 && (
+        <div ref={listRef} onKeyDown={onResultsKeyDown}>
+          {filenameHits.length > 0 && (
+            <div role="group" aria-label="Files matching by name">
+              <div className="panel-title" aria-hidden="true">Files</div>
+              {filenameHits.map((m, i) => (
+                <SearchRow key={`f:${m.relativePath}`} index={i} tabbable={i === at} onFocus={() => setFocused(i)} match={m} onOpen={onOpen} filenameOnly />
+              ))}
+            </div>
+          )}
+          {contentHits.length > 0 && (
+            <div role="group" aria-label="Files matching by content">
+              <div className="panel-title" aria-hidden="true">Contents</div>
+              {contentHits.map((m, j) => {
+                const i = filenameHits.length + j;
+                return (
+                  <SearchRow key={`c:${m.relativePath}:${m.line}`} index={i} tabbable={i === at} onFocus={() => setFocused(i)} match={m} onOpen={onOpen} query={query} />
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
       {!searching && !searchError && query.trim() !== "" && filenameHits.length === 0 && contentHits.length === 0 && (
@@ -91,16 +113,22 @@ function SearchRow({
   onOpen,
   query,
   filenameOnly,
+  index,
+  tabbable,
+  onFocus,
 }: {
   match: SearchMatch;
   onOpen: (rel: string, line?: number) => void;
   query?: string;
   filenameOnly?: boolean;
+  index: number;
+  tabbable: boolean;
+  onFocus: () => void;
 }): JSX.Element {
   const rel = displayPath(match.relativePath);
   const name = rel.slice(rel.lastIndexOf("/") + 1);
   return (
-    <button className="search-result" style={{ width: "100%", textAlign: "left" }} onClick={() => onOpen(match.relativePath, match.line || undefined)}>
+    <button className="search-result" style={{ width: "100%", textAlign: "left" }} data-search-idx={index} tabIndex={tabbable ? 0 : -1} onFocus={onFocus} onClick={() => onOpen(match.relativePath, match.line || undefined)}>
       <div className="f" title={rel}>{highlight(name, filenameOnly ? query : undefined)}</div>
       <div className="p">{rel}</div>
       {!filenameOnly && (

@@ -47,6 +47,7 @@ import { CanvasEditor, isCanvasPath } from "./components/canvas";
 import { loadPropertyRegistry } from "./index/property-registry";
 import { renamePropertyKey } from "@takenotes/core/properties/summary";
 import { collectTodayTasks } from "@takenotes/core/productivity/today";
+import { dailyNotePath } from "@takenotes/core/productivity/daily";
 import { templateDate } from "@takenotes/core/productivity/templates";
 import { SettingsDialog } from "./components/settings";
 import { WslDialog } from "./components/wsl-dialog";
@@ -615,15 +616,25 @@ export default function App(): JSX.Element {
   // Today pane (productivity step 3): overdue + due-today + scheduled-today
   // derived from the document index, memoised on the index version so every
   // mutation (typing, capture, drag) refreshes it. No database anywhere.
+  // Daily-note existence + recent files ride the same memo (ADR-0011
+  // aggregate: tasks, Daily state, recents — recents refresh as files open).
   const todayGroups = useMemo(() => {
     if (!workspace) return null;
     try {
       const today = templateDate(new Date());
-      return { today, groups: collectTodayTasks(workspaceIndex.list(workspace.workspaceId), today) };
+      const entries = workspaceIndex.list(workspace.workspaceId);
+      const known = new Set(entries.map((e) => e.relativePath));
+      const dailyPath = dailyNotePath(today);
+      return {
+        today,
+        groups: collectTodayTasks(entries, today),
+        daily: { relativePath: dailyPath, exists: known.has(dailyPath) },
+        recents: recents.recents.filter((r) => known.has(r)).slice(0, 5),
+      };
     } catch {
       return null;
     }
-  }, [workspace?.workspaceId, indexVersion]);
+  }, [workspace?.workspaceId, indexVersion, recents.recents]);
 
   // Right-sidebar link panes (Step 4): derived from the typed edge table +
   // entries, memoised on the index version so every mutation refreshes them.
@@ -1021,7 +1032,7 @@ export default function App(): JSX.Element {
     return (
       <div className="app">
         {bridgeBanner}
-        <TitleBar workspace={null} platform={platform} wslEnabled={settings.wslEnabled} onQuickOpen={() => {}} onOpenWindows={() => void workspaceApi.openLocal()} onOpenWsl={() => void wslApi.open()} />
+        <TitleBar workspace={null} platform={platform} onQuickOpen={() => {}} />
         <EmptyState className="welcome-state" headingLevel={1} title="Open a workspace" description="Choose a folder of Markdown files."
           illustration={<>
             <img src={lockupDarkUrl} className="brand-logo only-dark" alt="takenotes" draggable={false} />
@@ -1074,7 +1085,7 @@ export default function App(): JSX.Element {
       >Skip to editor</a>
       {bridgeBanner}
       {!focusMode && (
-        <TitleBar workspace={workspace} platform={platform} wslEnabled={settings.wslEnabled} onQuickOpen={() => commandsApi.executeCommand("quickOpen.open")} onOpenWindows={() => void workspaceApi.openLocal()} onOpenWsl={() => void wslApi.open()} />
+        <TitleBar workspace={workspace} platform={platform} onQuickOpen={() => commandsApi.executeCommand("quickOpen.open")} />
       )}
       <div className="body">
         {!focusMode && settings.ribbonVisible && (
@@ -1203,11 +1214,16 @@ export default function App(): JSX.Element {
                     <TodayPane
                       groups={todayGroups.groups}
                       today={todayGroups.today}
+                      daily={todayGroups.daily}
+                      recents={todayGroups.recents}
                       onOpen={(rel, line) => {
                         void docsApi.openFile(rel).then(() => {
-                          gotoLine(line);
+                          if (line) gotoLine(line);
                         });
                       }}
+                      onNewNote={() => commandsApi.executeCommand("note.new")}
+                      onNewTask={() => commandsApi.executeCommand("task.new")}
+                      onOpenDaily={() => commandsApi.executeCommand("note.openToday")}
                     />
                   ) : (
                     <div className="panel-title">No workspace index yet.</div>

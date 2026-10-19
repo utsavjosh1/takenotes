@@ -51,6 +51,7 @@
     "./uri/parse": "./src/uri/parse.ts",
     "./import/html": "./src/import/html.ts",
     "./import/plan": "./src/import/plan.ts",
+    "./import/enex": "./src/import/enex.ts",
     "./validation/schemas": "./src/validation/schemas.ts"
   }
 }
