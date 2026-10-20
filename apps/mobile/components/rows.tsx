@@ -9,7 +9,7 @@ export function NativeListRow({ title, detail, kind, dimmed, selected, onPress }
   return (
     <TouchableOpacity onPress={onPress} style={{ minHeight: 44, opacity: dimmed ? 0.5 : 1 }}>
       <Text>
-        {kind === "directory" ? "▸ " : ""}
+        {kind === "folder" ? "▸ " : ""}
         {title}
       </Text>
       {detail ? <Text>{detail}</Text> : null}

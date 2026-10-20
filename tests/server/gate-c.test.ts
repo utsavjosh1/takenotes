@@ -78,6 +78,8 @@ function cleanup(h: Harness): void {
       const retryable = code === "ENOTEMPTY" || code === "EBUSY" || code === "EPERM";
       if (!retryable || attempt >= delays.length) {
         // Last resort: best-effort async retry in background, don't fail test.
+        // No .unref(): the timer must keep the process alive so the final
+        // removal attempt runs before exit (else h.dataDir leaks on Windows).
         if (retryable) {
           setTimeout(() => {
             try {
@@ -85,7 +87,7 @@ function cleanup(h: Harness): void {
             } catch {
               // ignore — OS temp reaper will collect it
             }
-          }, 1000).unref?.();
+          }, 1000);
           return;
         }
         throw err;

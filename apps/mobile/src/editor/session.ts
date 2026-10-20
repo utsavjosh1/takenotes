@@ -76,10 +76,11 @@ export class EditorSession {
     if (this.state === "saving") return;
     const prev = this.state;
     this.state = "saving";
-    const out = await this.save(this.draft, this.expected);
+    const sent = this.draft;
+    const out = await this.save(sent, this.expected);
     if ("revision" in out) {
       this.expected = { ...this.expected, hash: out.revision.hash };
-      this.state = "clean";
+      this.state = this.draft === sent ? "clean" : "dirty";
       this.diskContent = null;
     } else if (out.error.code === "CONFLICT") {
       this.state = "conflict";
@@ -105,10 +106,11 @@ export class EditorSession {
     if (this.state !== "conflict" && this.state !== "missing") return;
     const prev = this.state;
     this.state = "saving";
-    const out = await this.save(this.draft, this.expected);
+    const sent = this.draft;
+    const out = await this.save(sent, this.expected);
     if ("revision" in out) {
       this.expected = { ...this.expected, hash: out.revision.hash };
-      this.state = "clean";
+      this.state = this.draft === sent ? "clean" : "dirty";
     } else if (out.error.code === "CONFLICT" || out.error.code === "NOT_FOUND") {
       this.state = prev;
     } else {

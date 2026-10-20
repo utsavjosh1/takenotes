@@ -138,6 +138,17 @@ export default function App(): JSX.Element {
   const [menu, setMenu] = useState<CtxMenu>(null);
   const [focusMode, setFocusMode] = useState(false);
   const [version, setVersion] = useState("0.0.1");
+  // Local-date tick: refreshes the Today aggregate at next local midnight
+  // so an app left open overnight doesn't show yesterday's tasks/Daily.
+  const [todayKey, setTodayKey] = useState(() => templateDate(new Date()));
+  useEffect(() => {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(24, 0, 0, 50);
+    const ms = Math.max(1000, next.getTime() - now.getTime());
+    const t = setTimeout(() => setTodayKey(templateDate(new Date())), ms);
+    return () => clearTimeout(t);
+  }, [todayKey]);
   const dragResize = useRef<{ startX: number; startW: number } | null>(null);
 
   const recents = useRecents();
@@ -618,10 +629,11 @@ export default function App(): JSX.Element {
   // mutation (typing, capture, drag) refreshes it. No database anywhere.
   // Daily-note existence + recent files ride the same memo (ADR-0011
   // aggregate: tasks, Daily state, recents — recents refresh as files open).
+  // todayKey ticks at local midnight so the pane rolls over without reload.
   const todayGroups = useMemo(() => {
     if (!workspace) return null;
     try {
-      const today = templateDate(new Date());
+      const today = todayKey;
       const entries = workspaceIndex.list(workspace.workspaceId);
       const known = new Set(entries.map((e) => e.relativePath));
       const dailyPath = dailyNotePath(today);
@@ -634,7 +646,7 @@ export default function App(): JSX.Element {
     } catch {
       return null;
     }
-  }, [workspace?.workspaceId, indexVersion, recents.recents]);
+  }, [workspace?.workspaceId, indexVersion, recents.recents, todayKey]);
 
   // Right-sidebar link panes (Step 4): derived from the typed edge table +
   // entries, memoised on the index version so every mutation refreshes them.

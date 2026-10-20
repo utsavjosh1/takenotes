@@ -26,7 +26,8 @@ type ExpoNativeFs = {
   deleteAsync?: (uri: string, options?: { idempotent?: boolean }) => Promise<void>;
 };
 
-declare const expoFileSystem: ExpoNativeFs;
+// NOTE: no `declare const expoFileSystem` — it emits no runtime value and
+// a default param referencing it would throw ReferenceError when omitted.
 
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -42,7 +43,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 /** Build the injected ops from the real Expo module. Call on-device only. */
-export function createExpoFsOps(native: ExpoNativeFs = expoFileSystem): ExpoFsOps {
+export function createExpoFsOps(native: ExpoNativeFs): ExpoFsOps {
   return {
     async readBytes(uri: string): Promise<Uint8Array> {
       if (!native.readAsStringAsync) throw new Error("expo-file-system not installed (readAsStringAsync missing)");
@@ -126,6 +127,6 @@ export function createExpoFsOps(native: ExpoNativeFs = expoFileSystem): ExpoFsOp
 }
 
 /** One-liner for app startup: `new ExpoFileAdapter(createExpoFsOps(FileSystem))`. */
-export function createExpoFileAdapter(native?: ExpoNativeFs): ExpoFileAdapter {
+export function createExpoFileAdapter(native: ExpoNativeFs): ExpoFileAdapter {
   return new ExpoFileAdapter(createExpoFsOps(native));
 }

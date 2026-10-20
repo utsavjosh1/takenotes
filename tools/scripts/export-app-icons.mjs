@@ -36,6 +36,24 @@ async function png(size) {
   return sharp(SVG, { density: 512 }).resize(size, size).png().toBuffer();
 }
 
+/** Raw ARGB frame for legacy `ic04`/`ic05` (16/32px): 4 bytes/pixel
+ * in A,R,G,B order. Sharp yields RGBA; reorder per pixel. */
+async function argb(size) {
+  const { data } = await sharp(SVG, { density: 512 })
+    .resize(size, size)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const out = Buffer.alloc(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    out[i] = data[i + 3]; // A
+    out[i + 1] = data[i]; // R
+    out[i + 2] = data[i + 1]; // G
+    out[i + 3] = data[i + 2]; // B
+  }
+  return out;
+}
+
 /** ICO with PNG-compressed entries (accepted Vista+ and by all packagers). */
 function ico(buffers) {
   const n = buffers.length;
@@ -61,19 +79,22 @@ function ico(buffers) {
   return Buffer.concat(parts);
 }
 
-/** ICNS, modern set incl. retina variants (PNG payloads). */
+/** ICNS, modern set incl. retina variants.
+ * Small icons use legacy ARGB frames (`ic04`/`ic05`): macOS renders
+ * PNG-compressed `icp4`/`icp5` incorrectly in Finder/Activity Monitor.
+ * `ic14` is the 256px Retina frame so its PNG must be 512px square. */
 const ICNS_TYPES = [
-  ["icp4", 16], ["icp5", 32], ["icp6", 64],
+  ["ic04", 16], ["ic05", 32], ["icp6", 64],
   ["ic07", 128], ["ic08", 256], ["ic09", 512], ["ic10", 1024],
-  ["ic11", 32], ["ic12", 64], ["ic13", 256], ["ic14", 128],
+  ["ic11", 32], ["ic12", 64], ["ic13", 256], ["ic14", 512],
 ];
 
 function icns(entries) {
-  const chunks = entries.map(({ type, png }) => {
+  const chunks = entries.map(({ type, data }) => {
     const h = Buffer.alloc(8);
     h.write(type, 0, 4, "ascii");
-    h.writeUInt32BE(8 + png.length, 4);
-    return Buffer.concat([h, png]);
+    h.writeUInt32BE(8 + data.length, 4);
+    return Buffer.concat([h, data]);
   });
   const body = Buffer.concat(chunks);
   const head = Buffer.alloc(8);
@@ -94,7 +115,15 @@ write("build/icon.ico", ico(await Promise.all(icoSizes.map(async (size) => ({ si
 
 write(
   "build/icon.icns",
-  icns(await Promise.all(ICNS_TYPES.map(async ([type, size]) => ({ type, png: await png(size) })))),
+  icns(
+    await Promise.all(
+      ICNS_TYPES.map(async ([type, size]) => ({
+        type,
+        // Legacy small frames need uncompressed ARGB, everything else PNG.
+        data: type === "ic04" || type === "ic05" ? await argb(size) : await png(size),
+      })),
+    ),
+  ),
 );
 
 write("apps/mobile/assets/icon.png", await png(1024));

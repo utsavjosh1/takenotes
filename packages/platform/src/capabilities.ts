@@ -115,7 +115,9 @@ export function getMobileCapabilities(platform: MobilePlatform): MobileCapabilit
     sandboxOnly: true,
     supportsSystemTrash: false,
     supportsShareSheet: true,
-    haptics: platform === "ios",
+    // Both iOS (CoreHaptics) and Android (Vibrator) provide haptics for
+    // toggle/record affordances; callers branch on this, never Platform.OS.
+    haptics: platform === "ios" || platform === "android",
     offlineOnly: true,
   };
 }

@@ -53,7 +53,7 @@ export function TodayPane({ groups, today, daily, recents, onOpen, onNewNote, on
   const noTasks = groups.overdue.length === 0 && groups.dueToday.length === 0 && groups.scheduledToday.length === 0;
   const allClear = noTasks && !daily.exists && recents.length === 0;
   return (
-    <div role="list" aria-label={`Today, ${today}`}>
+    <div aria-label={`Today, ${today}`}>
       <DayHeader today={today} />
       <div style={{ display: "flex", gap: 8, padding: "4px 12px 8px", flexWrap: "wrap" }}>
         <Button onClick={onNewNote}>New note</Button>
