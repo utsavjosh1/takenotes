@@ -268,7 +268,19 @@ export function parseDocument(
     if (close > 0) {
       // Bad YAML degrades to `{}` — the file is still indexed.
       try {
-        const parsed: unknown = parseYaml(lines.slice(1, close).join("\n"));
+        // logLevel "error": a collection used as a mapping key only earns a
+        // yaml dev warning ("Keys with collection values will be
+        // stringified…") — pure console noise on every index of such a
+        // note. "error" mutes warnings but still throws on real syntax
+        // errors, preserving the `{}` degradation below. ("silent" would
+        // also swallow errors and accept corrupt frontmatter — wrong.)
+        // logLevel "error": a collection used as a mapping key only earns a
+        // yaml dev warning ("Keys with collection values will be
+        // stringified…") — pure console noise on every index of such a
+        // note. "error" mutes warnings but still throws on real syntax
+        // errors, preserving the `{}` degradation below. ("silent" would
+        // also swallow errors and accept corrupt frontmatter — wrong.)
+        const parsed: unknown = parseYaml(lines.slice(1, close).join("\n"), { logLevel: "error" });
         if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
           frontmatter = parsed as Record<string, unknown>;
         }

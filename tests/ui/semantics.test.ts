@@ -47,6 +47,24 @@ describe("live-region wiring", () => {
     expect(source).toContain("aria-disabled={c.enabled === false}");
   });
 
+  it("quick-open Ctrl+Enter keeps the palette open", () => {
+    const source = rendererSource("components", "palette.tsx");
+    // Frozen contract: Ctrl+Enter opens but keeps the palette for
+    // multi-open (open-in-new-tab would be a no-op — openFile already tabs).
+    expect(source).toContain("Ctrl+Enter open, keep open");
+    expect(source).toContain("{ keepOpen: true }");
+    expect(source).toContain("if (!opts?.ctrl) onClose()");
+  });
+
+  it("tags and properties empties use the shared EmptyState voice", () => {
+    const tags = rendererSource("components", "tags.tsx");
+    expect(tags).toContain("<EmptyState title=\"No tags yet\"");
+    expect(tags).toContain("<EmptyState title=\"No workspace index yet\"");
+    const props = rendererSource("components", "properties-view.tsx");
+    expect(props).toContain("<EmptyState title=\"No active note\"");
+    expect(props).toContain("<EmptyState title=\"No properties in this workspace\"");
+  });
+
   it("outline roves with Enter-to-navigate", () => {
     const source = rendererSource("components", "outline.tsx");
     expect(source).toContain("moveRovingIndex");
@@ -56,8 +74,14 @@ describe("live-region wiring", () => {
 
   it("link-pane actions are native buttons", () => {
     const source = rendererSource("components", "backlinks.tsx");
-    expect(source).not.toContain('role="button"');
+    // Inner mention actions stay native buttons (stopPropagation keeps the row intact).
     expect(source).toContain('type="button"');
     expect(source).toContain('className="link-action"');
+    // Rows carrying BOTH open + action cannot nest <button> in <button>
+    // (invalid HTML), so the row is role="button" — which must then stay
+    // keyboard-operable: tabIndex plus Enter/Space activation.
+    expect(source).toContain('role="button"');
+    expect(source).toContain("tabIndex={0}");
+    expect(source).toContain('e.key === "Enter" || e.key === " "');
   });
 });

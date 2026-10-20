@@ -20,7 +20,17 @@ import {
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import type { Edge } from "@takenotes/core/index/edges";
 
-const GROUP_COLORS = ["#e45649", "#986801", "#50a14f", "#4078f2", "#a626a4", "#0184bc"];
+/** Group categorical colors. Token refs (not hex): groups must follow light/dark themes.
+ * Stored as `var()` strings — they flow into inline `style` (which resolves vars),
+ * never into SVG presentation attributes (which do not). */
+const GROUP_COLORS = [
+  "var(--tn-graph-1)",
+  "var(--tn-graph-2)",
+  "var(--tn-graph-3)",
+  "var(--tn-graph-4)",
+  "var(--tn-graph-5)",
+  "var(--tn-graph-6)",
+];
 
 type T = { x: number; y: number; k: number };
 
@@ -190,7 +200,7 @@ export function GraphPane({
                 onClick={() => { if (!ghost) onOpen(n.id); }}
               >
                 <title>{ghost ? `${n.label} (missing — not clickable)` : `${n.label}\n${n.id}`}</title>
-                <circle r={r} fill={fill} stroke={hover === n.id ? "var(--text-primary)" : "transparent"} strokeWidth={2} style={ghost ? undefined : { cursor: "pointer" }} />
+                <circle r={r} style={{ fill, stroke: hover === n.id ? "var(--text-primary)" : "transparent", strokeWidth: 2, cursor: ghost ? undefined : "pointer" }} />
                 <text y={r + 11} textAnchor="middle" className="g-label">{n.label.length > 24 ? `${n.label.slice(0, 23)}…` : n.label}</text>
               </g>
             );

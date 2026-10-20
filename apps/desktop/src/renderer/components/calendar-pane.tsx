@@ -39,6 +39,14 @@ function readDrag(e: React.DragEvent): DragPayload | null {
   }
 }
 
+/** Density caps: day/week sections show all events (usually few, time-anchored)
+ * but cap tasks with an in-place expander; month cells stay at 1+2 with
+ * "+N more" navigating to the day view (which itself expands in place,
+ * so the escape hatch never dead-ends on another cap). */
+const MONTH_VISIBLE_EVENTS = 1;
+const MONTH_VISIBLE_TASKS = 2;
+const DAY_VISIBLE_TASKS = 5;
+
 function TaskRow({ task, onOpen, compact }: { task: CalendarTaskItem; onOpen: () => void; compact?: boolean }): JSX.Element {
   return (
     <div
@@ -77,6 +85,7 @@ function DaySection({ day, isToday, onOpenTask, onOpenNote, onReschedule }: {
   onReschedule: (relativePath: string, line: number, targetDate: string) => void;
 }): JSX.Element {
   const [over, setOver] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setOver(true); }}
@@ -93,9 +102,19 @@ function DaySection({ day, isToday, onOpenTask, onOpenNote, onReschedule }: {
       {day.events.map((ev) => (
         <EventChip key={`e:${ev.relativePath}`} event={ev} onOpen={() => onOpenNote(ev.relativePath)} />
       ))}
-      {day.tasks.map((t) => (
+      {(expanded ? day.tasks : day.tasks.slice(0, DAY_VISIBLE_TASKS)).map((t) => (
         <TaskRow key={`t:${t.relativePath}:${t.line}`} task={t} onOpen={() => onOpenTask(t.relativePath, t.line)} />
       ))}
+      {!expanded && day.tasks.length > DAY_VISIBLE_TASKS && (
+        <button className="cmd-item" style={{ cursor: "pointer" }} onClick={() => setExpanded(true)}>
+          +{day.tasks.length - DAY_VISIBLE_TASKS} more
+        </button>
+      )}
+      {expanded && day.tasks.length > DAY_VISIBLE_TASKS && (
+        <button className="cmd-item" style={{ cursor: "pointer" }} onClick={() => setExpanded(false)}>
+          Show less
+        </button>
+      )}
       {day.events.length === 0 && day.tasks.length === 0 && <div className="cmd-section">—</div>}
     </div>
   );
@@ -184,8 +203,8 @@ function MonthCell({ day, isToday, onOpenDay, onOpenTask, onOpenNote, onReschedu
   onReschedule: (relativePath: string, line: number, targetDate: string) => void;
 }): JSX.Element {
   const [over, setOver] = useState(false);
-  const shownEvents = day.events.slice(0, 1);
-  const shownTasks = day.tasks.slice(0, 2);
+  const shownEvents = day.events.slice(0, MONTH_VISIBLE_EVENTS);
+  const shownTasks = day.tasks.slice(0, MONTH_VISIBLE_TASKS);
   const hidden = day.events.length - shownEvents.length + (day.tasks.length - shownTasks.length);
   return (
     <div
@@ -199,44 +218,27 @@ function MonthCell({ day, isToday, onOpenDay, onOpenTask, onOpenNote, onReschedu
       }}
       style={{
         minHeight: 44,
-        border: "1px solid var(--border)",
+        border: "1px solid var(--border-subtle)",
         borderRadius: 4,
         padding: 2,
-        background: isToday ? "var(--selection)" : over ? "var(--hover)" : "transparent",
+        background: isToday ? "var(--selection)" : over ? "var(--surface-hover)" : "transparent",
         outline: over ? "1px dashed var(--accent)" : undefined,
       }}
       title={`${day.date} — drop a task to schedule it here`}
     >
-      <div className="cmd-section" style={{ padding: 2, cursor: "pointer", fontWeight: isToday ? 700 : 400 }} onClick={onOpenDay}>
+      <button className="cmd-section" style={{ padding: 2, cursor: "pointer", fontWeight: isToday ? 700 : 400 }} onClick={onOpenDay} aria-label={`Open day ${day.date}`}>
         {day.date.slice(8)}
-      </div>
+      </button>
       {shownEvents.map((ev) => (
-        <div key={`e:${ev.relativePath}`} className="cmd-item" style={{ padding: "0 2px" }} role="option" aria-selected={false} onClick={() => onOpenNote(ev.relativePath)} title={ev.title}>
-          <span className="main-label" style={{ fontSize: 11 }}>◷ {ev.title}</span>
-        </div>
+        <EventChip key={`e:${ev.relativePath}`} event={ev} onOpen={() => onOpenNote(ev.relativePath)} />
       ))}
       {shownTasks.map((t) => (
-        <div
-          key={`t:${t.relativePath}:${t.line}`}
-          className="cmd-item"
-          style={{ padding: "0 2px" }}
-          role="option"
-          aria-selected={false}
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.setData("application/x-takenotes-task", JSON.stringify({ relativePath: t.relativePath, line: t.line }));
-            e.dataTransfer.effectAllowed = "move";
-          }}
-          onClick={() => onOpenTask(t.relativePath, t.line)}
-          title={`${t.description} · ${t.scheduled}${t.due ? ` (due ${t.due})` : ""}`}
-        >
-          <span className="main-label" style={{ fontSize: 11 }}>☐ {t.description}</span>
-        </div>
+        <TaskRow key={`t:${t.relativePath}:${t.line}`} task={t} compact onOpen={() => onOpenTask(t.relativePath, t.line)} />
       ))}
       {hidden > 0 && (
-        <div className="cmd-section" style={{ padding: "0 2px", cursor: "pointer" }} onClick={onOpenDay}>
+        <button className="cmd-section" style={{ padding: "0 2px", cursor: "pointer" }} onClick={onOpenDay}>
           +{hidden} more
-        </div>
+        </button>
       )}
     </div>
   );

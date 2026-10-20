@@ -130,9 +130,12 @@ export function CommandMenu({
                 </div>
               ))
             ))}
-          {mode === "quickOpen" && query.trim() !== "" && quickItems.length > 0 && (
-            <div className="cmd-section">Enter open · Shift+Enter create · Ctrl+Enter open, keep open</div>
-          )}
+          {mode === "quickOpen" &&
+            (quickItems.length > 0 ? (
+              <div className="cmd-section">Enter open · Shift+Enter create · Ctrl+Enter open, keep open</div>
+            ) : query.trim() ? (
+              <div className="cmd-section">Enter create · Shift+Enter create · Ctrl+Enter open, keep open</div>
+            ) : null)}
           {mode === "commands" &&
             (cmdItems.length === 0 ? (
               <div className="cmd-section">No matching commands.</div>
