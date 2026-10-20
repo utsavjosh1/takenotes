@@ -76,7 +76,7 @@ Label key: **V** = implemented & verified · **VI** = implemented, verification 
 | 12 | Links/backlinks/outgoing (autocomplete, follow-to-create, rename rewrite) | **V** | `components/backlinks.tsx`, `packages/core/src/links/`, `tests/workspace/link-rename.test.ts` |
 | 13 | Attachments/embeds (policy naming, audio/video/PDF/note embeds) | **VI** | `pane-view.tsx` insert-at-cursor, `wysiwyg.ts` media previews (WIP fix), Step 1 “desktop file-URL plumbing” follow-up open |
 | 14 | Properties (registry, lossless round-trip, malformed-YAML safe) | **VI** | `index/property-registry.ts`, `components/properties-view.tsx:147`; UI depth vs Step 6 unverified on-host |
-| 15 | Today (aggregate) | **P** | `components/today-pane.tsx:59` — overdue/due/scheduled only; **no Daily embed, recents, or quick actions** (ADR-0011 gap, §4-F1) |
+| 15 | Today (aggregate) | **V** | `components/today-pane.tsx:37-136` — renders quick actions, Daily Note row/create action, conditional Recent section + overdue/due/scheduled groups; runtime data-wiring gaps tracked separately (see §4-F1) |
 | 16 | Tasks + Quick Capture (explicit dates, no NLP) | **V–VI** | `components/task-dialog.tsx` (inline date errors), `packages/core/src/productivity/tasks.ts` |
 | 17 | Calendar (event-notes + `@scheduled`, drag) | **V–VI** | `components/calendar-pane.tsx:28-105` (drag payload + drop); `@due`-untouched invariant service-tested, UI-path reverification pending |
 | 18 | Tags (tree/flat, counts, click-to-search) | **VI** | `components/tags.tsx:99`, `packages/core/src/tags/` |
@@ -100,7 +100,7 @@ Not invented, not assumed: every row above was read in source or tests. OS-gated
 
 | P | Finding | Evidence | Impact | Recommendation | Conf |
 |---|---|---|---|---|---|
-| F1 | **Today is task-list-only, not the ADR-0011 aggregate.** No Daily embed, recent notes, or quick actions; missing Daily Note has no explicit `[ Create Today's Note ]` in-pane. | `today-pane.tsx:1-59` (zero hits for daily/recent/quick); ADR-0011; roadmap Step 6 | High — Today is the flagship productivity view and currently under-delivers its contract | First component brief (§8): define aggregate hierarchy (scheduled → overdue/due → Daily state + create action → recent → quick actions), reuse `cmd-item` rows + `EmptyState`; prototype 3 density variants | High |
+| F1 | **Today aggregate data-wiring check.** `TodayPane` already renders quick actions, Daily Note row/create action, and conditional Recent section (`today-pane.tsx:37-136`); verify runtime wiring (tasks/Daily/recents props from `App.tsx`) rather than adding existing UI. | `today-pane.tsx:37-136`, `App.tsx` Today memo; ADR-0011; roadmap Step 6 | Med — if props are empty at runtime the pane under-delivers despite implemented UI | Trace data wiring first; only then define density/hierarchy tweaks, reuse `cmd-item` rows + `EmptyState`; prototype 3 density variants if hierarchy is contested | High |
 | F2 | **Graph group colors are raw hex, invisible to themes.** | `graph.tsx:23` `GROUP_COLORS` | Med — wrong/chalky swatches in dark mode; breaks token contract | Add `--tn-graph-*` categorical tokens (light/dark pairs, contrast-checked) or derive via `color-mix` from accent + neutrals; cheapest shared-system win | High |
 | F3 | **Collections UI can only create `list` views.** | `collections.tsx:135-140` (`kind: "list"` hardcoded, “New list view…”) | Med — table views require hand-written YAML; discoverability gap | Add kind selector (table/list) to the add-view row; empty/error/loading parity per view | High |
 | F4 | **`workspace.switch` permanently disabled while Recent-switching ships.** | `use-commands.ts:160-161` vs `App.tsx:1040-1051` (`openRecent` works) | Med — palette promises less than the app does; keyboard users detour via welcome screen | Owner call (§5.1): enable with recent-workspace source or remove the ID; do not leave a dead command | High |
@@ -160,9 +160,9 @@ Each component brief (Phase C) must still define: user job, hierarchy/density, p
 
 ## 8. Recommended first component: Today aggregate
 
-**Why Today:** it is the only flagship view in **Partial** status against an accepted ADR; it is seen daily (maximum leverage per unit of change); its fix is additive (Daily embed + create action + recents + quick actions around the existing task groups), so regression risk is low and the change is verifiable with existing index fixtures; and its density/hierarchy decisions cascade into Calendar, Tasks, and Collections.
+**Why Today:** it is a flagship daily surface; `TodayPane` already implements the ADR-0011 aggregate (quick actions, Daily row/create, Recent + task groups) so work here is verification + density/hierarchy polish, not greenfield UI — low regression risk, verifiable with existing index fixtures; decisions cascade into Calendar, Tasks, and Collections.
 
-**Scope (post-approval):** `components/today-pane.tsx` + data selector (`productivity/today.ts`) + empty/create states only. Exact file list and 3-variant prototype plan to be presented for approval before any production edit. No shell, editor, or service changes.
+**Scope (post-approval):** verify `App.tsx` Today memo wiring + `today-pane.tsx` density/empty states only. Exact file list and 3-variant prototype plan to be presented for approval before any production edit. No shell, editor, or service changes.
 
 ---
 

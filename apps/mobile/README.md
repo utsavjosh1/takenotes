@@ -10,7 +10,7 @@ Mobile consumes shared behavior through `@takenotes/core`,
 - `mobile-local` kind + `isMobileKind()` + `getMobileCapabilities()` in `@takenotes/platform`.
 - `src/adapters/expo-filesystem.ts` (`ExpoFileAdapter implements HostFilesystem`, tmp+rename, no fsync caveat documented) + `expo-binding.ts` (only file that may touch `expo-file-system`).
 - `src/adapters/memory.ts` (`MemoryHostFilesystem` for tests/dev).
-- `src/workspace/mobile-workspace.ts` (2-method deep module over `CoreNoteService`).
+- `src/workspace/mobile-workspace.ts` (deep module over `CoreNoteService`: `read`/`update`/`create` + `id`).
 - `src/sync/sync.ts` (`WorkspaceSync` seam + `LocalOnlySync` no-op).
 - Gate: `tests/mobile/m0-seam.test.ts` (12 tests, any-OS, no native deps) — green.
 
@@ -46,10 +46,9 @@ npx expo start            # dev client
 npx eas-cli build --profile preview   # on-device preview
 ```
 
-## Next: install Expo runtime deps (device smoke only)
+## Device smoke (after install)
 
 ```bash
-npx expo install expo expo-router expo-file-system expo-secure-store expo-sharing expo-document-picker @react-native-async-storage/async-storage
+npx expo start            # dev client
+npx eas-cli build --profile preview   # on-device preview
 ```
-
-Then add `app.json` + `app/_layout.tsx` + tabs (deferred until deps land so `tsc` stays green).

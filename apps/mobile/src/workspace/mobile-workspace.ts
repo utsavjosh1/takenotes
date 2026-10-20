@@ -16,6 +16,7 @@
 import type { FileReadResult, FileRevision } from "@takenotes/contracts/ipc";
 import type { AppError } from "@takenotes/contracts/errors";
 import { CoreNoteService, type CoreWorkspace } from "@takenotes/core/services/note-service";
+import { validateNoteRelativePath } from "@takenotes/core/policy/note-policy";
 import type { HostFilesystem } from "@takenotes/core/ports/host-filesystem";
 import type { DirectoryListing } from "../adapters/listing.js";
 
@@ -58,7 +59,11 @@ export class MobileWorkspace {
    *  when present — never overwrites. Needed for Daily notes
    *  (`Daily/YYYY/MM/…` parents never exist) and first-run `Inbox.md`. */
   async create(relativePath: string, content = ""): Promise<{ revision: FileRevision } | { error: AppError }> {
-    const parent = relativePath.includes("/") ? relativePath.slice(0, relativePath.lastIndexOf("/")) : "";
+    // Validate before touching the filesystem: creating parents first would
+    // mkdir outside the sandbox for `../evil/x.md` — fail shut instead.
+    const v = validateNoteRelativePath(this.ws.kind, relativePath);
+    if ("error" in v) return { error: v.error };
+    const parent = v.relativePath.includes("/") ? v.relativePath.slice(0, v.relativePath.lastIndexOf("/")) : "";
     if (parent) {
       const parts = parent.split("/");
       let cursor = this.handle.root.replace(/\/+$/, "");

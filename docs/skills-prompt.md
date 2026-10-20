@@ -64,7 +64,7 @@ Skill orchestration — follow in order, do not skip:
 5. BUILD RULES (all emits):
    - In-place edits only. Before editing state exact files to modify/create/delete.
      Never delete routes/components/old site without explicit confirmation.
-   - Locked tokens: every color/font refs `var(--tn-*)` or `var(--color-*)`, no inline hex/OKLCH/font-family.
+   - Locked tokens: every color/font refs `var(--tn-*)`, `var(--color-*)`, or `var(--font-*)` (`--font-ui`, `--font-editor`, `--font-mono`), no inline hex/OKLCH/font-family.
      If missing, lift to token block first.
    - No honest-copy violations: no invented metrics/testimonials ("+47%", "50k teams").
      Use real numbers or `—` placeholder + grey block.

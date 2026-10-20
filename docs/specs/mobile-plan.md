@@ -161,13 +161,17 @@ New deps (only these in step 1): `expo`, `expo-router`, `expo-file-system`, `exp
 ```
 apps/mobile/
   app.json  app/_layout.tsx  app/(tabs)/{index,search,capture,settings}.tsx
+  components/rows.tsx             # RN mapping of ui/native contracts (excluded from root tsc pre-install)
   src/
-    adapters/expo-filesystem.ts   # S1 adapter (only place touching expo-file-system for IO)
-    workspace/mobile-workspace.ts # ≤3-method deep module over CoreNoteService
-    sync/local-only.ts            # S5 no-op adapter (reserves seam)
-    index/workspace-index.ts      # mirrors desktop renderer/index wiring
-    components/*                  # RN mapping of ui/native contracts
-    editor/source-editor.tsx      # V1 shallow editor (thin on purpose)
+    adapters/expo-filesystem.ts   # IO adapter + expo-binding.ts (only place touching expo-file-system)
+    adapters/listing.ts           # DirectoryListing seam (M1)
+    workspace/mobile-workspace.ts # deep module over CoreNoteService (read/update/create + id)
+    sync/sync.ts                  # WorkspaceSync seam + LocalOnlySync no-op (M0)
+    index/mobile-index.ts         # eager indexed build, bounded (M1)
+    browse/{explorer,quick-open,search,favorites,outline}.ts  # thin over core (M1)
+    editor/{session,tasks}.ts     # save-pipeline state machine + task toggle (M2)
+    capture/{quick-capture,recovery}.ts  # Inbox/Daily/Today + snapshots (M2)
+    share/import-export.ts + settings/appearance.ts  # V1 text import/export + theme (M3)
 packages/platform/src/
   types.ts (add mobile-local)  capabilities.ts (add mobile caps)
 packages/ui/src/native/

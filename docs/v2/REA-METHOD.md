@@ -62,7 +62,7 @@ Borrowed from `../REA/AGENTS.md` ("Distinguish observations, derivations, infere
 - **Inference** — best explanation bridging a gap (e.g., "Obsidian pin implies open-in-new-tab because pinned tab must not be replaced"). Marked with confidence + what would confirm it (a trace or probe).
 - **Unknown** — explicitly not established (e.g., "Obsidian's exact fuzzy-match scoring"; "Canvas~Graph shared renderer internals"). Never rendered as absence.
 
-Every `OBSIDIAN-FEATURES.md` row carries these four columns. Session semantics: full inline evidence is kept in the docs (no retained-reference-only citations), because v2 readers have no live MCP connection.
+The taxonomy is documented here and applied per-row in `OBSIDIAN-FEATURES.md` § Per-feature REA notes (the master map itself carries feature/type/behavior/reconstruction/status/owner columns, not four taxonomy columns). Session semantics: full inline evidence is kept in the docs (no retained-reference-only citations), because v2 readers have no live MCP connection.
 
 ## 5. Evidence ledger (what v2 claims, and what it does not)
 

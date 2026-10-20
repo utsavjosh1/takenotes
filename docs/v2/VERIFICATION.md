@@ -20,12 +20,12 @@ npm test
 - Open two notes → active switches, per-tab dirty preserved.
 - Close records `closedTabs` (max 20) for `Ctrl+Shift+T` reopen.
 - `togglePinned` flips boolean without touching dirty/revision.
-- **v2 new:** `closeOtherTabs` keeps active + all pinned, drops the rest; `closeUnpinnedTabs` ("Close all" parity) keeps every pinned tab and closes the rest (all-pinned → selection empties, pins never force-closed); rename preserves pin; delete drops pins for removed paths.
+- **v2 new:** `closeOtherTabs` keeps active + all pinned, drops the rest; `closeUnpinnedTabs` ("Close all" parity) keeps every pinned tab and closes the rest (all-pinned → selection empties, pins never force-closed). Rename-pin preservation and delete-pin cleanup are implemented but not yet assertion-covered — see manual checklist.
 
 ### 1.2 Elephant evidence (`tests/import/enex.test.ts` + `import.test.ts`)
 
-- `parseEnex`: titles → stems, HTML content preserved for `htmlToMarkdown`, `<tag>` → frontmatter `tags:`, created/updated → frontmatter, `<resource>` (base64 + mime + filename) extracted, malformed XML → skip + warn (never throw, bounded output).
-- `planEnexImport` → `planImport`: collision-proof `name 1.md`, attachments under policy dir, remote images kept + warned (no fetch), missing refs in `unmapped`, over-cap in `skipped`, `warnings` surfaced.
+- `parseEnex`: titles → stems, HTML content preserved for `htmlToMarkdown`, `<tag>` extraction, `<resource>` (base64 + mime + filename) extraction, malformed XML → warnings (never throw). Frontmatter mapping, 1 MiB/25 MiB bounds, and over-cap `skipped` are implemented but only partially assertion-covered.
+- `planEnexImport` → `planImport`: collision-proof `name 1.md`, attachments extracted. Remote-image keep+warn, `unmapped` missing-ref, and over-cap `skipped` paths are implemented — explicit vectors pending; manual import checklist covers them until then.
 - Existing Markdown/HTML/Textbundle vectors in `import.test.ts` still pass (no regression).
 
 ### 1.3 Regression
