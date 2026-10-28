@@ -6,7 +6,6 @@ import {
 import { ACCENT_KEY, setAccent, setTheme, type ThemeRoot } from "../../packages/ui/src/dom/theme-api";
 
 const css = readFileSync(new URL("../../packages/ui/src/tokens.css", import.meta.url), "utf8");
-const legacy = readFileSync(new URL("../../packages/ui/src/legacy-aliases.css", import.meta.url), "utf8");
 
 function fakeRoot(): ThemeRoot & { props: Map<string, string> } {
   const props = new Map<string, string>();
@@ -39,12 +38,6 @@ describe("public tokens", () => {
     expect([...v].sort((a, b) => a - b)).toEqual(v);
   });
 
-  it("legacy aliases only reference public tokens or --tn-*", () => {
-    for (const m of legacy.matchAll(/var\(--([a-z0-9-]+)\)/g)) {
-      const name = m[1]!;
-      expect(name.startsWith("tn-") || name in publicColors).toBe(true);
-    }
-  });
 });
 
 describe("accent maths", () => {

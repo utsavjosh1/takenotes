@@ -218,10 +218,10 @@ function MonthCell({ day, isToday, onOpenDay, onOpenTask, onOpenNote, onReschedu
       }}
       style={{
         minHeight: 44,
-        border: "1px solid var(--border-subtle)",
+        border: "1px solid var(--line)",
         borderRadius: 4,
         padding: 2,
-        background: isToday ? "var(--selection)" : over ? "var(--surface-hover)" : "transparent",
+        background: isToday ? "var(--selection)" : over ? "var(--hover)" : "transparent",
         outline: over ? "1px dashed var(--accent)" : undefined,
       }}
       title={`${day.date} — drop a task to schedule it here`}

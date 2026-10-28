@@ -127,12 +127,12 @@ describe("reduced motion + highlight safety nets", () => {
 
   it("search highlights pin primary text (muted/accent-on-highlight never occur)", () => {
     const app = css("apps", "desktop", "src", "renderer", "styles", "app.css");
-    expect(app).toMatch(/\.search-result mark \{[^}]*color: var\(--text-primary\)/);
+    expect(app).toMatch(/\.sres-hit mark \{[^}]*color: var\(--text\)/);
   });
 
   it("editor find matches use the verified highlight pair", () => {
     const editor = css("apps", "desktop", "src", "renderer", "editor", "create-editor.ts");
     expect(editor).toContain('".cm-searchMatch"');
-    expect(editor).toMatch(/cm-searchMatch[^}]*var\(--highlight-surface\)/);
+    expect(editor).toMatch(/cm-searchMatch[^}]*var\(--highlight\)/);
   });
 });

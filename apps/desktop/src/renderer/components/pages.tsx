@@ -2,7 +2,7 @@
  * Tags, Properties, Collections, Graph). They open in the main column in
  * place of the editor; every row still opens its source note. */
 import { useMemo, useState, type JSX, type ReactNode } from "react";
-import { Button } from "@takenotes/ui/dom";
+import { Button, Select } from "@takenotes/ui/dom";
 import type { TodayGroups, TodayTaskItem } from "@takenotes/core/productivity/today";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import { Icon } from "./icons";
@@ -16,7 +16,7 @@ export const PAGE_TITLES: Record<PageView, { title: string; sub: string }> = {
   tasks: { title: "Tasks", sub: "Every task across this workspace" },
   calendar: { title: "Calendar", sub: "Event notes and scheduled tasks" },
   tags: { title: "Tags", sub: "Nested tags use slashes, for example #project/web" },
-  properties: { title: "Properties", sub: "Frontmatter fields used across your notes" },
+  properties: { title: "Details", sub: "Fields you add at the top of your notes" },
   collections: { title: "Collections", sub: "Saved queries shown as a table or a list" },
   graph: { title: "Graph", sub: "Notes as nodes, links as edges" },
 };
@@ -70,7 +70,7 @@ function TaskRow({ task, meta, onOpen, onToggle }: { task: { relativePath: strin
         <span>{task.description}</span>
         <small>{meta}</small>
       </div>
-      <button className="linkbtn" onClick={() => onOpen(task.relativePath, task.line)} title={`${displayPath(task.relativePath)}:${task.line}`}>Open</button>
+      <Button size="sm" variant="ghost" onClick={() => onOpen(task.relativePath, task.line)} title={`${displayPath(task.relativePath)}:${task.line}`}>Open</Button>
     </div>
   );
 }
@@ -179,7 +179,7 @@ function Timeline({ groups, today, onSchedule, onOpen }: {
                 {here.map((t) => (
                   <div key={`${t.relativePath}:${t.line}`} className="blk" draggable onDragStart={(e) => dragStart(e, t.relativePath, t.line)}
                     title="Dragging changes @scheduled only. @due is not changed.">
-                    <button className="linkbtn" onClick={() => onOpen(t.relativePath, t.line)}>{t.description}</button>
+                    <Button size="sm" variant="ghost" onClick={() => onOpen(t.relativePath, t.line)}>{t.description}</Button>
                   </div>
                 ))}
               </div>
@@ -235,10 +235,10 @@ export function TasksPage({ entries, today, onOpen, onToggle }: {
             <button key={f} className={filter === f ? "active" : ""} aria-pressed={filter === f} onClick={() => setFilter(f)}>{f[0]!.toUpperCase() + f.slice(1)}</button>
           ))}
         </div>
-        <select className="filter-select" aria-label="Folder" value={folder} onChange={(e) => setFolder(e.target.value)}>
+        <Select className="filter-select" aria-label="Folder" value={folder} onChange={(e) => setFolder(e.target.value)}>
           <option value="">All folders</option>
           {folders.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
+        </Select>
         <span className="muted">{all.length} {all.length === 1 ? "task" : "tasks"}</span>
       </div>
       {shown.length === 0 && <p className="muted">No tasks match these filters.</p>}
@@ -255,7 +255,7 @@ export function TasksPage({ entries, today, onOpen, onToggle }: {
                 {t.priority && <span className="chip">{t.priority}</span>}
                 {t.due && <span className="chip due">Due {t.due.slice(5)}</span>}
                 {t.scheduled && <span className="chip sch">Scheduled {t.scheduled.slice(5, 10)}</span>}
-                <button className="linkbtn" onClick={() => onOpen(t.relativePath, t.line)}>Open in note</button>
+                <Button size="sm" variant="ghost" onClick={() => onOpen(t.relativePath, t.line)}>Open in note</Button>
               </div>
             ))}
           </section>

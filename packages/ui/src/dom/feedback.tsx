@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Announcement, NoticeTone } from "../behavior";
-import { Art, type ArtName } from "./icon";
+import { Art, Icon, type ArtName } from "./icon";
 
 export type NoticeProps = {
   tone?: NoticeTone;
@@ -13,13 +13,15 @@ export type NoticeProps = {
 /** Tone is visual only. Callers choose whether/how urgently to announce;
  * a warning must not silently become a save-success or durability assertion. */
 export function Notice({ tone = "info", announcement = "off", title, children, actions, className = "" }: NoticeProps) {
-  return <div className={`tn-notice tn-notice--${tone} ${className}`}>
-    <span className="tn-notice-icon" aria-hidden="true">{tone === "success" ? "✓" : tone === "info" ? "i" : "!"}</span>
-    <div className="tn-notice-message" role={announcement === "assertive" ? "alert" : announcement === "polite" ? "status" : undefined}>
+  const banner = tone === "warning" ? "warn" : tone === "danger" ? "danger" : "info";
+  const icon = tone === "warning" ? "warn" : tone === "danger" ? "error" : tone === "success" ? "check" : "info";
+  return <div className={`ui-banner ui-banner--${banner} ${className}`}>
+    <Icon name={icon} size="sm" />
+    <div className="ui-banner-text" role={announcement === "assertive" ? "alert" : announcement === "polite" ? "status" : undefined}>
       <strong>{title}</strong>
-      {children && <div>{children}</div>}
+      {children && <> {children}</>}
     </div>
-    {actions && <div className="tn-actions">{actions}</div>}
+    {actions && <div className="ui-banner-actions">{actions}</div>}
   </div>;
 }
 

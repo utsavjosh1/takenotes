@@ -18,6 +18,7 @@
  * images, jump-to-group, readonly mode, export-image, Canvas-in-Canvas
  * text, shapes-only `![[x.canvas]]` embed rendering.
  */
+import { Select } from "@takenotes/ui/dom";
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import {
   addEdge,
@@ -320,7 +321,7 @@ export function CanvasEditor({
           <input
             className="rename-input"
             autoFocus
-            aria-label={adding === "link" ? "URL" : "Vault-relative path"}
+            aria-label={adding === "link" ? "URL" : "Path inside the workspace"}
             placeholder={adding === "link" ? "https://…" : adding === "image" ? "images/pic.png" : "Notes/My note.md"}
             value={addPath}
             onChange={(e) => setAddPath(e.target.value)}
@@ -553,7 +554,7 @@ export function CanvasEditor({
                   <textarea
                     className="c-text"
                     aria-label="Text card"
-                    placeholder="Markdown…"
+                    placeholder="Write a note…"
                     value={n.text}
                     onChange={(ev) => {
                       const r = setNodeText(doc, n.id, ev.target.value);
@@ -651,7 +652,7 @@ function ColorField({ value, onPick }: { value: string | undefined; onPick: (c: 
     <span className="canvas-field">
       <label>
         Color
-        <select
+        <Select
           aria-label="Color"
           value={value && COLOR_LABEL[value] ? value : value?.startsWith("#") ? "custom" : ""}
           onChange={(e) => {
@@ -665,7 +666,7 @@ function ColorField({ value, onPick }: { value: string | undefined; onPick: (c: 
             <option key={c} value={c}>{COLOR_LABEL[c]} ({c})</option>
           ))}
           <option value="custom">custom hex…</option>
-        </select>
+        </Select>
       </label>
       <input
         aria-label="Custom hex color"
@@ -757,12 +758,12 @@ function EdgePanel({
   return (
     <div className="pane-toolbar canvas-panel" role="toolbar" aria-label="Selected edge">
       <span className="pane-hint">edge · {edge.id}</span>
-      <label>From <select aria-label="Edge source" value={edge.fromNode} onChange={(e) => pick("fromNode", e.target.value)}>{ids.map((id) => <option key={id} value={id}>{id}</option>)}</select></label>
-      <label>To <select aria-label="Edge target" value={edge.toNode} onChange={(e) => pick("toNode", e.target.value)}>{ids.map((id) => <option key={id} value={id}>{id}</option>)}</select></label>
-      <label>From side <select aria-label="Edge source side" value={edge.fromSide ?? "right"} onChange={(e) => pick("fromSide", e.target.value)}>{CANVAS_SIDES.map((s) => <option key={s} value={s}>{s}</option>)}</select></label>
-      <label>To side <select aria-label="Edge target side" value={edge.toSide ?? "left"} onChange={(e) => pick("toSide", e.target.value)}>{CANVAS_SIDES.map((s) => <option key={s} value={s}>{s}</option>)}</select></label>
-      <label>Source end <select aria-label="Edge source end" value={edge.fromEnd ?? "none"} onChange={(e) => pick("fromEnd", e.target.value)}>{CANVAS_ENDS.map((s) => <option key={s} value={s}>{s}</option>)}</select></label>
-      <label>Target end <select aria-label="Edge target end" value={edge.toEnd ?? "arrow"} onChange={(e) => pick("toEnd", e.target.value)}>{CANVAS_ENDS.map((s) => <option key={s} value={s}>{s}</option>)}</select></label>
+      <label>From <Select aria-label="Edge source" value={edge.fromNode} onChange={(e) => pick("fromNode", e.target.value)}>{ids.map((id) => <option key={id} value={id}>{id}</option>)}</Select></label>
+      <label>To <Select aria-label="Edge target" value={edge.toNode} onChange={(e) => pick("toNode", e.target.value)}>{ids.map((id) => <option key={id} value={id}>{id}</option>)}</Select></label>
+      <label>From side <Select aria-label="Edge source side" value={edge.fromSide ?? "right"} onChange={(e) => pick("fromSide", e.target.value)}>{CANVAS_SIDES.map((s) => <option key={s} value={s}>{s}</option>)}</Select></label>
+      <label>To side <Select aria-label="Edge target side" value={edge.toSide ?? "left"} onChange={(e) => pick("toSide", e.target.value)}>{CANVAS_SIDES.map((s) => <option key={s} value={s}>{s}</option>)}</Select></label>
+      <label>Source end <Select aria-label="Edge source end" value={edge.fromEnd ?? "none"} onChange={(e) => pick("fromEnd", e.target.value)}>{CANVAS_ENDS.map((s) => <option key={s} value={s}>{s}</option>)}</Select></label>
+      <label>Target end <Select aria-label="Edge target end" value={edge.toEnd ?? "arrow"} onChange={(e) => pick("toEnd", e.target.value)}>{CANVAS_ENDS.map((s) => <option key={s} value={s}>{s}</option>)}</Select></label>
       <input className="rename-input" aria-label="Edge label" placeholder="label…" value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") apply(setEdgeLabel(doc, edge.id, label)); e.stopPropagation(); }} />
       <button onClick={() => apply(setEdgeLabel(doc, edge.id, label))}>Label</button>
       <ColorField value={edge.color} onPick={(c) => apply(setEdgeColor(doc, edge.id, c))} />

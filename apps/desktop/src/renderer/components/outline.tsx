@@ -27,7 +27,7 @@ export function OutlinePane({
     <div
       ref={listRef}
       role="tree"
-      aria-label="Outline"
+      aria-label="On this page"
       onKeyDown={(e) => {
         const next = moveRovingIndex(at, headings.length, e.key, "vertical");
         if (next === null) return;

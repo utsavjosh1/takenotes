@@ -6,7 +6,7 @@
  */
 import { useMemo, useRef, useState, type JSX } from "react";
 import { moveRovingIndex } from "@takenotes/ui";
-import { EmptyState } from "@takenotes/ui/dom";
+import { EmptyState, Input, Select, Skeleton } from "@takenotes/ui/dom";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import { cellDisplay } from "@takenotes/core/collections/evaluate";
 import {
@@ -77,11 +77,11 @@ export function PropertiesPane({
   return (
     <div className="properties-pane">
       <div className="panel-section">
-        <p className="panel-title">File properties</p>
+        <p className="panel-title">Details</p>
         {activeRows === null ? (
-          <EmptyState title="No active note" description="Open a note to see its properties." />
+          <EmptyState title="No active note" description="Open a note to see its details." />
         ) : activeRows.length === 0 ? (
-          <EmptyState title="No properties in this note" description="Frontmatter properties you add here show up automatically." />
+          <EmptyState title="No details in this note" description="Details you add here show up automatically." />
         ) : (
           <div
             ref={fileRef}
@@ -114,19 +114,19 @@ export function PropertiesPane({
         )}
       </div>
       <div className="panel-section">
-        <div className="pane-toolbar" role="toolbar" aria-label="All properties options">
-          <p className="panel-title">All properties</p>
+        <div className="pane-toolbar" role="toolbar" aria-label="All details options">
+          <p className="panel-title">All details</p>
           <label className="sort-control">Sort
-            <select aria-label="Properties sort" value={sort} onChange={(e) => setSort(e.target.value as PropertySort)}>
+            <Select aria-label="Details sort" value={sort} onChange={(e) => setSort(e.target.value as PropertySort)}>
               <option value="name">Name</option>
               <option value="frequency">Frequency</option>
-            </select>
+            </Select>
           </label>
         </div>
         {entries === null ? (
-          <EmptyState title="No workspace index yet" description="Properties appear once the workspace index builds." />
+          <Skeleton label="Loading details" />
         ) : summaries.length === 0 ? (
-          <EmptyState title="No properties in this workspace" description="Frontmatter properties you add to any note show up automatically." />
+          <EmptyState title="No details in this workspace" description="Details you add to any note show up automatically." />
         ) : (
           <div
             ref={allRef}
@@ -157,10 +157,10 @@ export function PropertiesPane({
                 <span className="tag-count">{s.files}</span>
               </button>
               {renamingKey === s.name ? (
-                <input
+                <Input
                   className="rename-input"
                   autoFocus
-                  aria-label={`Rename property ${s.name}`}
+                  aria-label={`Rename detail ${s.name}`}
                   value={renameDraft}
                   disabled={renaming}
                   onChange={(e) => setRenameDraft(e.target.value)}

@@ -112,6 +112,8 @@ export const publicColors = {
   btn: "action-fill", "btn-text": "action-text",
   ok: "success-text", "ok-bg": "success-surface", warn: "warning-text", "warn-bg": "warning-surface",
   bad: "danger-text", "bad-bg": "danger-surface", shadow: "shadow-overlay",
+  selection: "selection", scrollbar: "scrollbar",
+  "graph-1": "graph-1", "graph-2": "graph-2", "graph-3": "graph-3", "graph-4": "graph-4", "graph-5": "graph-5", "graph-6": "graph-6",
 } as const satisfies Record<string, ColorToken>;
 
 /** Shape: 4 small controls and menu items, 6 inputs/buttons/chips, 8 dialogs
@@ -119,7 +121,9 @@ export const publicColors = {
 export const publicRadius = { ctl: 4, in: 6, dlg: 8, max: 10 } as const;
 
 /** Layout in px. `measure` is the writing column (plus 48px side padding). */
-export const layout = { measure: 760, sb: 248, rp: 300, rail: 48, "titlebar-h": 40, "statusbar-h": 26, "tabstrip-h": 36 } as const;
+export const layout = {
+  measure: 760, sb: 248, rp: 300, rail: 48, "titlebar-h": 40, "statusbar-h": 26, "tabstrip-h": 36, "sidebar-head-h": 40, "row-h": 28, indent: 14,
+} as const;
 
 /** Control heights: 30 default on desktop, 36 "large", 44 on touch and in mobile. */
 export const controlHeight = { default: 30, sm: 26, lg: 36, touch: 44, icon: 28 } as const;

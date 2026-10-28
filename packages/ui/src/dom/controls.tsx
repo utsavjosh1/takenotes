@@ -10,7 +10,7 @@ export function Input({ invalid, className = "", ...props }: InputProps) {
 
 export type SelectProps = ComponentPropsWithRef<"select"> & { invalid?: boolean };
 export function Select({ invalid, className = "", ...props }: SelectProps) {
-  return <select {...props} aria-invalid={invalid || props["aria-invalid"]} className={`tn-field-control ${className}`} />;
+  return <select {...props} aria-invalid={invalid || props["aria-invalid"]} className={`tn-field-control ui-select ${className}`} />;
 }
 
 export type TextareaProps = ComponentPropsWithRef<"textarea"> & { invalid?: boolean };
@@ -19,13 +19,13 @@ export function Textarea({ invalid, className = "", rows = 3, ...props }: Textar
 }
 
 export type SwitchProps = NativeInput & {
-  /** Accessible name. Required: a switch has no visible text of its own. */
-  label: string;
+  /** Accessible name. Give this, or aria-labelledby: a switch has no text of its own. */
+  label?: string;
 };
 /** 40x22 on/off. A native checkbox with role=switch: Space toggles. */
 export function Switch({ label, className = "", ...props }: SwitchProps) {
   return <span className={`ui-switch ${className}`}>
-    <input {...props} type="checkbox" role="switch" aria-label={label} />
+    <input {...props} type="checkbox" role="switch" {...(label ? { "aria-label": label } : {})} />
     <span aria-hidden="true" />
   </span>;
 }
