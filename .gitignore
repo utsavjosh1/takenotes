@@ -24,3 +24,7 @@ reference/
 demo-workspace/
 demo-workspace-worst/
 packages/ui/storybook-static/
+
+# local agent tooling
+.agents/
+.claude/
