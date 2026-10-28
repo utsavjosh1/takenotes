@@ -143,6 +143,11 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
             <SettingRow label="Update links on rename" description="Rewrite [[links]] when a note or folder moves. Off asks first and renames only.">
               {(control) => <Switch {...control} checked={settings.autoUpdateLinks} onChange={(e) => set("autoUpdateLinks", e.target.checked)} />}
             </SettingRow>
+            <SettingRow label="Save after I stop typing" description="How long a note waits before it saves by itself.">
+              {(control) => <Select {...control} value={String(settings.autosaveMs)} onChange={(e) => set("autosaveMs", Number(e.target.value) as Settings["autosaveMs"])}>
+                <option value="600">Quickly (0.6 s)</option><option value="1200">Normal (1.2 s)</option><option value="3000">Relaxed (3 s)</option><option value="10000">Slow (10 s)</option>
+              </Select>}
+            </SettingRow>
             <SettingRow label="Attachment location" description="Where pasted and dropped files land. Subfolder nests the folder below; Folder uses it at the root.">
               {(control) => <Select {...control} value={settings.attachmentLocation} onChange={(e) => set("attachmentLocation", e.target.value as Settings["attachmentLocation"])}>
                 <option value="root">Workspace root</option><option value="same-folder">Same folder as note</option><option value="subfolder">Subfolder below note</option><option value="folder">Folder</option>
@@ -345,7 +350,7 @@ function CaptureOverlay({ onCapture, onCancel }: { onCapture: (acc: string | nul
         }}
       >
         <div className="cmd-list" role="listbox">
-          <div className="cmd-section">Press the keys for this command… (<kbd className="k">Esc</kbd> cancels)</div>
+          <div className="list-section">Press the keys for this command… (<kbd className="k">Esc</kbd> cancels)</div>
         </div>
       </div>
     </div>

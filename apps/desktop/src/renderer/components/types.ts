@@ -16,6 +16,12 @@ export type TabState = {
   saving: boolean;
   /** Last successful save time for the `Saved …` status segment. */
   savedAt: string;
+  /** The file was deleted outside the app; the text here is kept (trust layer). */
+  deleted?: boolean;
+  /** The file can't be written here (permission denied). */
+  readOnly?: boolean;
+  /** The connection is down; edits queue and write on reconnect. */
+  offline?: boolean;
   /** Pinned tabs stay visually marked and are future-proof for tab ordering. */
   pinned?: boolean;
 };
@@ -47,6 +53,8 @@ export type Settings = {
   /** Rewrite `[[links]]` after renames. Off prompts for rename-only. */
   autoUpdateLinks: boolean;
   confirmTrash: boolean;
+  /** Pause after typing before a note saves by itself. */
+  autosaveMs: 600 | 1200 | 3000 | 10000;
   /** Step 9: accent family for links/focus/selection. */
   accent: "violet" | "blue" | "graphite";
   /** Step 9: editor body face (UI chrome stays OS-native system sans). */
@@ -88,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   useWikilinks: true,
   autoUpdateLinks: true,
   confirmTrash: false,
+  autosaveMs: 1200,
   accent: "violet",
   editorFont: "system",
   zoomLevel: 1,

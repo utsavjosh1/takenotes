@@ -30,7 +30,7 @@ Shared design tokens and interaction contracts. Platform adapters render them.
 
 One source: `src/theme.ts`. `npm run ui:tokens` writes `src/tokens.css`;
 CI runs `ui:tokens:check`. Use the **public names** below in new code. The
-`--tn-*` variables hold the per-theme values and are deprecated for direct use.
+values are written per theme, so a subtree with its own `data-theme` re-resolves.
 
 | Public name | Light | Dark | Use |
 | --- | --- | --- | --- |

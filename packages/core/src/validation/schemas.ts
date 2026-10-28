@@ -24,6 +24,7 @@ export const SettingsSchema = v.object({
   useWikilinks: v.optional(v.boolean()),
   autoUpdateLinks: v.optional(v.boolean()),
   confirmTrash: v.optional(v.boolean()),
+  autosaveMs: v.optional(v.picklist([600, 1200, 3000, 10000])),
   /** Step 9: accent family for links/focus/selection (default violet). */
   accent: v.optional(v.picklist(["violet", "blue", "graphite"])),
   /** Step 9: editor body face; UI chrome stays OS-native system sans. */

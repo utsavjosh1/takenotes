@@ -8,6 +8,7 @@ import type { TreeState } from "../components/tree";
 import { useIndexMeta } from "../stores/index-meta";
 import { useSettingsStore } from "../stores/settings";
 import { getBridge } from "../bridge";
+import { askRename } from "../stores/rename-preview";
 import { usePlatform } from "./use-platform";
 import type { Notify } from "./use-notify";
 import type { DocumentsApi } from "./use-documents";
@@ -250,9 +251,8 @@ export function useFileTree(
     const newRel = joinRel(dir, newName);
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }, "Couldn't rename"); setTree((p) => ({ ...p, renaming: null })); return; }
-    // Auto-update off means rename-only: confirm first, then skip the
-    // link rewrite server-side. Links pointing here go stale visibly.
-    if (!autoUpdateLinks && !window.confirm(`Rename "${entry.name}" without updating links that point to it?`)) {
+    // Say what happens to links that point here before anything moves.
+    if (!(await askRename(ws.workspaceId, entry.relativePath, newRel, entry.kind === "directory", autoUpdateLinks))) {
       setTree((p) => ({ ...p, renaming: null }));
       return;
     }
@@ -283,15 +283,15 @@ export function useFileTree(
     const wslDel = isWslKind(ws.type);
     // WSL delete is permanent (unlink): always confirm. Native trash stays setting-gated.
     if (wslDel) {
-      if (!window.confirm(`Permanently delete folder "${entry.name}"? This cannot be undone.`)) return;
-    } else if (confirmTrash && !window.confirm(`Delete folder "${entry.name}"?`)) return;
+      if (!window.confirm(`Delete the folder “${entry.name}” forever? This can’t be undone.`)) return;
+    } else if (confirmTrash && !window.confirm(`Move the folder “${entry.name}” to the trash? You can get it back from there.`)) return;
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }, `Couldn't delete folder "${entry.name}"`); return; }
     const res = await bridge.directory.delete(ws.workspaceId, entry.relativePath);
     if (!res.ok) {
       // Non-empty folders need an explicit recursive confirm (no silent wipe).
       if (res.error.code === "DIRECTORY_NOT_EMPTY") {
-        if (!window.confirm(`"${entry.name}" is not empty. Delete it and everything inside?`)) return;
+        if (!window.confirm(`“${entry.name}” has notes inside. Delete it and everything in it?`)) return;
         const res2 = await bridge.directory.delete(ws.workspaceId, entry.relativePath, true);
         if (!res2.ok) { errToast(res2.error, `Couldn't delete folder "${entry.name}"`); return; }
       } else {
@@ -320,8 +320,8 @@ export function useFileTree(
     const wsl = isWslKind(ws.type);
     // WSL trash is permanent: always confirm. Native trash stays setting-gated.
     if (wsl) {
-      if (!window.confirm(`Permanently delete "${entry.name}"? This cannot be undone.`)) return;
-    } else if (confirmTrash && !window.confirm(`Move "${entry.name}" to trash?`)) return;
+      if (!window.confirm(`Delete “${entry.name}” forever? This can’t be undone.`)) return;
+    } else if (confirmTrash && !window.confirm(`Move “${entry.name}” to the trash? You can get it back from there.`)) return;
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }); return; }
     // Keep the text so Undo can put the note back (the OS trash has no restore call).

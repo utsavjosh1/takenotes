@@ -99,15 +99,27 @@ export function markSaving(layout: TabLayout, key: string, saving: boolean): Tab
 }
 
 export function markSaved(layout: TabLayout, key: string, revisionHash: string, savedAt: string): TabLayout {
-  return patchDoc(layout, key, { dirty: false, conflict: false, saving: false, revisionHash, savedAt });
+  return patchDoc(layout, key, { dirty: false, conflict: false, deleted: false, readOnly: false, offline: false, saving: false, revisionHash, savedAt });
 }
 
 export function markConflict(layout: TabLayout, key: string): TabLayout {
   return patchDoc(layout, key, { conflict: true, saving: false });
 }
 
+export function markDeleted(layout: TabLayout, key: string): TabLayout {
+  return patchDoc(layout, key, { deleted: true, conflict: false, saving: false });
+}
+
+export function markReadOnly(layout: TabLayout, key: string): TabLayout {
+  return patchDoc(layout, key, { readOnly: true, saving: false });
+}
+
+export function markOffline(layout: TabLayout, key: string, offline: boolean): TabLayout {
+  return patchDoc(layout, key, { offline, saving: false });
+}
+
 export function resolveDoc(layout: TabLayout, key: string, content: string, revisionHash: string): TabLayout {
-  return patchDoc(layout, key, { content, dirty: false, conflict: false, saving: false, revisionHash });
+  return patchDoc(layout, key, { content, dirty: false, conflict: false, deleted: false, saving: false, revisionHash });
 }
 
 export function togglePinned(layout: TabLayout, key: string): TabLayout {

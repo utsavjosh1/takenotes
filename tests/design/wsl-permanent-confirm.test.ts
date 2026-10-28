@@ -16,18 +16,18 @@ describe("TN-DESIGN-002a WSL permanent delete always confirms", () => {
   it("WSL file trash confirms unconditionally (not gated on confirmTrash)", () => {
     expect(tree).toContain("WSL trash is permanent: always confirm.");
     // WSL branch must call window.confirm without a confirmTrash guard.
-    expect(tree).toContain('if (!window.confirm(`Permanently delete "${entry.name}"? This cannot be undone.`)) return;');
+    expect(tree).toContain('if (!window.confirm(`Delete “${entry.name}” forever? This can’t be undone.`)) return;');
     // The old gated form must be gone for the WSL permanent path.
     expect(tree).not.toContain("confirmTrash && !window.confirm(wsl ?");
   });
 
   it("WSL folder delete confirms unconditionally", () => {
-    expect(tree).toContain('if (!window.confirm(`Permanently delete folder "${entry.name}"? This cannot be undone.`)) return;');
+    expect(tree).toContain('if (!window.confirm(`Delete the folder “${entry.name}” forever? This can’t be undone.`)) return;');
     expect(tree).not.toContain("confirmTrash && !window.confirm(wslDel ?");
   });
 
   it("native OS-trash behavior unchanged (still setting-gated)", () => {
-    expect(tree).toContain('confirmTrash && !window.confirm(`Move "${entry.name}" to trash?`)');
-    expect(tree).toContain('confirmTrash && !window.confirm(`Delete folder "${entry.name}"?`)');
+    expect(tree).toContain('confirmTrash && !window.confirm(`Move “${entry.name}” to the trash? You can get it back from there.`)');
+    expect(tree).toContain('confirmTrash && !window.confirm(`Move the folder “${entry.name}” to the trash? You can get it back from there.`)');
   });
 });

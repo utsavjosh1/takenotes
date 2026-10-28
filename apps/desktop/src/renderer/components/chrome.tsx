@@ -3,7 +3,8 @@ import { Badge, Button, Icon as SharedIcon, IconButton, Pill, Rail, StatusBar as
 import appMarkUrl from "../assets/brand/takenotes-symbol-violet.svg";
 import type { WorkspaceInfo } from "@takenotes/contracts/ipc";
 import { isWslKind } from "@takenotes/platform/filesystem";
-import { statusSegments } from "../status";
+import { statusSegments, type DocSaveView } from "../status";
+import { SAVE_STATES } from "@takenotes/core/save/decisions";
 import type { PlatformState } from "../hooks/use-platform";
 import type { PageView } from "./pages";
 
@@ -142,7 +143,7 @@ export function StatusBar({
   words: number;
   line: number;
   col: number;
-  doc: "clean" | "dirty" | "saving" | "saved" | "conflict" | "error";
+  doc: DocSaveView;
   savedAt: string;
   connection: "connected" | "disconnected" | "reconnecting" | "failed";
   fileCount: number;
@@ -172,14 +173,14 @@ export function StatusBar({
     savedAt,
     fileCount,
   });
-  const badSave = doc === "conflict" || doc === "error";
+  const badSave = doc === "conflict" || doc === "error" || doc === "deleted" || doc === "disconnected";
   const badConn = connection === "disconnected" || connection === "failed";
   return (
     <SharedStatusBar
       start={<>
         <Pill tone={badConn ? "bad" : "ok"} dot title={`Workspace: ${workspace.displayName}`}>{seg.workspace} · {seg.platform} · {seg.connection}</Pill>
         <span role="status">
-          {seg.save && <Pill tone={badSave ? "bad" : doc === "dirty" || doc === "saving" ? "warn" : "ok"} dot>{seg.save}</Pill>}
+          {seg.save && <Pill title={doc === "clean" || doc === "error" ? undefined : SAVE_STATES[doc].tip} tone={badSave ? "bad" : doc === "unsaved" || doc === "saving" || doc === "readonly" ? "warn" : "ok"} dot>{seg.save}</Pill>}
         </span>
         {indexWarning && <Pill tone="warn" title={indexWarning} role="note">Index partial</Pill>}
         {updateVersion && onReviewUpdate && (

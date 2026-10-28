@@ -67,11 +67,7 @@ const COLOR_LABEL: Record<string, string> = {
 function colorStyle(color: string | undefined): string | undefined {
   if (!color) return undefined;
   if (/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(color)) return color;
-  const map: Record<string, string> = {
-    "1": "#e45649", "2": "#d2842a", "3": "#b09a2a",
-    "4": "#50a14f", "5": "#0184bc", "6": "#a626a4",
-  };
-  return map[color] ?? undefined;
+  return /^[1-6]$/.test(color) ? `var(--canvas-${color})` : undefined;
 }
 
 function port(n: CanvasNode, side: CanvasSide | undefined, def: CanvasSide): { x: number; y: number } {

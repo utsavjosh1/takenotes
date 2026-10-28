@@ -32,5 +32,7 @@ export function useSiteTheme(): Theme {
 
 export function applyTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#191613" : "#faf6ee");
+  // The browser chrome follows the page colour; read it from the token, not a copy.
+  const page = getComputedStyle(document.documentElement).getPropertyValue("--app").trim();
+  if (page) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", page);
 }

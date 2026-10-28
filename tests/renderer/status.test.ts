@@ -29,11 +29,11 @@ describe("status segments", () => {
       distro: "Ubuntu",
       linuxUser: "work",
       connection: "connected",
-      doc: "dirty",
+      doc: "unsaved",
       fileCount: 7,
     });
     expect(s.platform).toBe("WSL · Ubuntu · work");
-    expect(s.save).toBe("Unsaved");
+    expect(s.save).toBe("Unsaved changes");
     expect(s.connection).toBe("Connected");
   });
 
@@ -72,7 +72,7 @@ describe("status segments", () => {
     });
     expect(wsl.workspace).not.toBe(local.workspace);
     expect(wsl.platform).not.toBe(local.platform);
-    expect(wsl.save).toBe("Conflict");
+    expect(wsl.save).toBe("Changed elsewhere");
     expect(wsl.files).not.toBe(local.files);
   });
 
@@ -87,7 +87,7 @@ describe("status segments", () => {
       fileCount: 7,
     });
     expect(s.connection).toBe("Unavailable");
-    expect(s.save).not.toBe("Conflict");
+    expect(s.save).not.toBe("Changed elsewhere");
   });
 
   it("reconnecting and failed connections read distinctly", () => {

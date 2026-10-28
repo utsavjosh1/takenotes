@@ -10,6 +10,9 @@ import {
   closeDocInPane,
   createLayout,
   markConflict,
+  markDeleted,
+  markOffline,
+  markReadOnly,
   markSaved,
   markSaving,
   openDocInPane,
@@ -24,7 +27,9 @@ import {
 } from "../panes";
 import { useIndexMeta } from "../stores/index-meta";
 import { useSettingsStore } from "../stores/settings";
+import { askRename } from "../stores/rename-preview";
 import { getBridge } from "../bridge";
+import { classifySaveFailure, decideExternalChange, saveStateOf, type SaveState } from "@takenotes/core/save/decisions";
 import type { Notify } from "./use-notify";
 import type { RecentsApi } from "./use-recents";
 
@@ -32,6 +37,9 @@ export type RecoveryEntry = { content: string; updatedAt: number; stale: boolean
 export type HistoryDialogState = { docKey: string; loading: boolean; error: string | null; snapshots: RecoverySnapshotMeta[] };
 export type Cursor = { line: number; col: number };
 export type SaveView = "clean" | "conflict" | "saving" | "dirty" | "saved";
+/** A save that failed for a reason the person has to act on ("Could not save" dialog). */
+export type CompareState = { docKey: string; mine: string; theirs: string };
+export type SaveFailureDialog = { docKey: string; message: string };
 
 /** Draft IPC guards: the dev loop rebuilds main/preload only on restart,
  *  so a hot-reloaded renderer can run against a stale main without draft
@@ -94,6 +102,20 @@ export type DocumentsApi = {
   cursor: Cursor;
   words: number;
   saveView: SaveView;
+  /** One of the seven trust-layer states for the active note. */
+  saveState: SaveState | "clean";
+  saveFailure: SaveFailureDialog | null;
+  compare: CompareState | null;
+  openCompare: (docKey: string) => Promise<void>;
+  closeCompare: () => void;
+  /** Deleted outside the app: write the open text back to its original path. */
+  restoreDeleted: (docKey: string) => Promise<void>;
+  dismissSaveFailure: () => void;
+  copyToNewNote: (docKey: string, content?: string) => Promise<void>;
+  readSnapshot: (snapshotId: string) => Promise<string | null>;
+  copySnapshotToNewNote: (snapshotId: string) => Promise<void>;
+  /** Tell open notes the connection went down or came back. */
+  setConnected: (connected: boolean) => void;
   recovery: Record<string, RecoveryEntry>;
   historyDialog: HistoryDialogState | null;
   closeHistory: () => void;
@@ -143,6 +165,8 @@ export function useDocuments(
   // reached the note file. A persisted draft never flips the save indicator.
   const [recovery, setRecovery] = useState<Record<string, RecoveryEntry>>({});
   const [historyDialog, setHistoryDialog] = useState<HistoryDialogState | null>(null);
+  const [compare, setCompare] = useState<CompareState | null>(null);
+  const [saveFailure, setSaveFailure] = useState<SaveFailureDialog | null>(null);
   const recoveryLastEditCapture = useRef<Record<string, number>>({});
 
   const activeTab = activeDoc(layout);
@@ -244,11 +268,14 @@ export function useDocuments(
       hadBom: target.hadBom,
     });
     if (!res.ok) {
-      if (res.error.code === "CONFLICT") {
-        setLayout((l) => markConflict(l, key));
-      } else {
+      const failure = classifySaveFailure(res.error.code);
+      if (failure === "conflict") setLayout((l) => markConflict(l, key));
+      else if (failure === "readonly") setLayout((l) => markReadOnly(l, key));
+      else if (failure === "offline") setLayout((l) => markOffline(l, key, true));
+      else if (failure === "deleted") setLayout((l) => markDeleted(l, key));
+      else {
         setLayout((l) => markSaving(l, key, false));
-        errToast(res.error, `Couldn't save ${fileName(target.relativePath)}. Your edits are still safe`);
+        setSaveFailure({ docKey: key, message: res.error.message });
       }
       return;
     }
@@ -273,6 +300,7 @@ export function useDocuments(
     safeDraftClear(workspace.workspaceId, target.relativePath);
   }, [workspace, layout, errToast, bumpIndex]);
 
+  const autosaveMs = useSettingsStore((s) => s.settings.autosaveMs);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (autosaveTimer.current) {
@@ -280,19 +308,19 @@ export function useDocuments(
       autosaveTimer.current = null;
     }
     if (!workspace) return;
-    const dirtyDocs = Object.values(layout.docs).filter((d) => d.dirty && !d.saving && !d.conflict && !d.loadError && d.revisionHash);
+    const dirtyDocs = Object.values(layout.docs).filter((d) => d.dirty && !d.saving && !d.conflict && !d.deleted && !d.readOnly && !d.offline && !d.loadError && d.revisionHash);
     if (dirtyDocs.length === 0) return;
     autosaveTimer.current = setTimeout(() => {
       autosaveTimer.current = null;
       for (const doc of dirtyDocs) void save(doc.key);
-    }, 1_500);
+    }, autosaveMs);
     return () => {
       if (autosaveTimer.current) {
         clearTimeout(autosaveTimer.current);
         autosaveTimer.current = null;
       }
     };
-  }, [workspace, layout.docs, save]);
+  }, [workspace, layout.docs, save, autosaveMs]);
 
   const reloadFromDisk = useCallback(async (docKey?: string) => {
     if (!workspace) return;
@@ -315,6 +343,7 @@ export function useDocuments(
         message: res.error.message,
       });
       errToast(res.error, "Couldn't reload from disk"); return; }
+    if (target.dirty) await safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: target.relativePath, content: target.content, reason: "before-reload" });
     setLayout((l) => resolveDoc(l, target.key, res.result.content, res.result.revision.hash));
     syncFileIndex(workspaceIndex, workspace.workspaceId, target.relativePath, res.result.content, res.result.revision);
     bumpIndex();
@@ -327,20 +356,24 @@ export function useDocuments(
     const bridge = getBridge();
     if (!bridge) return;
     const res = await bridge.file.read(workspace.workspaceId, relativePath);
+    if (!res.ok && classifySaveFailure(res.error.code) !== "deleted") return;
     if (!res.ok) {
       workspaceIndex.remove(workspace.workspaceId, relativePath);
       bumpIndex();
+      if (target) setLayout((l) => markDeleted(l, key));
       return;
     }
     syncFileIndex(workspaceIndex, workspace.workspaceId, relativePath, res.result.content, res.result.revision);
     bumpIndex();
     if (!target) return;
-    if (target.dirty) {
-      setLayout((l) => markConflict(l, key));
-      toast("File changed on disk. Your unsaved edits were kept; reload or retry save to resolve.", "error");
-      return;
+    const action = decideExternalChange({ dirty: target.dirty, baseRev: target.revisionHash }, { exists: true, rev: res.result.revision.hash });
+    if (action.kind === "conflict") setLayout((l) => markConflict(l, key));
+    else if (action.kind === "reload-quietly") {
+      // The text on screen is replaced, so keep what was there first.
+      await safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath, content: target.content, reason: "before-reload" });
+      setLayout((l) => resolveDoc(l, key, res.result.content, res.result.revision.hash));
+      toast("Updated from disk.");
     }
-    setLayout((l) => resolveDoc(l, key, res.result.content, res.result.revision.hash));
   }, [workspace, layout, bumpIndex, toast]);
 
   const keepMyVersion = useCallback(async (docKey?: string) => {
@@ -352,6 +385,8 @@ export function useDocuments(
     const res = await bridge.file.read(workspace.workspaceId, target.relativePath);
     if (!res.ok) { errToast(res.error); return; }
     const diskHash = res.result.revision.hash;
+    // About to overwrite the other version: keep it in history first.
+    await safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: target.relativePath, content: res.result.content, reason: "before-overwrite" });
     const res2 = await bridge.file.write({
       workspaceId: workspace.workspaceId, relativePath: target.relativePath, content: target.content,
       expectedHash: diskHash, newlineStyle: target.newlineStyle, hadBom: target.hadBom,
@@ -366,6 +401,71 @@ export function useDocuments(
     syncFileIndex(workspaceIndex, workspace.workspaceId, target.relativePath, target.content, res2.result);
     bumpIndex();
   }, [workspace, layout, errToast, bumpIndex]);
+
+  const copyToNewNote = useCallback(async (docKey: string, content?: string) => {
+    if (!workspace) return;
+    const doc = layout.docs[docKey];
+    const bridge = getBridge();
+    if (!doc || !bridge) return;
+    const stem = fileName(doc.relativePath).replace(/\.md$/i, "");
+    const dir = parentDir(doc.relativePath);
+    let rel = joinRel(dir, `${stem} (copy).md`);
+    let created = await bridge.file.create(workspace.workspaceId, rel);
+    for (let i = 2; !created.ok && created.error.code === "ALREADY_EXISTS" && i < 100; i += 1) {
+      rel = joinRel(dir, `${stem} (copy ${i}).md`);
+      created = await bridge.file.create(workspace.workspaceId, rel);
+    }
+    if (!created.ok) { errToast(created.error, "Couldn't make a new note"); return; }
+    const fresh = await bridge.file.read(workspace.workspaceId, rel);
+    if (!fresh.ok) { errToast(fresh.error, "Couldn't make a new note"); return; }
+    const wrote = await bridge.file.write({ workspaceId: workspace.workspaceId, relativePath: rel, content: content ?? doc.content, expectedHash: fresh.result.revision.hash, newlineStyle: doc.newlineStyle, hadBom: doc.hadBom });
+    if (!wrote.ok) { errToast(wrote.error, "Couldn't make a new note"); return; }
+    syncFileIndex(workspaceIndex, workspace.workspaceId, rel, content ?? doc.content, wrote.result);
+    bumpIndex();
+    setSaveFailure(null);
+    await openFile(rel);
+    toast(`Copied to ${fileName(rel).replace(/\.md$/i, "")}.`);
+  }, [workspace, layout, errToast, toast, bumpIndex, openFile]);
+
+  // Connection down: dirty notes wait (state "Disconnected"). Back up: they leave the
+  // waiting state and the autosave effect writes the queued edits.
+  const setConnected = useCallback((connected: boolean) => {
+    setLayout((l) => {
+      let next = l;
+      for (const d of Object.values(l.docs)) {
+        if (connected && d.offline) next = markOffline(next, d.key, false);
+        else if (!connected && d.dirty && !d.offline) next = markOffline(next, d.key, true);
+      }
+      return next;
+    });
+  }, []);
+
+  const openCompare = useCallback(async (docKey: string) => {
+    if (!workspace) return;
+    const doc = layout.docs[docKey];
+    const bridge = getBridge();
+    if (!doc || !bridge) return;
+    const res = await bridge.file.read(workspace.workspaceId, doc.relativePath);
+    if (!res.ok) { errToast(res.error, "Couldn't read the other version"); return; }
+    setCompare({ docKey, mine: doc.content, theirs: res.result.content });
+  }, [workspace, layout, errToast]);
+
+  const restoreDeleted = useCallback(async (docKey: string) => {
+    if (!workspace) return;
+    const doc = layout.docs[docKey];
+    const bridge = getBridge();
+    if (!doc || !bridge) return;
+    const created = await bridge.file.create(workspace.workspaceId, doc.relativePath);
+    if (!created.ok && created.error.code !== "ALREADY_EXISTS") { errToast(created.error, "Couldn't restore the note"); return; }
+    const fresh = await bridge.file.read(workspace.workspaceId, doc.relativePath);
+    if (!fresh.ok) { errToast(fresh.error, "Couldn't restore the note"); return; }
+    const wrote = await bridge.file.write({ workspaceId: workspace.workspaceId, relativePath: doc.relativePath, content: doc.content, expectedHash: fresh.result.revision.hash, newlineStyle: doc.newlineStyle, hadBom: doc.hadBom });
+    if (!wrote.ok) { errToast(wrote.error, "Couldn't restore the note"); return; }
+    setLayout((l) => markSaved(l, docKey, wrote.result.hash, new Date().toLocaleTimeString()));
+    syncFileIndex(workspaceIndex, workspace.workspaceId, doc.relativePath, doc.content, wrote.result);
+    bumpIndex();
+    toast("Note restored.");
+  }, [workspace, layout, errToast, toast, bumpIndex]);
 
   const titleToFileName = useCallback((title: string): string | null => {
     const base = title
@@ -389,7 +489,7 @@ export function useDocuments(
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }, "Couldn't rename note"); return false; }
     const autoUpdateLinks = useSettingsStore.getState().settings.autoUpdateLinks;
-    if (!autoUpdateLinks && !window.confirm(`Rename "${fileName(target.relativePath)}" without updating links that point to it?`)) return false;
+    if (!(await askRename(workspace.workspaceId, target.relativePath, newRel, false, autoUpdateLinks))) return false;
     const res = await bridge.file.rename(workspace.workspaceId, target.relativePath, newRel, { autoUpdateLinks });
     if (!res.ok) { errToast(res.error, "Couldn't rename note"); return false; }
     setLayout((l) => applyRename(l, workspace.workspaceId, target.relativePath, newRel));
@@ -540,11 +640,25 @@ export function useDocuments(
     toast("Copied recovery snapshot contents.");
   }, [workspace, errToast, toast]);
 
+  const readSnapshot = useCallback(async (snapshotId: string): Promise<string | null> => {
+    if (!workspace) return null;
+    const res = await getBridge()?.recovery.read(workspace.workspaceId, snapshotId);
+    return res?.ok ? res.result.content : null;
+  }, [workspace]);
+
+  const copySnapshotToNewNote = useCallback(async (snapshotId: string) => {
+    if (!historyDialog) return;
+    const content = await readSnapshot(snapshotId);
+    if (content === null) { toast("Couldn’t read that version.", "error"); return; }
+    setHistoryDialog(null);
+    await copyToNewNote(historyDialog.docKey, content);
+  }, [historyDialog, readSnapshot, toast, copyToNewNote]);
+
   const restoreRecoverySnapshot = useCallback(async (snapshotId: string) => {
     if (!workspace || !historyDialog) return;
     const doc = layout.docs[historyDialog.docKey];
     if (!doc || doc.loadError) return;
-    if (!window.confirm(`Restore this recovery snapshot over ${fileName(doc.relativePath)}? The current editor content will be snapshotted first.`)) return;
+    if (!window.confirm(`Restore this version of ${fileName(doc.relativePath)}? What’s there now goes to history first (Before restore).`)) return;
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }, "Couldn't restore recovery snapshot"); return; }
     const res = await bridge.recovery.restore({
@@ -655,8 +769,14 @@ export function useDocuments(
             ? "saved"
             : "clean";
 
+  const saveState = !activeTab ? "clean" as const : saveStateOf({
+    dirty: activeTab.dirty, saving: activeTab.saving, conflict: activeTab.conflict,
+    readOnly: activeTab.readOnly ?? false, deleted: activeTab.deleted ?? false, offline: activeTab.offline ?? false,
+  });
+
   return {
-    layout, activeTab, cursor, words, saveView, recovery, historyDialog,
+    layout, activeTab, cursor, words, saveView, saveState, saveFailure, compare, openCompare, closeCompare: () => setCompare(null), restoreDeleted,
+    dismissSaveFailure: () => setSaveFailure(null), copyToNewNote, readSnapshot, copySnapshotToNewNote, setConnected, recovery, historyDialog,
     closeHistory: () => setHistoryDialog(null),
     openFile, onEdit, save, reloadFromDisk, reconcileExternalChange, keepMyVersion,
     renameNoteTitle, closeTab, closeTabWithoutPreserve, togglePinnedTab, reopenClosedTab,
