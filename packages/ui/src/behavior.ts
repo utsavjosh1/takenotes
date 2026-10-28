@@ -1,6 +1,13 @@
 /** Shared interaction rules; platform adapters map them to DOM/native events.
  * These rules never perform an operation or infer that it succeeded. */
-export type ButtonVariant = "primary" | "secondary" | "quiet" | "destructive";
+/** `secondary`, `quiet` and `destructive` are deprecated aliases of
+ * `default`, `ghost` and `danger`; they keep old callers working until M4. */
+export type ButtonVariant = "default" | "primary" | "ghost" | "danger" | "secondary" | "quiet" | "destructive";
+export type ButtonSize = "sm" | "md" | "lg";
+const VARIANT_ALIAS = { secondary: "default", quiet: "ghost", destructive: "danger" } as const;
+export function canonicalVariant(v: ButtonVariant): "default" | "primary" | "ghost" | "danger" {
+  return v in VARIANT_ALIAS ? VARIANT_ALIAS[v as keyof typeof VARIANT_ALIAS] : (v as "default" | "primary" | "ghost" | "danger");
+}
 export type NoticeTone = "info" | "success" | "warning" | "danger";
 export type Announcement = "off" | "polite" | "assertive";
 

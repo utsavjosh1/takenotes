@@ -73,3 +73,19 @@ on-accent, and refuses (returns `false`, keeps the default) a colour below
 
 `legacy-aliases.css` maps old desktop variable names (`--surface-*`,
 `--text-primary`, ...) to the public tokens. Deprecated; M6 deletes it.
+
+## Components (`@takenotes/ui/dom`)
+
+Foundation set: `Icon` / `Art` (prototype `ICONS` and empty-state art),
+`Button` (default, primary, ghost, danger; sm 26 / md 30 / lg 36; 44 on touch),
+`IconButton`, `Input`, `Select`, `Textarea`, `TextField`, `SelectField`,
+`Switch`, `Checkbox`, `Chip`, `Badge`, `Pill`, `Kbd`, `Card`, `EmptyState`,
+`Skeleton`, `Progress`, `Stepper`, `DataTable`. Styles are in `dom/styles.css`
+and use public tokens only.
+
+Deprecated button variants `secondary`, `quiet`, `destructive` still work
+(aliases of `default`, `ghost`, `danger`); M4 removes them.
+
+Examples: `npm run storybook` (stories in `src/dom/components.stories.tsx`).
+Tests are logic-only (`tests/ui/components.test.ts`, `component-styles.test.ts`):
+markup/ARIA, token use, contrast of every colour pair, motion and touch rules.

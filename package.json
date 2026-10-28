@@ -42,11 +42,14 @@
     "mobile:help": "npm --workspace @takenotes/mobile run help",
     "package:mac": "npm run build && electron-builder --mac dmg --x64 --arm64 --publish never",
     "package:linux": "npm run build && electron-builder --linux AppImage deb --x64 --publish never",
-    "demo:seed": "node tools/scripts/seed-demo-workspace.mjs"
+    "demo:seed": "node tools/scripts/seed-demo-workspace.mjs",
+    "storybook": "storybook dev -p 6006 -c packages/ui/.storybook --no-open",
+    "storybook:build": "storybook build -c packages/ui/.storybook -o packages/ui/storybook-static --quiet"
   },
   "devDependencies": {
     "@electron/fuses": "2.1.3",
     "@eslint/js": "10.0.1",
+    "@storybook/react-vite": "^10.6.5",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "26.6.2",
     "@vitejs/plugin-react": "6.1.1",
@@ -55,10 +58,11 @@
     "esbuild": "0.28.2",
     "eslint": "10.12.0",
     "globals": "17.12.0",
+    "storybook": "^10.6.5",
     "tailwindcss": "^4.3.3",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.0",
-    "vite": "8.3.2",
+    "vite": "^8.3.2",
     "vitest": "5.0.2"
   },
   "allowScripts": {
