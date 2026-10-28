@@ -5,7 +5,7 @@
  */
 import { useMemo, useRef, useState, type JSX } from "react";
 import { moveRovingIndex } from "@takenotes/ui";
-import { EmptyState } from "@takenotes/ui/dom";
+import { EmptyState, Skeleton } from "@takenotes/ui/dom";
 import {
   aggregateTags,
   buildTagTree,
@@ -93,7 +93,7 @@ export function TagsPane({
 
   if (entries === null) {
     return (
-      <EmptyState title="No workspace index yet" description="Tags appear once the workspace index builds." />
+      <Skeleton label="Loading tags" />
     );
   }
   return (

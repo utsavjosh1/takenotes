@@ -8,6 +8,7 @@
  * sliders, tag nodes + tags toggle, time-lapse. Nodes are notes;
  * ghosts/attachments appear only under their opt-in toggles.
  */
+import { Skeleton } from "@takenotes/ui/dom";
 import { useMemo, useState, type JSX } from "react";
 import {
   buildGraph,
@@ -87,7 +88,7 @@ export function GraphPane({
     return (
       <div className="pane-placeholder">
         <p className="panel-title">Graph</p>
-        <p>No workspace index yet.</p>
+        <Skeleton label="Loading the graph" />
       </div>
     );
   }

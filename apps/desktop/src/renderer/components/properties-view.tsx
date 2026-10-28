@@ -6,7 +6,7 @@
  */
 import { useMemo, useRef, useState, type JSX } from "react";
 import { moveRovingIndex } from "@takenotes/ui";
-import { EmptyState } from "@takenotes/ui/dom";
+import { EmptyState, Skeleton } from "@takenotes/ui/dom";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import { cellDisplay } from "@takenotes/core/collections/evaluate";
 import {
@@ -124,7 +124,7 @@ export function PropertiesPane({
           </label>
         </div>
         {entries === null ? (
-          <EmptyState title="No workspace index yet" description="Details appear once the workspace index builds." />
+          <Skeleton label="Loading details" />
         ) : summaries.length === 0 ? (
           <EmptyState title="No details in this workspace" description="Details you add to any note show up automatically." />
         ) : (

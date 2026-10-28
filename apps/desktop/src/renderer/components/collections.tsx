@@ -4,6 +4,7 @@
  * with named presentations; definitions travel as
  * `.takenotes/collections/*.yaml`. MVP renders table + list only.
  */
+import { Skeleton } from "@takenotes/ui/dom";
 import { useMemo, useState, type JSX } from "react";
 import { evaluateCollectionView } from "@takenotes/core/collections/evaluate";
 import type { CollectionViewKind } from "@takenotes/core/collections/store";
@@ -40,7 +41,7 @@ export function CollectionsPane({
     return (
       <div className="pane-placeholder">
         <p className="panel-title">Collections</p>
-        <p>Loading…</p>
+        <Skeleton label="Loading collections" />
       </div>
     );
   }
@@ -85,7 +86,7 @@ export function CollectionsPane({
             Query: <button className="linklike" title="Run in Search" onClick={() => runSearch(active.doc.query)}>{active.doc.query || "(empty — matches nothing)"}</button>
           </p>
           {result === null ? (
-            <p className="pane-hint">No workspace index yet.</p>
+            <Skeleton label="Loading results" />
           ) : !result.ok ? (
             <p className="inline-error">{result.error}</p>
           ) : result.rows.length === 0 ? (
