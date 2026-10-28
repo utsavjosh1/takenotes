@@ -1,0 +1,42 @@
+/* DEPRECATED. Maps old variable names to the public tokens in tokens.css so
+ * existing CSS keeps working during the migration. Do not use in new code.
+ * M6 deletes this file. Load after tokens.css.
+ *
+ * Values are unchanged from the desktop aliases this replaces, except where
+ * noted. --accent-soft is deliberately NOT mapped here: the public token
+ * (--accent-soft, a solid tint) replaces the old 14% colour-mix, and nothing
+ * outside the [data-accent] presets reads it. */
+:root, [data-theme] {
+  --surface-app: var(--app);
+  --surface-sidebar: var(--side);
+  --surface-editor: var(--editor);
+  --surface-overlay: var(--overlay);
+  --surface-input: var(--tn-surface-input);
+  --surface-hover: var(--hover);
+  --surface-active: var(--selected);
+  --surface-selected: var(--selected);
+  --border-subtle: var(--line);
+  --border-strong: var(--control);
+  --border-control: var(--control);
+  --text-primary: var(--text);
+  --text-secondary: var(--text2);
+  --text-muted: var(--muted);
+  --danger: var(--bad);
+  --danger-surface: var(--bad-bg);
+  --warning: var(--warn);
+  --warning-surface: var(--warn-bg);
+  --success: var(--ok);
+  --success-surface: var(--ok-bg);
+  --selection: var(--tn-selection);
+  --code-bg: var(--code);
+  --highlight-surface: var(--highlight);
+  --action-fill: var(--btn);
+  --action-text: var(--btn-text);
+  --scrollbar: var(--tn-scrollbar);
+  --shadow-menu: 0 4px 16px rgb(62 52 25 / .12);
+  --shadow-overlay: 0 16px 48px rgb(62 52 25 / .18);
+}
+[data-theme="dark"] {
+  --shadow-menu: 0 4px 16px rgb(0 0 0 / .32);
+  --shadow-overlay: 0 16px 48px rgb(0 0 0 / .45);
+}

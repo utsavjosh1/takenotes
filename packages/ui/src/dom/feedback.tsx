@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Announcement, NoticeTone } from "../behavior";
+import { Art, type ArtName } from "./icon";
 
 export type NoticeProps = {
   tone?: NoticeTone;
@@ -26,15 +27,17 @@ export type EmptyStateProps = {
   title: string;
   description?: ReactNode;
   illustration?: ReactNode;
+  /** Built-in line illustration. Ignored when `illustration` is given. */
+  art?: ArtName;
   actions?: ReactNode;
   children?: ReactNode;
   headingLevel?: 1 | 2;
   className?: string;
 };
-export function EmptyState({ title, description, illustration, actions, children, headingLevel = 2, className = "" }: EmptyStateProps) {
+export function EmptyState({ title, description, illustration, art, actions, children, headingLevel = 2, className = "" }: EmptyStateProps) {
   const Heading = headingLevel === 1 ? "h1" : "h2";
   return <div className={`tn-empty-state ${className}`}>
-    {illustration}
+    {illustration ?? (art && <Art name={art} />)}
     <Heading>{title}</Heading>
     {description && <div className="tn-empty-description">{description}</div>}
     {actions && <div className="tn-actions">{actions}</div>}

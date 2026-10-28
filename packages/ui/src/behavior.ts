@@ -1,6 +1,13 @@
 /** Shared interaction rules; platform adapters map them to DOM/native events.
  * These rules never perform an operation or infer that it succeeded. */
-export type ButtonVariant = "primary" | "secondary" | "quiet" | "destructive";
+/** `secondary`, `quiet` and `destructive` are deprecated aliases of
+ * `default`, `ghost` and `danger`; they keep old callers working until M4. */
+export type ButtonVariant = "default" | "primary" | "ghost" | "danger" | "secondary" | "quiet" | "destructive";
+export type ButtonSize = "sm" | "md" | "lg";
+const VARIANT_ALIAS = { secondary: "default", quiet: "ghost", destructive: "danger" } as const;
+export function canonicalVariant(v: ButtonVariant): "default" | "primary" | "ghost" | "danger" {
+  return v in VARIANT_ALIAS ? VARIANT_ALIAS[v as keyof typeof VARIANT_ALIAS] : (v as "default" | "primary" | "ghost" | "danger");
+}
 export type NoticeTone = "info" | "success" | "warning" | "danger";
 export type Announcement = "off" | "polite" | "assertive";
 
@@ -10,9 +17,14 @@ export function actionState({ disabled = false, pending = false }: ActionState) 
 }
 
 export type DismissReason = "close" | "escape" | "backdrop";
-export type DialogPolicy = { dismissible?: boolean; closeOnBackdrop?: boolean };
-export function canDismissDialog(reason: DismissReason, { dismissible = true, closeOnBackdrop = false }: DialogPolicy): boolean {
-  return dismissible && (reason !== "backdrop" || closeOnBackdrop);
+/** `unsavedInput`: the dialog holds typed text, so Escape and the backdrop
+ * must not throw it away. The close button (an explicit act) still works. */
+export type DialogPolicy = { dismissible?: boolean; closeOnBackdrop?: boolean; unsavedInput?: boolean };
+export function canDismissDialog(reason: DismissReason, { dismissible = true, closeOnBackdrop = false, unsavedInput = false }: DialogPolicy): boolean {
+  if (!dismissible) return false;
+  if (reason === "backdrop") return closeOnBackdrop && !unsavedInput;
+  if (reason === "escape") return !unsavedInput;
+  return true;
 }
 
 export type FieldState = { description?: string; error?: string };
