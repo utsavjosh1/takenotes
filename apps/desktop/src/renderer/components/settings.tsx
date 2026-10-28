@@ -312,7 +312,7 @@ export function ShortcutTable({ platform, hotkeys }: { platform: PlatformState; 
         const label = id === "escape" ? "Esc" : (hotkeys ? hotkeys.labelFor(id) || platform.shortcutLabel(id) : platform.shortcutLabel(id));
         const conflict = id !== "escape" && collisionIds.has(id);
         return <tr key={id}><td>{title}{conflict ? " ⚠" : ""}</td><td style={{ textAlign: "right" }}>
-          {label ? <kbd className="k">{label}</kbd> : <span style={{ color: "var(--text-muted)", fontSize: 12 }}>menu only</span>}
+          {label ? <kbd className="k">{label}</kbd> : <span style={{ color: "var(--muted)", fontSize: 12 }}>menu only</span>}
           {hotkeys && id !== "escape" && (
             capturing === id
               ? <Button onClick={() => setCapturing(null)}>Press keys… (Esc cancels)</Button>

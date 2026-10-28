@@ -1589,7 +1589,7 @@ export default function App(): JSX.Element {
                       <div className="panel-title">Opening…</div>
                     ) : healthError ? (
                       <div style={{ padding: 12 }}>
-                        <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Couldn&apos;t list this workspace.</p>
+                        <p style={{ fontSize: 13, color: "var(--text2)" }}>Couldn&apos;t list this workspace.</p>
                         <p className="inline-error">{healthError}</p>
                       </div>
                     ) : (

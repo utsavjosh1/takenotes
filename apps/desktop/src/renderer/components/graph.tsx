@@ -24,12 +24,12 @@ import type { Edge } from "@takenotes/core/index/edges";
  * Stored as `var()` strings — they flow into inline `style` (which resolves vars),
  * never into SVG presentation attributes (which do not). */
 const GROUP_COLORS = [
-  "var(--tn-graph-1)",
-  "var(--tn-graph-2)",
-  "var(--tn-graph-3)",
-  "var(--tn-graph-4)",
-  "var(--tn-graph-5)",
-  "var(--tn-graph-6)",
+  "var(--graph-1)",
+  "var(--graph-2)",
+  "var(--graph-3)",
+  "var(--graph-4)",
+  "var(--graph-5)",
+  "var(--graph-6)",
 ];
 
 type T = { x: number; y: number; k: number };
@@ -188,7 +188,7 @@ export function GraphPane({
             if (!p) return null;
             const ghost = n.ghost === true || n.attachment === true;
             const r = 6 + Math.min(n.inDegree, 6) * 1.5;
-            const fill = colors.get(n.id) ?? (ghost ? "var(--text-muted)" : "var(--accent)");
+            const fill = colors.get(n.id) ?? (ghost ? "var(--muted)" : "var(--accent)");
             const dim = neighbours && !neighbours.has(n.id);
             return (
               <g
@@ -200,7 +200,7 @@ export function GraphPane({
                 onClick={() => { if (!ghost) onOpen(n.id); }}
               >
                 <title>{ghost ? `${n.label} (missing — not clickable)` : `${n.label}\n${n.id}`}</title>
-                <circle r={r} style={{ fill, stroke: hover === n.id ? "var(--text-primary)" : "transparent", strokeWidth: 2, cursor: ghost ? undefined : "pointer" }} />
+                <circle r={r} style={{ fill, stroke: hover === n.id ? "var(--text)" : "transparent", strokeWidth: 2, cursor: ghost ? undefined : "pointer" }} />
                 <text y={r + 11} textAnchor="middle" className="g-label">{n.label.length > 24 ? `${n.label.slice(0, 23)}…` : n.label}</text>
               </g>
             );

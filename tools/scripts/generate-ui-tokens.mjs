@@ -22,6 +22,7 @@ lines.push(":root, [data-theme] {");
 for (const [name, key] of Object.entries(publicColors)) lines.push(`  --${name}: var(--tn-${key});`);
 for (const [name, value] of Object.entries(publicRadius)) lines.push(`  --r-${name}: ${value}px;`);
 lines.push("  --r-pill: 99px;");
+for (const [name, value] of Object.entries(space)) lines.push(`  --space-${name}: ${value}px;`);
 for (const [name, value] of Object.entries(layout)) lines.push(`  --${name}: ${value}px;`);
 for (const [name, value] of Object.entries(controlHeight)) lines.push(`  --control-h${name === "default" ? "" : `-${name}`}: ${value}px;`);
 for (const [name, value] of Object.entries(type)) lines.push(`  --${name}: ${name.startsWith("lh") ? value : `${value}px`};`);
