@@ -1,5 +1,5 @@
 import type { JSX, ReactNode } from "react";
-import { Icon, type IconName } from "./icons";
+import { Badge, Button, Icon as SharedIcon, IconButton, Pill, Rail, StatusBar as SharedStatusBar, TitleBar as SharedTitleBar, type RailItem } from "@takenotes/ui/dom";
 import appMarkUrl from "../assets/brand/takenotes-symbol-violet.svg";
 import type { WorkspaceInfo } from "@takenotes/contracts/ipc";
 import { isWslKind } from "@takenotes/platform/filesystem";
@@ -28,41 +28,47 @@ export function TitleBar({
 }): JSX.Element {
   const quickOpen = platform.shortcutLabel("quickOpen.open");
   const newNote = platform.shortcutLabel("note.new");
-  return (
-    <header className="titlebar" role="banner">
+  const start = (
+    <>
       <img src={appMarkUrl} className="app-mark" alt="" aria-hidden="true" draggable={false} />
       {workspace && switcher ? switcher : workspace ? (
         <span className="ws-switch" title={workspace.displayName}>
-          <span className={`kind ${isWslKind(workspace.type) ? "kind-wsl" : "kind-local"}`}>
+          <Badge tone={isWslKind(workspace.type) ? "neutral" : "neutral"}>
             {isWslKind(workspace.type) ? "WSL" : workspace.type === "macos-local" ? "macOS" : workspace.type === "linux-local" ? "Linux" : "Windows"}
-          </span>
+          </Badge>
           <span className="ws-name">{workspace.displayName}</span>
         </span>
       ) : null}
-      <button
-        className="quickopen-launcher"
-        onClick={onQuickOpen}
-        title={workspace ? `Quick open (${quickOpen})` : "Open a workspace before using quick open"}
-        aria-label={workspace ? "Quick open notes" : "Quick open unavailable until a workspace is open"}
-        disabled={!workspace}
-      >
-        <Icon name="search" />
-        <span>Search files…</span>
-        <kbd>{quickOpen}</kbd>
-      </button>
+    </>
+  );
+  const center = (
+    <button
+      className="quickopen-launcher"
+      onClick={onQuickOpen}
+      title={workspace ? `Quick open (${quickOpen})` : "Open a workspace before using quick open"}
+      aria-label={workspace ? "Quick open notes" : "Quick open unavailable until a workspace is open"}
+      disabled={!workspace}
+    >
+      <SharedIcon name="search" size="sm" />
+      <span>Search files…</span>
+      <kbd className="ui-kbd">{quickOpen}</kbd>
+    </button>
+  );
+  const end = (
+    <>
       {workspace && onToggleRight && (
-        <button className={`titlebar-icon${rightOpen ? " on" : ""}`} onClick={onToggleRight} aria-pressed={rightOpen} title="Toggle side panel" aria-label="Toggle side panel">
-          <Icon name="panel" />
-        </button>
+        <IconButton label="Toggle side panel" title="Toggle side panel" aria-pressed={rightOpen} onClick={onToggleRight}>
+          <SharedIcon name="split" size="sm" />
+        </IconButton>
       )}
       {workspace && onNewNote && (
-        <button className="titlebar-new" onClick={onNewNote} title={`New note (${newNote})`} aria-label="New note">
-          <Icon name="plus" />
-          New
-        </button>
+        <Button size="sm" variant="primary" onClick={onNewNote} title={`New note (${newNote})`} aria-label="New note">
+          <SharedIcon name="plus" size="xs" />New
+        </Button>
       )}
-    </header>
+    </>
   );
+  return <SharedTitleBar start={start} center={center} end={end} />;
 }
 
 /* ---------- activity rail ---------- */
@@ -95,29 +101,23 @@ export function ActivityRail({
   const searchLabel = platform.shortcutLabel("search.open");
   const settingsLabel = platform.shortcutLabel("settings.open");
   const todayLabel = platform.shortcutLabel("today.open");
-  const items: Array<{ key: string; label: string; icon: IconName; active: boolean; hint?: string; run: () => void }> = [
-    { key: "files", label: "Files", icon: "files", active: view === "files" && !page, run: () => onView("files") },
-    { key: "search", label: "Search", icon: "search", active: view === "search" && !page, hint: searchLabel, run: () => onView("search") },
-    { key: "favorites", label: "Favourites", icon: "star", active: view === "favorites" && !page, run: () => onView("favorites") },
-    { key: "recent", label: "Recent", icon: "clock", active: view === "recent" && !page, run: () => onView("recent") },
-    { key: "calendar", label: "Calendar", icon: "grid", active: page === "calendar", run: () => onPage("calendar") },
-    { key: "tags", label: "Tags", icon: "tag", active: page === "tags", run: () => onPage("tags") },
-    { key: "tasks", label: "Tasks", icon: "tasks", active: page === "tasks", run: () => onPage("tasks") },
-    { key: "today", label: "Today", icon: "calendar", active: page === "today", hint: todayLabel, run: () => onPage("today") },
+  const item = (id: string, label: string, icon: RailItem["icon"], active: boolean, onSelect: () => void, hint?: string): RailItem =>
+    ({ id, label, icon, active, onSelect, ...(hint ? { hint } : {}) });
+  const items: RailItem[] = [
+    item("files", "Files", "file", view === "files" && !page, () => onView("files")),
+    item("search", "Search", "search", view === "search" && !page, () => onView("search"), searchLabel),
+    item("favorites", "Favourites", "star", view === "favorites" && !page, () => onView("favorites")),
+    item("recent", "Recent", "today", view === "recent" && !page, () => onView("recent")),
+    item("calendar", "Calendar", "grid", page === "calendar", () => onPage("calendar")),
+    item("tags", "Tags", "tag", page === "tags", () => onPage("tags")),
+    item("tasks", "Tasks", "tasks", page === "tasks", () => onPage("tasks")),
+    item("today", "Today", "calendar", page === "today", () => onPage("today"), todayLabel),
   ];
-  return (
-    <nav className="rail" aria-label="Activity">
-      {items.map((it) => (
-        <button key={it.key} className={`rail-btn${it.active ? " active" : ""}`} onClick={it.run}
-          title={it.hint ? `${it.label} (${it.hint})` : it.label} aria-label={it.label} aria-pressed={it.active}>
-          <Icon name={it.icon} />
-        </button>
-      ))}
-      <span className="spacer" />
-      <button className="rail-btn" onClick={onShortcuts} title="Shortcuts" aria-label="Shortcuts"><Icon name="keyboard" /></button>
-      <button className="rail-btn" onClick={onSettings} title={`Settings (${settingsLabel})`} aria-label="Settings"><Icon name="settings" /></button>
-    </nav>
-  );
+  const footer: RailItem[] = [
+    item("shortcuts", "Shortcuts", "keyboard", false, onShortcuts),
+    item("settings", "Settings", "gear", false, onSettings, settingsLabel),
+  ];
+  return <Rail items={items} footer={footer} label="Activity" />;
 }
 
 /* ---------- status bar ---------- */
@@ -160,15 +160,7 @@ export function StatusBar({
     // Step 9: no live region here — words/cursor update per keystroke and
     // must never announce. Save/connection states (below) are the only
     // polite announcements in the strip.
-    return (
-      <footer className="statusbar">
-        <span>No workspace</span>
-        <span className="right">
-          <span>{words} words</span>
-          <span>Ln {line}, Col {col}</span>
-        </span>
-      </footer>
-    );
+    return <SharedStatusBar start={<span>No workspace</span>} end={<><span>{words} words</span><span>Ln {line}, Col {col}</span></>} />;
   }
   const seg = statusSegments({
     displayName: workspace.displayName,
@@ -183,32 +175,22 @@ export function StatusBar({
   const badSave = doc === "conflict" || doc === "error";
   const badConn = connection === "disconnected" || connection === "failed";
   return (
-    <footer className="statusbar">
-      <span className={`conn ${badConn ? "bad" : ""}`} title={`Workspace: ${workspace.displayName}`}>
-        <i className="dot" />{seg.workspace} · {seg.platform} · {seg.connection}
-      </span>
-      <span role="status">
-        {seg.save && (
-          <span className={`savepill ${badSave ? "bad" : doc === "dirty" || doc === "saving" ? "dirty" : "saved"}`}>
-            <i className="dot" />{seg.save}
-          </span>
+    <SharedStatusBar
+      start={<>
+        <Pill tone={badConn ? "bad" : "ok"} dot title={`Workspace: ${workspace.displayName}`}>{seg.workspace} · {seg.platform} · {seg.connection}</Pill>
+        <span role="status">
+          {seg.save && <Pill tone={badSave ? "bad" : doc === "dirty" || doc === "saving" ? "warn" : "ok"} dot>{seg.save}</Pill>}
+        </span>
+        {indexWarning && <Pill tone="warn" title={indexWarning} role="note">Index partial</Pill>}
+        {updateVersion && onReviewUpdate && (
+          <Button size="sm" variant="ghost" onClick={onReviewUpdate} title="Review the available update">Update {updateVersion} available · Review</Button>
         )}
-      </span>
-      {indexWarning && (
-        <span className="conn-bad" title={indexWarning} role="note">Index partial</span>
-      )}
-      {updateVersion && onReviewUpdate && (
-        <button className="updbanner" onClick={onReviewUpdate} title="Review the available update">
-          Update {updateVersion} available · Review
-        </button>
-      )}
-      <span className="right">
-        {onOpenHistory && (
-          <button className="link" onClick={onOpenHistory} title="Open recovery history" aria-label="Open recovery history">History</button>
-        )}
+      </>}
+      end={<>
+        {onOpenHistory && <Button size="sm" variant="ghost" onClick={onOpenHistory} title="Open recovery history" aria-label="Open recovery history">History</Button>}
         <span>{words} {words === 1 ? "word" : "words"}</span>
         <span title="Notes in this workspace">{fileCount.toLocaleString()} notes</span>
-      </span>
-    </footer>
+      </>}
+    />
   );
 }
