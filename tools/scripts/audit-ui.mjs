@@ -2,18 +2,19 @@
 // Usage: node tools/scripts/audit-ui.mjs [--json]
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("../../", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../../", import.meta.url));
 const SKIP = /(^|\/)(node_modules|dist[\w-]*|build|design|new|docs|\.agents|\.claude|\.expo|storybook-static)(\/|$)/;
 function walk(dir) {
   return readdirSync(dir).flatMap((n) => {
     const p = join(dir, n);
-    if (SKIP.test(relative(root, p))) return [];
+    if (SKIP.test(relative(root, p).replaceAll("\\", "/"))) return [];
     return statSync(p).isDirectory() ? walk(p) : [p];
   });
 }
 const files = ["apps", "packages"].flatMap((d) => walk(join(root, d)));
-const rel = (f) => relative(root, f);
+const rel = (f) => relative(root, f).replaceAll("\\", "/");
 const TOKEN_FILES = new Set(["packages/ui/src/tokens.css", "packages/ui/src/generated.ts", "packages/ui/src/theme.ts", "packages/ui/src/dom/icon-data.ts",
   "apps/web/src/brand.css", "apps/desktop/src/renderer/styles/tokens.css", "packages/core/src/appearance/appearance.ts"]);
 const css = files.filter((f) => f.endsWith(".css") && !TOKEN_FILES.has(rel(f)));
