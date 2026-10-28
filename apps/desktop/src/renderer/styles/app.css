@@ -935,3 +935,22 @@ button.sp-card:hover { background: var(--hover); }
 .ui-statusbar { user-select: none; flex: none; }
 .ui-rail { flex: none; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 .ui-tabs { flex: none; }
+
+/* Compare dialog: my version beside the other one. Removed lines red on the left, added lines green on the right. */
+.compare-grid { display: flex; flex-direction: column; max-height: 60vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-in); font-size: 13px; }
+.compare-head, .compare-row { display: grid; grid-template-columns: 1fr 1fr; }
+.compare-head { position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); font-weight: 600; }
+.compare-head > span { padding: var(--space-2) var(--space-3); }
+.compare-cell { margin: 0; padding: 0 var(--space-3); min-height: 1.5em; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; }
+.compare-del { background: color-mix(in srgb, var(--bad) 16%, transparent); }
+.compare-add { background: color-mix(in srgb, var(--ok) 16%, transparent); }
+.compare-empty { background: var(--hover); }
+
+/* Version history: list of versions beside a preview. */
+.history-split { display: grid; grid-template-columns: minmax(180px, 1fr) 2fr; gap: var(--space-4); }
+.history-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-in); }
+.history-item { display: flex; flex-direction: column; width: 100%; min-height: var(--control-h); padding: var(--space-2) var(--space-3); text-align: start; background: none; border: 0; color: var(--text); font-size: 13px; cursor: pointer; }
+.history-item:hover { background: var(--hover); }
+.history-item[aria-current="true"] { background: var(--selected); }
+.history-preview { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.history-text { margin: 0; max-height: 40vh; overflow: auto; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-in); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }

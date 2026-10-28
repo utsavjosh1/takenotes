@@ -60,6 +60,8 @@ import { SettingsDialog } from "./components/settings";
 import { WslDialog } from "./components/wsl-dialog";
 import { UpdateDialog } from "./components/update-dialog";
 import { HistoryDialog } from "./components/history-dialog";
+import { useRenamePreview } from "./stores/rename-preview";
+import { CompareDialog, RenamePreviewDialog, ConflictBanner, DeletedBanner, DisconnectedBanner, ReadOnlyBanner, SaveFailureDialogView } from "./components/trust-ui";
 import { buildFileMenu, buildTabMenu, type MenuOps } from "./components/menus";
 import { Icon } from "./components/icons";
 import { getBridge } from "./bridge";
@@ -1369,6 +1371,11 @@ export default function App(): JSX.Element {
       not this URL. For the browser demo instead, run <kbd className="k">npm run dev:web</kbd>.
     </Notice>
   );
+  const renamePending = useRenamePreview((s) => s.pending);
+  const setDocsConnected = docsApi.setConnected;
+  const docsHealthError = workspaceApi.healthError;
+  useEffect(() => { setDocsConnected(!docsHealthError); }, [docsHealthError, setDocsConnected]);
+
   if (!workspace) {
     return (
       <div className="app">
@@ -1780,10 +1787,9 @@ export default function App(): JSX.Element {
         )}
         <main className="main" id="main-content" tabIndex={-1} aria-label="Editor">
           {healthError && (
-            <Notice className="pane-notice" tone="danger" announcement="assertive" title="Connection lost"
-              actions={<Button variant="primary" onClick={() => refreshWorkspace()}>Reconnect</Button>}>
-              Keep writing. Changes save when it comes back. {healthError}
-            </Notice>
+            <DisconnectedBanner detail={healthError}
+              onCopyDetails={() => { void navigator.clipboard.writeText(healthError); toast("Details copied."); }}
+              onReconnect={() => refreshWorkspace()} />
           )}
           {(() => {
             const docs = paneDocs(docsApi.layout);
@@ -1840,15 +1846,15 @@ export default function App(): JSX.Element {
                     {rec.stale ? " This draft is over 30 days old." : ""}
                   </Notice>
                 )}
-                {doc?.conflict && (
-                  <Notice className="pane-notice" tone="warning" announcement="assertive" title="This note was changed somewhere else."
-                    actions={<>
-                      <Button onClick={() => void docsApi.keepMyVersion(doc.key)}>Keep mine</Button>
-                      <Button variant="primary" onClick={() => void docsApi.reloadFromDisk(doc.key)}>Use the other one</Button>
-                    </>}>
-                    You also have changes in {fileName(doc.relativePath)}, so nothing was merged. Both versions are safe.
-                  </Notice>
-                )}
+                {doc?.deleted ? (
+                  <DeletedBanner name={fileName(doc.relativePath)} onSaveAsNew={() => void docsApi.copyToNewNote(doc.key)}
+                    onRestore={() => void docsApi.restoreDeleted(doc.key)} onClose={() => requestCloseTab(doc.key)} />
+                ) : doc?.conflict ? (
+                  <ConflictBanner name={fileName(doc.relativePath)} onCompare={() => void docsApi.openCompare(doc.key)}
+                    onKeepMine={() => void docsApi.keepMyVersion(doc.key)} onUseOther={() => void docsApi.reloadFromDisk(doc.key)} />
+                ) : doc?.readOnly ? (
+                  <ReadOnlyBanner onCopy={() => void docsApi.copyToNewNote(doc.key)} />
+                ) : null}
                 {settingsOpen ? (
                   <SettingsDialog asPage settings={settings} onChange={setSettings} version={version} platform={platform} hotkeys={hotkeys} updatesEnabled={platform.capabilities.updates} onCheckUpdates={() => void updatesApi.check(true)} mcp={getBridge()?.mcp} onClose={() => setSettingsOpen(false)} />
                 ) : page ? (
@@ -1962,7 +1968,7 @@ export default function App(): JSX.Element {
           words={docsApi.words}
           line={docsApi.cursor.line}
           col={docsApi.cursor.col}
-          doc={docsApi.saveView}
+          doc={docsApi.saveState}
           savedAt={docsApi.activeTab?.savedAt ?? ""}
           connection={healthError ? "disconnected" : workspace.connection}
           fileCount={treeApi.allFiles.length}
@@ -2046,12 +2052,27 @@ export default function App(): JSX.Element {
           onDone={() => void convergeImport()}
         />
       )}
+      {renamePending && <RenamePreviewDialog from={renamePending.from} to={renamePending.to} summary={renamePending.summary} onGo={() => renamePending.resolve(true)} onCancel={() => renamePending.resolve(false)} />}
+      {docsApi.saveFailure && docsApi.layout.docs[docsApi.saveFailure.docKey] && (
+        <SaveFailureDialogView failure={docsApi.saveFailure} name={fileName(docsApi.layout.docs[docsApi.saveFailure.docKey]!.relativePath)}
+          onCopy={() => void docsApi.copyToNewNote(docsApi.saveFailure!.docKey)}
+          onRetry={() => { const k = docsApi.saveFailure!.docKey; docsApi.dismissSaveFailure(); void docsApi.save(k); }}
+          onClose={docsApi.dismissSaveFailure} />
+      )}
+      {docsApi.compare && docsApi.layout.docs[docsApi.compare.docKey] && (
+        <CompareDialog compare={docsApi.compare} name={fileName(docsApi.layout.docs[docsApi.compare.docKey]!.relativePath)}
+          onKeepMine={() => { const k = docsApi.compare!.docKey; docsApi.closeCompare(); void docsApi.keepMyVersion(k); }}
+          onUseOther={() => { const k = docsApi.compare!.docKey; docsApi.closeCompare(); void docsApi.reloadFromDisk(k); }}
+          onClose={docsApi.closeCompare} />
+      )}
       {docsApi.historyDialog && (
         <HistoryDialog
           dialog={docsApi.historyDialog}
           onClose={docsApi.closeHistory}
           onRestore={(id) => void docsApi.restoreRecoverySnapshot(id)}
           onCopy={(id) => void docsApi.copyRecoverySnapshot(id)}
+          onPreview={docsApi.readSnapshot}
+          onCopyToNote={(id) => void docsApi.copySnapshotToNewNote(id)}
         />
       )}
       {wslApi.dialog && <WslDialog dialog={wslApi.dialog} onDistro={(d) => void wslApi.fetchUsers(d)} onConnect={(data) => void wslApi.connect(data)} onClose={wslApi.close} />}

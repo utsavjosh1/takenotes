@@ -1,3 +1,4 @@
+import { SAVE_STATES, type SaveState } from "@takenotes/core/save/decisions";
 import type { WorkspaceKind } from "@takenotes/platform/types";
 
 /** Status identity strip (P1-06): one line reading
@@ -6,7 +7,7 @@ import type { WorkspaceKind } from "@takenotes/platform/types";
  * tests/renderer/status.test.ts. Distro/user come from explicit identity
  * fields (P1-03/P1-04), never parsed out of display text. Canonical product
  * terms only (CONTEXT.md: Workspace, Connection — never Vault). */
-export type DocSaveView = "clean" | "dirty" | "saving" | "saved" | "conflict" | "error";
+export type DocSaveView = "clean" | "error" | SaveState;
 
 export type StatusInput = {
   displayName: string;
@@ -41,27 +42,10 @@ function platformLabel(kind: WorkspaceKind, distro?: string, linuxUser?: string)
 }
 
 export function statusSegments(input: StatusInput): StatusSegments {
-  let save = "";
-  switch (input.doc) {
-    case "dirty":
-      save = "Unsaved";
-      break;
-    case "saving":
-      save = "Saving…";
-      break;
-    case "saved":
-      save = input.savedAt ? `Saved ${input.savedAt}` : "Saved";
-      break;
-    case "conflict":
-      save = "Conflict";
-      break;
-    case "error":
-      save = "Error";
-      break;
-    case "clean":
-      save = "";
-      break;
-  }
+  // The seven honest states and their words come from the shared decision rules.
+  let save = input.doc === "clean" || input.doc === "error" ? "" : SAVE_STATES[input.doc].label;
+  if (input.doc === "error") save = "Error";
+  if (input.doc === "saved" && input.savedAt) save = `Saved ${input.savedAt}`;
   let connection = "";
   switch (input.connection) {
     case "connected":
