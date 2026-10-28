@@ -22,7 +22,7 @@ function ranges(doc: string) {
 describe("markdown-backed wysiwyg ranges", () => {
   it("always hides heading marks (no syntax view)", () => {
     const { hide, lineClasses } = ranges("# Hello\n\ntext\n");
-    expect(hide).toContainEqual({ from: 0, to: 1 });
+    expect(hide).toContainEqual({ from: 0, to: 2 });
     expect(lineClasses).toContainEqual({ line: 1, cls: "wys-h1" });
   });
 
@@ -61,7 +61,7 @@ describe("markdown-backed wysiwyg ranges", () => {
   it("hides quote marks and tags the line", () => {
     const doc = "> hi\n";
     const { hide, lineClasses } = ranges(doc);
-    expect(hide).toContainEqual({ from: 0, to: 1 });
+    expect(hide).toContainEqual({ from: 0, to: 2 });
     expect(lineClasses).toContainEqual({ line: 1, cls: "wys-quote" });
   });
 
@@ -113,12 +113,12 @@ describe("live preview: cursor-line reveal", () => {
     const onLine = (g: { from: number; to: number }): boolean => g.from < boldLine.to && g.to > boldLine.from;
     expect(replaces(r1).filter(onLine)).toEqual([]);
     // The heading on line 1 still renders.
-    expect(r1.hide).toContainEqual({ from: 0, to: 1 });
+    expect(r1.hide).toContainEqual({ from: 0, to: 2 });
     // Cursor on the heading (line 1): bold marks hide again, heading reveals.
     const onHead = stateWithCursor(doc, 2);
     const r2 = collectWysiwygRanges(onHead, 0, onHead.doc.length, { activeLines: selectionActiveLines(onHead) });
     expect(r2.hide).toContainEqual({ from: doc.indexOf("**"), to: doc.indexOf("**") + 2 });
-    expect(r2.hide).not.toContainEqual({ from: 0, to: 1 });
+    expect(r2.hide).not.toContainEqual({ from: 0, to: 2 });
   });
 
   it("reveals every line a multi-line selection touches", () => {

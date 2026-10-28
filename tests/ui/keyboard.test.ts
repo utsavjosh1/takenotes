@@ -89,7 +89,7 @@ describe("keyboard wiring", () => {
     const source = rendererSource(join("components", "search.tsx"));
     expect(source).toContain("moveRovingIndex");
     expect(source).toContain("data-search-idx");
-    expect(source).toContain("tabIndex={tabbable ? 0 : -1}");
+    expect(source).toContain("tabIndex={hitIdx[hi] === focused ? 0 : -1}");
   });
 
   it("tags rows rove across tree and flat modes", () => {

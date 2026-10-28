@@ -22,12 +22,12 @@
 
 import { validatePosixRelativePath } from "@takenotes/core/policy/note-policy";
 
-// Values mirror desktop `recovery.ts` (`RECOVERY_THROTTLE_MS = 5min`,
+// Values mirror desktop `recovery.ts` (`RECOVERY_THROTTLE_MS = 1min`,
 // `RECOVERY_RETENTION_MS = 7d`). The M2 gate imports both sides and
 // asserts equality — the pin lives in the test so no desktop `node:fs`
 // code ever enters the mobile bundle.
 
-export const RECOVERY_THROTTLE_MS = 5 * 60 * 1000;
+export const RECOVERY_THROTTLE_MS = 60 * 1000;
 export const RECOVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type RecoveryReason = "edit" | "save" | "close" | "shutdown";

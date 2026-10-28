@@ -283,14 +283,14 @@ describe("M2: recovery", () => {
     expect(fingerprintContent("x")).not.toBe(fingerprintContent("y"));
   });
 
-  it("edit throttle: 1 snapshot per 5min; save bypasses when changed; identical skips", async () => {
+  it("edit throttle: 1 snapshot per minute; save bypasses when changed; identical skips", async () => {
     const clock = fakeClock();
     const rec = new MobileRecovery(new MemoryRecoveryStorage(), { now: clock.now, id: (() => { let n = 0; return () => `s${n++}`; })() });
     const ns = mobileRecoveryNamespace(ROOT);
     expect(await rec.snapshot(ns, "a.md", "v1", "edit")).not.toBeNull();
-    clock.advance(60_000);
+    clock.advance(20_000);
     expect(await rec.snapshot(ns, "a.md", "v2", "edit")).toBeNull(); // throttled
-    clock.advance(60_000);
+    clock.advance(20_000);
     expect(await rec.snapshot(ns, "a.md", "v3", "save")).not.toBeNull(); // save bypasses
     expect(await rec.snapshot(ns, "a.md", "v3", "save")).toBeNull(); // identical skips
     clock.advance(RECOVERY_THROTTLE_MS);

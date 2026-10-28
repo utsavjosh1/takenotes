@@ -34,7 +34,7 @@ export type TakeNotesApi = {
       workspaceId: string;
       relativePath: string;
       content: string;
-      reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
+      reason: "edit" | "save" | "close" | "shutdown" | "restore-before" | "before-overwrite" | "before-reload" | "before-agent-undo";
     }): Promise<IpcResult<RecoverySnapshotMeta | null>>;
     list(workspaceId: string, relativePath: string): Promise<IpcResult<RecoverySnapshotMeta[]>>;
     read(workspaceId: string, snapshotId: string): Promise<IpcResult<RecoverySnapshotRead>>;
@@ -54,6 +54,10 @@ export type TakeNotesApi = {
   };
   workspace: {
     openLocal(): Promise<IpcResult<WorkspaceInfo | null>>;
+    /** Creates `<Documents>/<name>` with a welcome note and opens it. */
+    create(name: string): Promise<IpcResult<WorkspaceInfo>>;
+    /** Checks an access token against a takenotes server; opens its browser editor on success. */
+    verifyServer(address: string, token: string): Promise<IpcResult<{ locked?: boolean }>>;
     listRecent(): Promise<IpcResult<RecentWorkspaceInfo[]>>;
     openRecent(id: string): Promise<IpcResult<WorkspaceInfo>>;
     close(workspaceId: string): Promise<IpcResult<null>>;
@@ -185,6 +189,8 @@ const api: TakeNotesApi = {
   },
   workspace: {
     openLocal: () => ipcRenderer.invoke("workspace:openLocal"),
+    create: (name) => ipcRenderer.invoke("workspace:create", name),
+    verifyServer: (address, token) => ipcRenderer.invoke("workspace:verifyServer", address, token),
     listRecent: () => ipcRenderer.invoke("workspace:listRecent"),
     openRecent: (id) => ipcRenderer.invoke("workspace:openRecent", id),
     close: (workspaceId) => ipcRenderer.invoke("workspace:close", workspaceId),

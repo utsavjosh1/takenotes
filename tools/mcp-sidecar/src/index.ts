@@ -8,7 +8,11 @@
  *
  * Run: `node takenotes-mcp.cjs` (system node; packaged installs ship
  * the bundle under `<resources>/mcp/` — the exact command is shown in
- * Settings → Automation). No HTTP, no flags, no config files.
+ * Settings → Automation).
+ *
+ * Bridge mode (ADR-0017): `--server http://127.0.0.1:3000` plus
+ * `TAKENOTES_TOKEN` (or `--token`) proxies stdio JSON-RPC to the
+ * server's `POST /mcp` instead of the desktop pipe. No other flags.
  */
 import { connect, type Socket } from "node:net";
 import { randomUUID } from "node:crypto";
@@ -80,19 +84,57 @@ function dial(tool: string, params: unknown, clientId: string): Promise<McpPipeR
   });
 }
 
+function flag(name: string): string | undefined {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
+
+const serverUrl = flag("--server") ?? process.env.TAKENOTES_SERVER;
+const serverToken = flag("--token") ?? process.env.TAKENOTES_TOKEN;
+
+/** Bridge mode: forward one JSON-RPC message to the server, return its reply. */
+async function forward(message: unknown): Promise<unknown | null> {
+  const id = (message as { id?: unknown } | null)?.id;
+  try {
+    const res = await fetch(new URL("/mcp", serverUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${serverToken ?? ""}` },
+      body: JSON.stringify(message),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (res.status === 202) return null;
+    return await res.json();
+  } catch {
+    if (id === undefined) return null;
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32001, message: `takenotes server unreachable at ${serverUrl}: start it first.` },
+    };
+  }
+}
+
+if (serverUrl && !serverToken) {
+  process.stderr.write("takenotes-mcp: --server needs a token (TAKENOTES_TOKEN or --token).\n");
+  process.exit(2);
+}
+
 const session = createMcpSession(dial);
+const inflight = new Set<Promise<void>>();
 const splitter = createLineSplitter(
   (line) => {
-    void (async () => {
+    const task = (async () => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(line);
       } catch {
         return;
       }
-      const reply = await session.handle(parsed);
+      const reply = serverUrl ? await forward(parsed) : await session.handle(parsed);
       if (reply) process.stdout.write(`${JSON.stringify(reply)}\n`);
     })();
+    inflight.add(task);
+    void task.finally(() => inflight.delete(task));
   },
   () => {
     process.stdout.write(
@@ -103,5 +145,6 @@ const splitter = createLineSplitter(
 
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk: string) => splitter.push(chunk));
-process.stdin.on("end", () => process.exit(0));
+// Let in-flight replies flush before exiting (one-shot piped use).
+process.stdin.on("end", () => void Promise.allSettled([...inflight]).then(() => process.exit(0)));
 process.stdin.resume();

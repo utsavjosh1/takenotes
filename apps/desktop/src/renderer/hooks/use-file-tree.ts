@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DirectoryEntry, WorkspaceInfo } from "@takenotes/contracts/ipc";
 import { ancestorsOf, DEFAULT_EXPLORER_SORT, parseExplorerSort, sortEntries, type ExplorerSort } from "@takenotes/core/explorer/sort";
-import { isWslKind, moveToTrashLabel, trashName } from "@takenotes/platform/filesystem";
+import { isWslKind, trashName } from "@takenotes/platform/filesystem";
 import { workspaceIndex } from "../index/workspace-index";
-import { joinRel, parentDir } from "../components/types";
+import { fileName, joinRel, parentDir } from "../components/types";
 import type { TreeState } from "../components/tree";
 import { useIndexMeta } from "../stores/index-meta";
 import { useSettingsStore } from "../stores/settings";
@@ -32,6 +32,8 @@ export type FileTreeApi = {
   commitCreate: () => Promise<void>;
   commitRename: (entry: DirectoryEntry, newName: string) => Promise<void>;
   removeEntry: (entry: DirectoryEntry) => Promise<void>;
+  /** Drag-move into a folder ("" = root). Offers Undo. */
+  moveEntries: (rels: string[], destDir: string) => Promise<void>;
   /** Deterministic teardown of all workspace-scoped tree state (H5). */
   resetTree: () => void;
   select: (rel: string | null) => void;
@@ -75,6 +77,8 @@ export function useFileTree(
   const [sidebarLoading, setSidebarLoading] = useState(false);
   // Logical app-data/ui.json: sort persists per workspace, default name-asc.
   const [sort, setSortState] = useState<ExplorerSort>(DEFAULT_EXPLORER_SORT);
+  /** Set by refresh(); the next rebuild() opens small top-level folders. */
+  const autoExpandRef = useRef(false);
 
   useEffect(() => {
     if (!workspace) return;
@@ -105,6 +109,7 @@ export function useFileTree(
     const res = await bridge.directory.list(ws.workspaceId, "");
     setSidebarLoading(false);
     if (res.ok) {
+      autoExpandRef.current = true;
       setEntries(res.result);
       setTree((p) => ({ ...p, children: new Map(), expanded: new Set(), renaming: null }));
     } else {
@@ -119,17 +124,36 @@ export function useFileTree(
     // Quick-open index builds from directory.list, which is helper-backed
     // for WSL workspaces — no native-only gate here (§13, §18).
     const out: DirectoryEntry[] = [];
+    const listings = new Map<string, DirectoryEntry[]>();
     const queue = [""];
     for (let i = 0; i < queue.length && out.length < 2000; i++) {
       const dir = queue[i]!;
       const res = await bridge.directory.list(ws.workspaceId, dir);
       if (!res.ok) break;
+      listings.set(dir, res.result);
       for (const e of res.result) {
         if (e.kind === "directory") queue.push(e.relativePath);
         else if (e.fileClass === "markdown" || e.fileClass === "text") out.push(e);
       }
     }
     setAllFiles(out);
+    // Folders with more than 40 notes start collapsed; smaller ones start open.
+    if (autoExpandRef.current) {
+      autoExpandRef.current = false;
+      const open = (listings.get("") ?? []).filter((e) => {
+        if (e.kind !== "directory" || !listings.has(e.relativePath)) return false;
+        const n = out.filter((f) => f.relativePath.startsWith(`${e.relativePath}/`)).length;
+        return n > 0 && n <= 40;
+      });
+      if (open.length > 0) {
+        setTree((p) => {
+          const expanded = new Set(p.expanded);
+          const children = new Map(p.children);
+          for (const e of open) { expanded.add(e.relativePath); children.set(e.relativePath, listings.get(e.relativePath)!); }
+          return { ...p, expanded, children };
+        });
+      }
+    }
   }, []);
 
   /** Clear every workspace-scoped tree state (H5 teardown). The next open
@@ -257,7 +281,10 @@ export function useFileTree(
     // WSL folders delete permanently in P1 (helper `directory.delete`):
     // label it honestly, never as Recycle Bin trash.
     const wslDel = isWslKind(ws.type);
-    if (confirmTrash && !window.confirm(wslDel ? `Permanently delete folder "${entry.name}"? This cannot be undone.` : `Delete folder "${entry.name}"?`)) return;
+    // WSL delete is permanent (unlink): always confirm. Native trash stays setting-gated.
+    if (wslDel) {
+      if (!window.confirm(`Permanently delete folder "${entry.name}"? This cannot be undone.`)) return;
+    } else if (confirmTrash && !window.confirm(`Delete folder "${entry.name}"?`)) return;
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }, `Couldn't delete folder "${entry.name}"`); return; }
     const res = await bridge.directory.delete(ws.workspaceId, entry.relativePath);
@@ -291,9 +318,14 @@ export function useFileTree(
     // WSL delete is permanent-delete in P1 (helper `file.delete`): label it
     // honestly — never "Move to trash" / Recycle Bin for WSL workspaces.
     const wsl = isWslKind(ws.type);
-    if (confirmTrash && !window.confirm(wsl ? `Permanently delete "${entry.name}"? This cannot be undone.` : `Move "${entry.name}" to trash?`)) return;
+    // WSL trash is permanent: always confirm. Native trash stays setting-gated.
+    if (wsl) {
+      if (!window.confirm(`Permanently delete "${entry.name}"? This cannot be undone.`)) return;
+    } else if (confirmTrash && !window.confirm(`Move "${entry.name}" to trash?`)) return;
     const bridge = getBridge();
     if (!bridge) { errToast({ code: "INTERNAL_ERROR", message: "Desktop bridge unavailable." }); return; }
+    // Keep the text so Undo can put the note back (the OS trash has no restore call).
+    const before = wsl ? null : await bridge.file.read(ws.workspaceId, entry.relativePath);
     const res = await bridge.file.trash(ws.workspaceId, entry.relativePath);
     if (!res.ok) { errToast(res.error, wsl ? `Couldn't delete "${entry.name}"` : undefined); return; }
     docs.removeEntryDocs(ws.workspaceId, entry.relativePath);
@@ -306,8 +338,84 @@ export function useFileTree(
     } else await refresh(ws);
     await rebuild(ws);
     if (isWslKind(ws.type)) toast(`Permanently deleted "${entry.name}". This cannot be undone — WSL workspaces don't use the ${trashName(platform.platform)}.`);
-    else toast(`Moved "${entry.name}" to trash. Recoverable from ${trashName(platform.platform)} — ${moveToTrashLabel(platform.platform)}.`);
+    else {
+      const saved = before && before.ok ? before.result : null;
+      toast(`Moved "${entry.name.replace(/\.md$/i, "")}" to the ${trashName(platform.platform)}.`, "info", saved ? {
+        label: "Undo",
+        run: () => {
+          void (async () => {
+            const created = await bridge.file.create(ws.workspaceId, entry.relativePath);
+            if (!created.ok) { errToast(created.error, "Couldn't restore the note"); return; }
+            const written = await bridge.file.write({
+              workspaceId: ws.workspaceId, relativePath: entry.relativePath, content: saved.content,
+              expectedHash: created.result.hash, newlineStyle: saved.newlineStyle, hadBom: saved.hadBom,
+            });
+            if (!written.ok) { errToast(written.error, "Couldn't restore the note"); return; }
+            workspaceIndex.upsert(ws.workspaceId, entry.relativePath, saved.content, written.result);
+            bumpIndex();
+            await reloadDir(ws, parentDir(entry.relativePath));
+            await rebuild(ws);
+          })();
+        },
+      } : undefined);
+    }
   }, [workspace, confirmTrash, errToast, toast, refresh, rebuild, docs, bumpIndex, platform.platform]);
+
+  /** Re-list one directory without collapsing anything else. */
+  const reloadDir = useCallback(async (ws: WorkspaceInfo, dir: string) => {
+    const bridge = getBridge();
+    if (!bridge) return;
+    const res = await bridge.directory.list(ws.workspaceId, dir);
+    if (!res.ok) return;
+    if (dir === "") setEntries(res.result);
+    else setTree((p) => ({ ...p, children: new Map(p.children).set(dir, res.result) }));
+  }, []);
+
+  /** Renames each [from, to] pair; returns the pairs that actually moved. */
+  const applyMoves = useCallback(async (ws: WorkspaceInfo, pairs: Array<{ from: string; to: string; dir: boolean }>) => {
+    const bridge = getBridge();
+    const moved: typeof pairs = [];
+    if (!bridge) return moved;
+    for (const m of pairs) {
+      const res = m.dir
+        ? await bridge.directory.rename(ws.workspaceId, m.from, m.to, { autoUpdateLinks })
+        : await bridge.file.rename(ws.workspaceId, m.from, m.to, { autoUpdateLinks });
+      if (!res.ok) { errToast(res.error, `Couldn't move "${fileName(m.from)}"`); continue; }
+      docs.renameEntryDocs(ws.workspaceId, m.from, m.to);
+      if (m.dir) workspaceIndex.movePrefix(ws.workspaceId, m.from, m.to);
+      else workspaceIndex.move(ws.workspaceId, m.from, m.to);
+      moved.push(m);
+    }
+    if (moved.length > 0) {
+      bumpIndex();
+      for (const d of new Set(moved.flatMap((m) => [parentDir(m.from), parentDir(m.to)]))) await reloadDir(ws, d);
+      await rebuild(ws);
+    }
+    return moved;
+  }, [autoUpdateLinks, errToast, docs, bumpIndex, reloadDir, rebuild]);
+
+  const moveEntries = useCallback(async (rels: string[], destDir: string) => {
+    if (!workspace) return;
+    const ws = workspace;
+    const kindOf = (rel: string): boolean => {
+      for (const list of [entries, ...tree.children.values()]) {
+        const e = list.find((x) => x.relativePath === rel);
+        if (e) return e.kind === "directory";
+      }
+      return false;
+    };
+    const pairs = rels
+      .filter((r) => parentDir(r) !== destDir && destDir !== r && !destDir.startsWith(`${r}/`))
+      .map((from) => ({ from, to: joinRel(destDir, fileName(from)), dir: kindOf(from) }));
+    if (pairs.length === 0) return;
+    const moved = await applyMoves(ws, pairs);
+    if (moved.length === 0) return;
+    const label = moved.length === 1 ? `"${fileName(moved[0]!.to).replace(/\.md$/i, "")}"` : `${moved.length} items`;
+    toast(`Moved ${label} to ${destDir ? `"${fileName(destDir)}"` : "the top folder"}.`, "info", {
+      label: "Undo",
+      run: () => { void applyMoves(ws, moved.map((m) => ({ from: m.to, to: m.from, dir: m.dir }))); },
+    });
+  }, [workspace, entries, tree.children, applyMoves, toast]);
 
   const removeEntry = useCallback(async (entry: DirectoryEntry) => {
     // Folders delete through directory.delete; files move to OS trash.
@@ -523,7 +631,7 @@ export function useFileTree(
   return {
     entries: sortedEntries, allFiles, tree: sortedTree, sidebarLoading, creating, createName, setCreateName,
     refresh, rebuild, toggleDir, beginCreate, createUntitledNote, createUntitledCanvas, cancelCreate, commitCreate, commitRename,
-    removeEntry, resetTree, select, beginRename, cancelRename, visibleRows, onTreeKeyDown,
+    removeEntry, moveEntries, resetTree, select, beginRename, cancelRename, visibleRows, onTreeKeyDown,
     preferredNewNoteDir, selectedEntry, sort, setSort, reveal, expandAll, collapseAll,
   };
 }

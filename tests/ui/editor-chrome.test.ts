@@ -17,10 +17,10 @@ function rendererSource(...parts: string[]): string {
 describe("editor chrome contracts", () => {
   it("conflict bar asserts with both resolutions", () => {
     const source = rendererSource("App.tsx");
-    expect(source).toContain('title="File changed outside takenotes"');
+    expect(source).toContain('title="This note was changed somewhere else."');
     expect(source).toContain('announcement="assertive"');
-    expect(source).toContain("Reload from disk");
-    expect(source).toContain("Keep my version");
+    expect(source).toContain("Use the other one");
+    expect(source).toContain("Keep mine");
   });
 
   it("draft notice is polite with restore and discard", () => {

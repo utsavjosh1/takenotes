@@ -65,6 +65,11 @@ export type FootnoteRefRange = { from: number; to: number; id: string };
 /** Note embed `![[target]]` replaced by a target label (`![[`/`]]` hidden). */
 export type EmbedRange = { from: number; to: number; target: string };
 
+/** `@due(…)` / `@scheduled(…)` / `@priority(…)` on a task line, shown as a chip. */
+export type ChipRange = { from: number; to: number; kind: "due" | "scheduled" | "priority"; label: string };
+/** `[[Note]]` / `[[Note|alias]]`: visible text styled as a link (amber when the note is missing). */
+export type WikilinkRange = { from: number; to: number; target: string; missing: boolean };
+
 export type WysiwygRanges = {
   hide: HiddenRange[];
   lineClasses: LineClass[];
@@ -74,6 +79,8 @@ export type WysiwygRanges = {
   callouts: CalloutRange[];
   footnoteRefs: FootnoteRefRange[];
   embeds: EmbedRange[];
+  chips: ChipRange[];
+  wikilinks: WikilinkRange[];
   /** 1-based source lines carrying an image/media reference. */
   mediaLines: Set<number>;
 };
@@ -83,6 +90,8 @@ export type WysiwygCollectOptions = {
   livePreview?: boolean;
   /** 1-based lines the selection touches: their marks stay raw (cursor-line reveal). */
   activeLines?: ReadonlySet<number>;
+  /** Whether `[[target]]` resolves to a note; unresolved links render amber. */
+  linkExists?: (target: string) => boolean;
 };
 
 export const EMPTY_WYSIWYG_RANGES: WysiwygRanges = {
@@ -94,6 +103,8 @@ export const EMPTY_WYSIWYG_RANGES: WysiwygRanges = {
   callouts: [],
   footnoteRefs: [],
   embeds: [],
+  chips: [],
+  wikilinks: [],
   mediaLines: new Set<number>(),
 };
 
@@ -135,6 +146,8 @@ const WIKILINK_MEDIA = /![[\s]*([^\]|\]]+?)[\s\]|]/;
 const FOOTNOTE_REF = /\[\^([^\]]+)\]/g;
 /** Note embed `![[inner]]` (whole-range replacement shows target). */
 const EMBED_WIKILINK = /!\[\[([^\]\n]+)\]\]/g;
+/** `[[target]]`, `[[target|alias]]`, `[[target#heading]]` (not embeds). */
+const WIKILINK = /\[\[([^\]\n|]+)(?:\|([^\]\n]*))?\]\]/g;
 const FOOTNOTE_DEF_PREFIX = /^(\s*)\[\^([^\]]+)\]:/;
 /** `%%comment%%` — hidden entirely (only complete pairs; unclosed stays). */
 const COMMENT_PAIR = /%%[\s\S]*?%%/g;
@@ -206,6 +219,28 @@ class TaskWidget extends WidgetType {
   }
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const TASK_TOKEN = /\s*@(due|scheduled|priority)\(([^)\n]*)\)/g;
+
+function prettyDate(value: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}:\d{2}))?/.exec(value.trim());
+  if (!m) return null;
+  const month = MONTHS[Number(m[2]) - 1];
+  if (!month) return null;
+  return `${month} ${Number(m[3])}${m[4] ? `, ${m[4]}` : ""}`;
+}
+
+/** Plain-words chip text for a task token, or null when the value is not usable (token stays visible as text). */
+export function chipLabel(kind: ChipRange["kind"], value: string): string | null {
+  if (kind === "priority") {
+    const v = value.trim().toLowerCase();
+    return ["high", "medium", "low"].includes(v) ? `${v[0]!.toUpperCase()}${v.slice(1)} priority` : null;
+  }
+  const d = prettyDate(value);
+  if (!d) return null;
+  return kind === "due" ? `Due ${d}` : `Planned ${d}`;
+}
+
 /** Pure range collection over `[from, to)`. Structural Markdown syntax
  * is hidden or widget-replaced so the user only ever sees the rendered
  * document; the source stays authoritative underneath. Line-regex passes
@@ -219,7 +254,7 @@ class TaskWidget extends WidgetType {
  * never hide source, so they apply on all lines. */
 export function collectWysiwygRanges(state: EditorState, from: number, to: number, opts?: WysiwygCollectOptions): WysiwygRanges {
   if (opts?.livePreview === false) {
-    return { hide: [], lineClasses: [], tasks: [], bullets: [], pipes: [], callouts: [], footnoteRefs: [], embeds: [], mediaLines: new Set<number>() };
+    return { hide: [], lineClasses: [], tasks: [], bullets: [], pipes: [], callouts: [], footnoteRefs: [], embeds: [], chips: [], wikilinks: [], mediaLines: new Set<number>() };
   }
   const active = opts?.activeLines;
   const touchesActive = (rfrom: number, rto: number): boolean => {
@@ -239,6 +274,8 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
   const callouts: CalloutRange[] = [];
   const footnoteRefs: FootnoteRefRange[] = [];
   const embeds: EmbedRange[] = [];
+  const chips: ChipRange[] = [];
+  const wikilinks: WikilinkRange[] = [];
   const tree = ensureSyntaxTree(state, to, 200) ?? syntaxTree(state);
   const lineOf = (pos: number): number => state.doc.lineAt(Math.max(0, Math.min(pos, state.doc.length))).number;
   const literal: { from: number; to: number }[] = [];
@@ -340,7 +377,9 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
         if (!parent || (parent.name !== "Link" && parent.name !== "Image")) return;
         if (parent.getChildren("LinkMark").length === 0) return;
       }
-      hideCandidates.push({ from: ref.from, to: ref.to });
+      // `# ` and `> ` hide with their trailing space so text starts flush.
+      const trail = (ref.name === "HeaderMark" || ref.name === "QuoteMark") && state.sliceDoc(ref.to, ref.to + 1) === " " ? 1 : 0;
+      hideCandidates.push({ from: ref.from, to: ref.to + trail });
     },
   });
   const firstLine = lineOf(from);
@@ -365,6 +404,16 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
       if (!inRanges(literal, markerFrom, markerTo)) {
         tasks.push({ markerFrom, markerTo, checked: m[2] !== " ", lineNo });
         taskLines.add(lineNo);
+        // The checkbox widget stands alone: its brackets hide.
+        hideCandidates.push({ from: markerFrom - 1, to: markerFrom }, { from: markerTo, to: markerTo + 1 });
+        if (m[2] !== " ") lineClasses.push({ line: lineNo, cls: "wys-task-done" });
+        TASK_TOKEN.lastIndex = markerTo + 1 - line.from;
+        let tk: RegExpExecArray | null;
+        while ((tk = TASK_TOKEN.exec(line.text)) !== null) {
+          const kind = tk[1] as ChipRange["kind"];
+          const label = chipLabel(kind, tk[2]!);
+          if (label) chips.push({ from: line.from + tk.index, to: line.from + tk.index + tk[0].length, kind, label });
+        }
       }
     }
     // Callout opener tags its line; the `!type` text becomes a type chip
@@ -415,6 +464,23 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
         embeds.push({ from: emFrom, to: emTo, target });
       }
     }
+    // Note links: brackets (and the target before `|`) hide; the visible
+    // text is styled as a link, amber when no such note exists.
+    if (!lineInCode) {
+      WIKILINK.lastIndex = 0;
+      let wl: RegExpExecArray | null;
+      while ((wl = WIKILINK.exec(line.text)) !== null) {
+        if (wl.index > 0 && line.text[wl.index - 1] === "!") continue;
+        const wFrom = line.from + wl.index;
+        const wTo = wFrom + wl[0].length;
+        if (inRanges(literal, wFrom, wTo)) continue;
+        const target = wl[1]!.split("#")[0]!.trim();
+        const alias = wl[2];
+        const visFrom = alias === undefined ? wFrom + 2 : wFrom + 2 + wl[1]!.length + 1;
+        ownedHides.push({ from: wFrom, to: visFrom }, { from: wTo - 2, to: wTo });
+        wikilinks.push({ from: visFrom, to: wTo - 2, target, missing: opts?.linkExists ? !opts.linkExists(target) : false });
+      }
+    }
     // Media/embed source lines earn a preview block below the source.
     if (!lineInCode) {
       const imgSrc = mediaSrcOnLine(line.text);
@@ -437,7 +503,7 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
   for (const mark of listMarks) {
     const lineNo = lineOf(mark.from);
     if (taskLines.has(lineNo)) {
-      hideCandidates.push({ from: mark.from, to: mark.to });
+      hideCandidates.push({ from: mark.from, to: mark.to + 1 });
       continue;
     }
     const ordered = /^\d+[.)]$/.test(mark.text);
@@ -480,9 +546,10 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
   };
   const blocked = (rfrom: number, rto: number): boolean =>
     ownedHides.some((o) => rfrom < o.to && rto > o.from) || touchesActive(rfrom, rto);
-  type WidgetKey = { kind: "task" | "fnref" | "callout" | "bullet" | "pipe" | "embed"; index: number };
+  type WidgetKey = { kind: "task" | "fnref" | "callout" | "bullet" | "pipe" | "embed" | "chip"; index: number };
   const rankedWidgets: (Ranked & WidgetKey)[] = [
     ...tasks.map((t, index) => ({ from: t.markerFrom, to: t.markerTo, rank: 0, kind: "task" as const, index })),
+    ...chips.map((c, index) => ({ from: c.from, to: c.to, rank: 0, kind: "chip" as const, index })),
     ...footnoteRefs.map((f, index) => ({ from: f.from, to: f.to, rank: 1, kind: "fnref" as const, index })),
     ...embeds.map((e, index) => ({ from: e.from, to: e.to, rank: 1, kind: "embed" as const, index })),
     ...callouts.map((c, index) => ({ from: c.from, to: c.to, rank: 2, kind: "callout" as const, index })),
@@ -507,6 +574,8 @@ export function collectWysiwygRanges(state: EditorState, from: number, to: numbe
     callouts: callouts.filter((_, i) => kept("callout", i)),
     footnoteRefs: footnoteRefs.filter((_, i) => kept("fnref", i)),
     embeds: embeds.filter((_, i) => kept("embed", i)),
+    chips: chips.filter((_, i) => kept("chip", i)),
+    wikilinks: wikilinks.filter((w) => !touchesActive(w.from, w.to)),
     mediaLines,
   };
 }
@@ -542,6 +611,20 @@ export function mediaDimsOnLine(lineText: string): { width?: number; height?: nu
 }
 
 const hideDeco = Decoration.replace({});
+
+/** Task detail chip (due, planned, priority). Replaces the raw token; the
+ * token reappears only in the file. Not editable inline. */
+class ChipWidget extends WidgetType {
+  constructor(readonly kind: ChipRange["kind"], readonly label: string) { super(); }
+  eq(o: ChipWidget): boolean { return o.kind === this.kind && o.label === this.label; }
+  toDOM(): HTMLElement {
+    const el = document.createElement("span");
+    el.className = `wys-chip wys-chip-${this.kind}${this.kind === "priority" && /^High/.test(this.label) ? " wys-chip-high" : ""}`;
+    el.textContent = this.label;
+    return el;
+  }
+  ignoreEvent(): boolean { return false; }
+}
 
 /** Click-to-edit: a plain click on a rendered widget puts the caret at the
  * matching source position instead of landing adjacent to it. Modifier
@@ -769,11 +852,21 @@ function rawClipboardHandlers(): Extension {
   });
 }
 
-export function buildWysiwygDecorations(view: EditorView, opts?: { livePreview?: boolean }): DecorationSet {
+export type WysiwygOptions = {
+  livePreview?: boolean;
+  /** Raw source on the cursor line (off: marks stay hidden everywhere, the caret skips them). */
+  reveal?: boolean;
+  linkExists?: (target: string) => boolean;
+  /** Note title; a first heading that repeats it is hidden (kept in the file). */
+  title?: string;
+};
+
+export function buildWysiwygDecorations(view: EditorView, opts?: WysiwygOptions): DecorationSet {
   if (opts?.livePreview === false) return Decoration.none;
   const state = view.state;
   const ranges = collectWysiwygRanges(state, view.viewport.from, view.viewport.to, {
-    activeLines: selectionActiveLines(state),
+    activeLines: opts?.reveal ? selectionActiveLines(state) : new Set<number>(),
+    ...(opts?.linkExists ? { linkExists: opts.linkExists } : {}),
   });
   type Op = { from: number; to: number; value: Decoration };
   const ops: Op[] = [];
@@ -808,6 +901,12 @@ export function buildWysiwygDecorations(view: EditorView, opts?: { livePreview?:
       to: e.to,
       value: Decoration.replace({ widget: new EmbedWidget(e.target, e.from) }),
     });
+  }
+  for (const c of ranges.chips) {
+    ops.push({ from: c.from, to: c.to, value: Decoration.replace({ widget: new ChipWidget(c.kind, c.label) }) });
+  }
+  for (const w of ranges.wikilinks) {
+    ops.push({ from: w.from, to: w.to, value: Decoration.mark({ class: w.missing ? "wys-wikilink wys-wikilink-missing" : "wys-wikilink" }) });
   }
   for (const t of ranges.tasks) {
     ops.push({
@@ -901,13 +1000,78 @@ function mediaPreviewField(enabled: boolean): Extension {
   return field;
 }
 
-export function wysiwyg(opts?: { livePreview?: boolean }): Extension {
+/** Frontmatter and a first heading that repeats the title are hidden on the
+ * page and kept in the file. Static block replaces, so they come from a
+ * StateField (a view plugin may not provide block decorations). */
+export function hiddenBlockRanges(state: EditorState, title: string | undefined): Array<{ from: number; to: number }> {
+  const out: Array<{ from: number; to: number }> = [];
+  const doc = state.doc;
+  let next = 1;
+  if (doc.lines >= 2 && /^---\s*$/.test(doc.line(1).text)) {
+    const limit = Math.min(doc.lines, 500);
+    for (let n = 2; n <= limit; n++) {
+      if (/^(---|\.\.\.)\s*$/.test(doc.line(n).text)) {
+        out.push({ from: 0, to: Math.min(doc.line(n).to + 1, doc.length) });
+        next = n + 1;
+        break;
+      }
+    }
+  }
+  if (title) {
+    let n = next;
+    while (n <= doc.lines && doc.line(n).text.trim() === "") n++;
+    if (n <= doc.lines) {
+      const m = /^#\s+(.*?)\s*#*\s*$/.exec(doc.line(n).text);
+      if (m && m[1]!.trim().toLowerCase() === title.trim().toLowerCase()) {
+        out.push({ from: doc.line(n).from, to: Math.min(doc.line(n).to + 1, doc.length) });
+      }
+    }
+  }
+  return out;
+}
+
+function hiddenBlocksField(enabled: boolean, title: string | undefined): Extension {
+  const build = (state: EditorState): DecorationSet => {
+    if (!enabled) return Decoration.none;
+    const b = new RangeSetBuilder<Decoration>();
+    for (const r of hiddenBlockRanges(state, title)) b.add(r.from, r.to, Decoration.replace({ block: true }));
+    return b.finish();
+  };
+  return StateField.define<DecorationSet>({
+    create: build,
+    update: (deco, tr) => (tr.docChanged ? build(tr.state) : deco),
+    provide: (f) => [EditorView.decorations.from(f), EditorView.atomicRanges.of((v) => v.state.field(f))],
+  });
+}
+
+/** Faint hint on the empty line the caret is on. */
+function emptyLineHint(): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet = Decoration.none;
+      constructor(view: EditorView) { this.decorations = this.build(view); }
+      update(u: ViewUpdate): void {
+        if (u.docChanged || u.selectionSet || u.focusChanged) this.decorations = this.build(u.view);
+      }
+      build(view: EditorView): DecorationSet {
+        const sel = view.state.selection.main;
+        if (!view.hasFocus || !sel.empty) return Decoration.none;
+        const line = view.state.doc.lineAt(sel.head);
+        if (line.length > 0) return Decoration.none;
+        return Decoration.set([Decoration.line({ class: "wys-empty-hint" }).range(line.from)]);
+      }
+    },
+    { decorations: (v) => v.decorations },
+  );
+}
+
+export function wysiwyg(opts?: WysiwygOptions): Extension {
   const enabled = opts?.livePreview !== false;
   const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
       constructor(view: EditorView) {
-        this.decorations = enabled ? buildWysiwygDecorations(view) : Decoration.none;
+        this.decorations = enabled ? buildWysiwygDecorations(view, opts) : Decoration.none;
       }
       update(update: ViewUpdate): void {
         if (!enabled) return;
@@ -921,11 +1085,15 @@ export function wysiwyg(opts?: { livePreview?: boolean }): Extension {
           update.selectionSet ||
           syntaxTree(update.state) !== syntaxTree(update.startState)
         ) {
-          this.decorations = buildWysiwygDecorations(update.view);
+          this.decorations = buildWysiwygDecorations(update.view, opts);
         }
       }
     },
-    { decorations: (v) => v.decorations },
+    {
+      decorations: (v) => v.decorations,
+      // The caret skips hidden marks and widgets instead of landing inside them.
+      provide: (p) => EditorView.atomicRanges.of((view) => view.plugin(p)?.decorations ?? Decoration.none),
+    },
   );
-  return [plugin, mediaPreviewField(enabled), rawClipboardHandlers()];
+  return [plugin, hiddenBlocksField(enabled, opts?.title), mediaPreviewField(enabled), rawClipboardHandlers(), ...(enabled ? [emptyLineHint()] : [])];
 }

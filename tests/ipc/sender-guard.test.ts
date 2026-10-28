@@ -62,11 +62,13 @@ describe("ipc handler sender audit", () => {
         "update:check",
         "update:download",
         "workspace:close",
+        "workspace:create",
         "workspace:listRecent",
         "workspace:listWsl",
         "workspace:listWslUsers",
         "workspace:openLocal",
         "workspace:openRecent",
+        "workspace:verifyServer",
         "wsl:connect",
       ].sort(),
     );

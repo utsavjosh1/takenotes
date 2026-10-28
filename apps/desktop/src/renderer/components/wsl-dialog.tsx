@@ -1,9 +1,10 @@
-import { useEffect, useId, type JSX } from "react";
+import { useEffect, useId, useRef, useState, type JSX } from "react";
 import { Button, Dialog, Notice, SelectField, TextField } from "@takenotes/ui/dom";
 import { useForm } from "react-hook-form";
 import { valibotResolver } from "@hookform/resolvers/valibot";
 import type { WslDistribution, WslLinuxUser } from "@takenotes/contracts/ipc";
 import { WslConnectSchema, type WslConnectInput } from "@takenotes/core/validation/schemas";
+import { stepStatuses, WIZARD_STEPS } from "@takenotes/core/workspace/onboarding";
 import type { WslDialogState } from "../hooks/use-wsl-connect";
 
 /** Picker label: `Name · Running|Stopped · WSL2` (+ default marker).
@@ -23,11 +24,13 @@ export function WslDialog({
   onDistro,
   onConnect,
   onClose,
+  onPairLink,
 }: {
   dialog: WslDialogState;
   onDistro: (distro: string) => void;
   onConnect: (data: WslConnectInput) => void;
   onClose: () => void;
+  onPairLink?: () => void;
 }): JSX.Element {
   const { register, handleSubmit, setValue, formState: { errors, isValid } } = useForm<WslConnectInput>({
     resolver: valibotResolver(WslConnectSchema),
@@ -44,18 +47,42 @@ export function WslDialog({
   }, [dialog.users, setValue]);
   const distroRegister = register("distro");
   const formId = useId();
+  const [submitted, setSubmitted] = useState(false);
+  const lastRef = useRef<WslConnectInput | null>(null);
+  const run = (data: WslConnectInput): void => { lastRef.current = data; setSubmitted(true); onConnect(data); };
+  const failed = submitted && !dialog.connecting && !!dialog.error;
+  // The connect call installs the helper and pairs in one go; the wizard shows
+  // that stage as "Install helper" until the call returns.
+  const phase = !submitted ? "choose" : "install";
+  const statuses = stepStatuses(phase, failed ? "failed" : submitted ? "working" : "idle");
+  const showProgress = submitted && (dialog.connecting || failed);
   return (
     <Dialog title="Open WSL folder" onClose={onClose} footer={<>
+      {onPairLink && <Button onClick={onPairLink}>I have a pairing link</Button>}
       <Button onClick={onClose}>Cancel</Button>
-      {dialog.distros.length > 0 && <Button form={formId} type="submit" variant="primary"
-        disabled={!isValid || dialog.usersLoading} pending={dialog.connecting} pendingLabel="Opening…">Open workspace</Button>}
+      {dialog.distros.length > 0 && !failed && <Button form={formId} type="submit" variant="primary"
+        disabled={!isValid || dialog.usersLoading} pending={dialog.connecting} pendingLabel="Setting up…">Set up and open</Button>}
     </>}>
       <form id={formId} className="dialog-stack" onSubmit={(e) => {
         if (dialog.connecting) { e.preventDefault(); return; }
-        void handleSubmit(onConnect)(e);
+        void handleSubmit(run)(e);
       }}>
-        {dialog.error && <Notice tone="danger" announcement="assertive" title="Couldn’t open this workspace">{dialog.error}</Notice>}
-        {dialog.distros.length > 0 && <>
+        <ol className="wizard-steps" aria-label="Setup steps">
+          {WIZARD_STEPS.map((st, i) => (
+            <li key={st.id} className={`wiz-${statuses[i]}`} aria-current={st.id === phase ? "step" : undefined}>
+              <span className="wiz-mark" aria-hidden="true">{statuses[i] === "done" ? "✓" : statuses[i] === "failed" ? "!" : i + 1}</span>
+              {st.label}<span className="sr-only"> — {statuses[i]}</span>
+            </li>
+          ))}
+        </ol>
+        {failed && dialog.error && (
+          <Notice tone="danger" announcement="assertive" title="Setup didn’t finish"
+            actions={<><Button onClick={() => void navigator.clipboard.writeText(dialog.error ?? "")}>Copy details</Button><Button variant="primary" onClick={() => lastRef.current && run(lastRef.current)}>Try again</Button></>}>
+            takenotes could not set up the helper in this distribution. Details: <span className="mono">{dialog.error}</span>
+          </Notice>
+        )}
+        {!submitted && dialog.error && <Notice tone="danger" announcement="assertive" title="Couldn’t read your Linux distributions">{dialog.error}</Notice>}
+        {dialog.distros.length > 0 && !showProgress && !failed && <>
           <SelectField label="Distribution" error={errors.distro?.message} {...distroRegister}
             onChange={(e) => {
               const v = e.target.value;

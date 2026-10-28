@@ -17,7 +17,7 @@ import {
 } from "@takenotes/core/properties/summary";
 import { resolvePropertyType, type PropertyRegistry } from "@takenotes/core/index/properties";
 
-function frontmatterRows(entry: DocumentIndexEntry): { name: string; display: string }[] {
+export function frontmatterRows(entry: DocumentIndexEntry): { name: string; display: string }[] {
   if (!entry.frontmatter || typeof entry.frontmatter !== "object") return [];
   return Object.keys(entry.frontmatter as Record<string, unknown>)
     .sort()

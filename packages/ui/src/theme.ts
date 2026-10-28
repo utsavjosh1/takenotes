@@ -9,13 +9,16 @@ export const colors = {
     "surface-input": "#fffdf7",
     "surface-hover": "#ece4d1",
     "surface-selected": "#ece8ff",
+    "surface-panel": "#fbf7ef",
     "text-primary": "#191817",
     "text-secondary": "#4c4a45",
     // Slightly stronger than the original guide: >= 4.5:1 on hover too.
     "text-muted": "#6c6558",
+    "text-faint": "#968d7d",
     "border-subtle": "#e5dcc8",
     "border-control": "#8a806d",
     accent: "#4f41d6",
+    "accent-soft": "#e3dcff",
     "accent-hover": "#4032ba",
     "action-fill": "#1d1c1a",
     "action-text": "#fffdf7",
@@ -26,6 +29,7 @@ export const colors = {
     "danger-text": "#a53240",
     "danger-surface": "#fcebed",
     selection: "#e3dcff",
+    "shadow-overlay": "0 12px 40px rgba(40,30,10,.18)",
     "code-surface": "#f3ecdd",
     "highlight-surface": "#ffdf8e",
     // 6e: darkened to hold 3:1 (non-text) on every surface incl. hover.
@@ -45,12 +49,15 @@ export const colors = {
     "surface-input": "#191613",
     "surface-hover": "#322b22",
     "surface-selected": "#342b50",
+    "surface-panel": "#1d1a15",
     "text-primary": "#f4ecd9",
     "text-secondary": "#d9cfae",
     "text-muted": "#b7ad9b",
+    "text-faint": "#8f8677",
     "border-subtle": "#38322a",
     "border-control": "#887d69",
     accent: "#ad9fff",
+    "accent-soft": "#2c2a48",
     "accent-hover": "#c3b9ff",
     "action-fill": "#f4ecd9",
     "action-text": "#191817",
@@ -61,6 +68,7 @@ export const colors = {
     "danger-text": "#ffadb5",
     "danger-surface": "#3b2025",
     selection: "#493968",
+    "shadow-overlay": "0 12px 40px rgba(0,0,0,.5)",
     "code-surface": "#26211a",
     "highlight-surface": "#59451b",
     // 6e: lightened to hold 3:1 (non-text) on every surface incl. hover.
@@ -83,7 +91,8 @@ export function resolveTheme(preference: ThemePreference, system: Theme): Theme 
 }
 
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32, 10: 40, 12: 48, 16: 64 } as const;
-export const radius = { row: 6, control: 8, menu: 12, dialog: 16 } as const;
+// Prototype scale: 4 rows/controls, 6 inputs/menus, 8 dialogs, 10 largest cards.
+export const radius = { row: 4, control: 6, menu: 6, dialog: 8, max: 10 } as const;
 export const fontSize = { secondary: 12, control: 14, heading: 20, body: 16, "touch-control": 16, "touch-body": 17 } as const;
 export const lineHeight = { ui: 1.4, heading: 1.3, body: 1.65 } as const;
 export const targetSize = { control: 36, icon: 32, row: 32, touch: 48, "touch-row": 52 } as const;

@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { resolveTheme } from "@takenotes/ui";
 import { appearanceVars, clampZoom, stepZoom, type AppearanceTheme } from "@takenotes/core/appearance/appearance";
-import { Button, EmptyState, IconButton, Notice } from "@takenotes/ui/dom";
+import { Button, Dialog, EmptyState, IconButton, Notice } from "@takenotes/ui/dom";
 import type { DirectoryEntry, WorkspaceInfo } from "@takenotes/contracts/ipc";
 import type { CommandId } from "@takenotes/core/commands/registry";
 import { usePlatform } from "./hooks/use-platform";
-import { isWslKind } from "@takenotes/platform/filesystem";
-import { TitleBar, ActivityRail, StatusBar, type SidebarView } from "./components/chrome";
+import { WelcomeScreen, readRecentServers, rememberServer, type RecentServer } from "./components/welcome";
+import { CreateWorkspaceDialog, ErrorDialog, PairDialog, ServerSignInDialog } from "./components/workspace-dialogs";
+import { WorkspaceSwitcher } from "./components/ws-switcher";
+import type { RecentWorkspaceInfo } from "@takenotes/contracts/ipc";
+import { PAGE_VIEWS, PageShell, TasksPage, TodayPage, type PageView } from "./components/pages";
+import { TitleBar, ActivityRail, StatusBar, VIEW_TITLES, type SidebarView } from "./components/chrome";
 import { PaneView } from "./components/pane-view";
-import { BacklinksPane, OutgoingPane } from "./components/backlinks";
 // NOTE: Single-surface Markdown WYSIWYG (ADR-0015) — the editor surface
 // renders Markdown live (marks hidden, tasks as checkboxes, tables,
 // callouts, code, and media styled in place) and the doc stays plain
@@ -28,6 +31,9 @@ import { indexedEntryToQuickOpenItem } from "@takenotes/core/commands/palette";
 import { FileTree } from "./components/tree";
 import { FavoritesPane } from "./components/favorites";
 import { OutlinePane, PreviewCard } from "./components/outline";
+import { SidePanel } from "./components/side-panel";
+import { ShortcutsDialog } from "./components/shortcuts-dialog";
+import { aggregateTags } from "@takenotes/core/tags/tree";
 import { lineForBlockId, lineForHeadingFragment, previewExcerpt } from "@takenotes/core/outline/extract";
 import type { ParsedTakenotesUri } from "@takenotes/core/uri/parse";
 import { renderMarkdown } from "@takenotes/core/markdown/render";
@@ -53,7 +59,7 @@ import { SettingsDialog } from "./components/settings";
 import { WslDialog } from "./components/wsl-dialog";
 import { UpdateDialog } from "./components/update-dialog";
 import { HistoryDialog } from "./components/history-dialog";
-import { buildFileMenu, buildSidebarMenu, buildTabMenu, type MenuOps } from "./components/menus";
+import { buildFileMenu, buildTabMenu, type MenuOps } from "./components/menus";
 import { Icon } from "./components/icons";
 import { getBridge } from "./bridge";
 
@@ -64,9 +70,8 @@ const NOTE_FILE_RE = /\.(md|markdown|txt)$/i;
 function mimeExt(mime: string): string {
   return (mime.split("/")[1]?.split(";")[0]?.split("+")[0] ?? "").replace(/[^a-z0-9]/gi, "");
 }
-import lockupDarkUrl from "./assets/brand/takenotes-lockup-dark.svg";
-import lockupLightUrl from "./assets/brand/takenotes-lockup-light.svg";
-import { fileName, type CtxMenu } from "./components/types";
+import { isWslKind } from "@takenotes/platform/filesystem";
+import { fileName, joinRel, parentDir, type CtxMenu } from "./components/types";
 import { useToastStore } from "./stores/toasts";
 import { useSettingsStore } from "./stores/settings";
 import { useIndexMeta } from "./stores/index-meta";
@@ -98,6 +103,26 @@ function previewBodyText(entry: DocumentIndexEntry): string {
  * choreography (workspace open/close flows). Every feature domain —
  * documents, tree, search, recovery, WSL, updates, commands — owns its
  * state in its hook; App wires them together and renders. */
+/** "Edited 5 min ago" for the note meta line (prototype wording). */
+function editedLabel(mtimeMs: number | undefined): string {
+  if (!mtimeMs) return "Not edited yet";
+  const diff = Date.now() - mtimeMs;
+  const min = 60_000, hour = 60 * min, day = 24 * hour;
+  if (diff < min) return "Edited just now";
+  if (diff < hour) return `Edited ${Math.round(diff / min)} min ago`;
+  if (diff < day) return `Edited ${Math.round(diff / hour)} h ago`;
+  if (diff < 2 * day) return "Edited yesterday";
+  return `Edited ${Math.round(diff / day)} days ago`;
+}
+
+/** Remembered panel visibility; anything unreadable falls back to the default. */
+function readFlag(key: string, fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === "true";
+  } catch { return fallback; }
+}
+
 export default function App(): JSX.Element {
   const platform = usePlatform();
   const hotkeys = useHotkeys(platform.platform);
@@ -113,15 +138,23 @@ export default function App(): JSX.Element {
   const bumpIndex = useIndexMeta((s) => s.bump);
 
   // Shell UI state: local, single-component, never leaves App.
-  const [view, setView] = useState<SidebarView>("files");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [view, setViewRaw] = useState<SidebarView>("files");
+  const [page, setPage] = useState<PageView | null>(null);
+  // Today/Calendar/Tags/Properties/Collections/Graph open as pages in the
+  // main column (prototype); files/search/outline/favorites stay sidebar views.
+  const setView = useCallback((v: SidebarView): void => {
+    if ((PAGE_VIEWS as readonly string[]).includes(v)) { setPage(v as PageView); return; }
+    setPage(null);
+    setViewRaw(v);
+  }, []);
+  const [sidebarOpen, setSidebarOpen] = useState(() => readFlag("takenotes.sidebarOpen", true));
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem("takenotes.sidebarWidth") ?? 256) || 256);
   // Per-pane collapse (Step 2 shell seam): one flag per left pane, persisted.
   const [paneCollapsed, setPaneCollapsed] = useState<Record<SidebarView, boolean>>(() => {
     try {
-      return { files: false, search: false, outline: false, favorites: false, today: false, calendar: false, ...JSON.parse(localStorage.getItem("takenotes.paneCollapsed") ?? "{}") };
+      return { files: false, search: false, outline: false, recent: false, favorites: false, today: false, calendar: false, ...JSON.parse(localStorage.getItem("takenotes.paneCollapsed") ?? "{}") };
     } catch {
-      return { files: false, search: false, outline: false, favorites: false, today: false, calendar: false };
+      return { files: false, search: false, outline: false, recent: false, favorites: false, today: false, calendar: false };
     }
   });
   const togglePaneCollapse = useCallback((v: SidebarView) => {
@@ -133,10 +166,17 @@ export default function App(): JSX.Element {
   }, []);
   const [palette, setPalette] = useState<{ initialQuery: string } | null>(null);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menu, setMenu] = useState<CtxMenu>(null);
+  const [dirtyPrompt, setDirtyPrompt] = useState<null | { kind: "tab"; key: string; rel: string } | { kind: "entry"; entry: DirectoryEntry; dirty: { key: string; rel: string }[] }>(null);
+  const dirtySaveRef = useRef<HTMLElement | null>(null);
   const [focusMode, setFocusMode] = useState(false);
+  const [rightOpen, setRightOpen] = useState(() => readFlag("takenotes.rightOpen", true));
+  useEffect(() => {
+    try { localStorage.setItem("takenotes.sidebarOpen", String(sidebarOpen)); localStorage.setItem("takenotes.rightOpen", String(rightOpen)); } catch { /* layout memory is a convenience */ }
+  }, [sidebarOpen, rightOpen]);
   const [version, setVersion] = useState("0.0.1");
   // Local-date tick: refreshes the Today aggregate at next local midnight
   // so an app left open overnight doesn't show yesterday's tasks/Daily.
@@ -203,6 +243,46 @@ export default function App(): JSX.Element {
 
   const docsApi = useDocuments(workspace, notify, recents);
   const treeApi = useFileTree(workspace, docsApi, notify, workspaceApi.reportHealth);
+  // Single close/delete prompt on dirty; bulk/quit/crash call closeTab directly (silent preserve).
+  const requestCloseTab = useCallback((key: string) => {
+    const doc = docsApi.layout.docs[key];
+    if (doc && doc.dirty && !doc.loadError) setDirtyPrompt({ kind: "tab", key, rel: doc.relativePath });
+    else docsApi.closeTab(key);
+  }, [docsApi]);
+  const requestRemoveEntry = useCallback((entry: DirectoryEntry) => {
+    const ws = workspaceApi.workspace;
+    if (!ws) return;
+    const dirty = Object.values(docsApi.layout.docs)
+      .filter((d) => d.dirty && !d.loadError && (d.relativePath === entry.relativePath || d.relativePath.startsWith(`${entry.relativePath}/`)))
+      .map((d) => ({ key: d.key, rel: d.relativePath }));
+    if (dirty.length === 0) void treeApi.removeEntry(entry);
+    else setDirtyPrompt({ kind: "entry", entry, dirty });
+  }, [docsApi, treeApi, workspaceApi]);
+  const confirmDirtySave = useCallback(async () => {
+    const p = dirtyPrompt;
+    if (!p) return;
+    if (p.kind === "tab") {
+      await docsApi.save(p.key);
+      setDirtyPrompt(null);
+      docsApi.closeTab(p.key);
+    } else {
+      for (const d of p.dirty) await docsApi.save(d.key);
+      setDirtyPrompt(null);
+      void treeApi.removeEntry(p.entry);
+    }
+  }, [dirtyPrompt, docsApi, treeApi]);
+  const confirmDirtyDiscard = useCallback(() => {
+    const p = dirtyPrompt;
+    if (!p) return;
+    if (p.kind === "tab") {
+      docsApi.discardDraft(p.key);
+      docsApi.closeTabWithoutPreserve(p.key);
+    } else {
+      for (const d of p.dirty) docsApi.discardDraft(d.key);
+      void treeApi.removeEntry(p.entry);
+    }
+    setDirtyPrompt(null);
+  }, [dirtyPrompt, docsApi, treeApi]);
   const favoritesApi = useFavorites(workspace, notify);
   const collectionsApi = useCollections(workspace, notify);
   const favFilesLower = useMemo(() => new Set(treeApi.allFiles.map((f) => f.relativePath.toLowerCase())), [treeApi.allFiles]);
@@ -267,6 +347,28 @@ export default function App(): JSX.Element {
   // workspace keeps working when toggled off; only new connects hide.
   const wslFeature = platform.capabilities.wsl && settings.wslEnabled;
   const wslApi = useWslConnect(notify, (ws) => workspaceApi.openWorkspace(ws));
+  const [wsDialog, setWsDialog] = useState<null | { kind: "create" } | { kind: "server"; address: string } | { kind: "pair" }>(null);
+  const [servers, setServers] = useState<RecentServer[]>(() => readRecentServers());
+  const workspaceDialogs = (
+    <>
+      {workspaceApi.openError && (
+        <ErrorDialog error={workspaceApi.openError} onClose={workspaceApi.clearOpenError}
+          onAction={() => { workspaceApi.clearOpenError(); void workspaceApi.openLocal(); }} />
+      )}
+      {wsDialog?.kind === "create" && (
+        <CreateWorkspaceDialog existing={recents.recentWorkspaces.map((r) => ("displayName" in r ? r.displayName : r.name))}
+          onClose={() => setWsDialog(null)}
+          onCreate={async (name) => { const err = await workspaceApi.createWorkspace(name); if (!err) setWsDialog(null); return err; }} />
+      )}
+      {wsDialog?.kind === "server" && (
+        <ServerSignInDialog initialAddress={wsDialog.address} onClose={() => setWsDialog(null)}
+          onSignedIn={(address) => { setServers(rememberServer(address)); setWsDialog(null); notify.toast("Signed in. The server’s editor opened in your browser."); }} />
+      )}
+      {wsDialog?.kind === "pair" && (
+        <PairDialog onClose={() => setWsDialog(null)} onPair={(server) => setWsDialog({ kind: "server", address: server })} />
+      )}
+    </>
+  );
   // Stable identity: an inline closure here would recreate updatesApi.check
   // on every render and re-run the startup effect (IPC storm + dialog reset).
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -302,9 +404,13 @@ export default function App(): JSX.Element {
     checkUpdates: () => void updatesApi.check(true),
     setView,
     setSidebarOpen,
+    setRightOpen,
     toggleFocusMode: () => setFocusMode((v) => !v),
     openSettings: () => setSettingsOpen(true),
     openPalette: (q) => setPalette({ initialQuery: q }),
+    openPage: (p) => { setSettingsOpen(false); setPage(p); },
+    openShortcuts: () => setShortcutsOpen(true),
+    requestCloseTab,
     shortcutLabel: (id) => hotkeys.labelFor(id) || platform.shortcutLabel(id),
     addActiveToFavorites: () => {
       const tab = docsApi.activeTab;
@@ -386,17 +492,38 @@ export default function App(): JSX.Element {
     if (!ws || !bridge) return;
     setTaskDialogOpen(false);
     const { formatTaskLine, appendTaskLine, INBOX_RELATIVE_PATH } = await import("@takenotes/core/productivity/tasks");
+    if (input.kind === "note") {
+      const stamp = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "");
+      const target = resolveCreateTarget(`Capture ${stamp}`, treeApi.preferredNewNoteDir());
+      if (!target.ok) { toast(target.error, "error"); return; }
+      const created = await bridge.file.create(ws.workspaceId, target.rel);
+      if (!created.ok) { toast(`Couldn't create ${target.rel}.`, "error"); return; }
+      const body = `# Capture\n\n${input.text.replace(/\s+/g, " ").trim()}\n`;
+      const wrote = await bridge.file.write({
+        workspaceId: ws.workspaceId, relativePath: target.rel, content: body,
+        expectedHash: created.result.hash, newlineStyle: "lf", hadBom: false,
+      });
+      if (!wrote.ok) { toast(`Couldn't save ${target.rel}.`, "error"); return; }
+      workspaceIndex.upsert(ws.workspaceId, target.rel, body, wrote.result);
+      bumpIndex();
+      await refreshWorkspaceFlow({ tree: treeApi, search: searchApi }, ws);
+      await docsApi.openFile(target.rel);
+      toast(`Saved as ${target.rel}.`);
+      return;
+    }
     let line: string;
     try {
-      line = formatTaskLine(input.text, input.due);
+      line = input.kind === "bullet" ? `- ${input.text.replace(/\s+/g, " ").trim()}` : formatTaskLine(input.text, input.due);
+      if (input.scheduled && input.kind !== "bullet") line += ` @scheduled(${input.scheduled})`;
+      if (!line.replace(/^- (\[ \] )?/, "")) throw new Error("empty");
     } catch {
-      toast("Couldn't add the task: invalid text or due date.", "error");
+      toast("Couldn't save: invalid text or due date.", "error");
       return;
     }
     let rel = INBOX_RELATIVE_PATH;
     let base: { content: string; hash: string; newlineStyle: "lf" | "crlf"; hadBom: boolean } | null = null;
     let createdNew = false;
-    if (settings.taskCaptureTarget === "daily") {
+    if ((input.target ?? settings.taskCaptureTarget) === "daily") {
       const info = await bridge.daily.getToday(ws.workspaceId);
       if (!info.ok) { toast(`Couldn't find today's Daily Note.`, "error"); return; }
       rel = info.result.relativePath;
@@ -441,8 +568,8 @@ export default function App(): JSX.Element {
     if (createdNew) { void treeApi.refresh(ws); void treeApi.rebuild(ws); }
     void docsApi.reconcileExternalChange(rel);
     commandsApi.remember("task.new");
-    toast(`Task added to ${rel}.`);
-  }, [workspaceApi.workspace, settings.taskCaptureTarget, toast, commandsApi, bumpIndex, treeApi, docsApi]);
+    toast(input.kind === "bullet" ? `Captured to ${rel}.` : `Task added to ${rel}.`);
+  }, [workspaceApi.workspace, settings.taskCaptureTarget, toast, commandsApi, bumpIndex, treeApi, docsApi, searchApi]);
 
   // Calendar drag (productivity step 4): dropping a task on a day rewrites
   // only its `@scheduled` token — never `@due`, never anything else. The
@@ -481,6 +608,73 @@ export default function App(): JSX.Element {
     if (!written.ok) {
       if (written.error.code === "CONFLICT") toast(`${relativePath} changed on disk — drop NOT applied. Try again.`, "error");
       else toast(`Couldn't move the task.`, "error");
+      return;
+    }
+    workspaceIndex.upsert(ws.workspaceId, relativePath, next, written.result);
+    bumpIndex();
+    void docsApi.reconcileExternalChange(relativePath);
+  }, [workspaceApi.workspace, toast, bumpIndex, docsApi]);
+
+  // Timeline drops (Today page): set `@scheduled` to an hour today, or clear
+  // it. Same guarded write as reschedule/toggle: fresh read, checkbox-line
+  // check, expectedHash, so a concurrent edit surfaces instead of clobbering.
+  const scheduleTaskAt = useCallback(async (relativePath: string, line: number, hour: number | null) => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) return;
+    const { rewriteScheduledHour, removeScheduledToken } = await import("@takenotes/core/productivity/calendar");
+    const read = await bridge.file.read(ws.workspaceId, relativePath);
+    if (!read.ok) { toast(`Couldn't open ${relativePath}.`, "error"); return; }
+    const newline = read.result.content.includes("\r\n") ? "\r\n" : "\n";
+    const lines = read.result.content.split(newline);
+    const current = lines[line - 1];
+    if (current === undefined || !/^\s*(?:>\s*)*([-*+]|\d+[.)])\s+\[[ xX]\]/.test(current)) {
+      toast("That task moved — refresh and try again.", "error");
+      return;
+    }
+    let nextLine: string;
+    try {
+      nextLine = hour === null ? removeScheduledToken(current) : rewriteScheduledHour(current, todayKey, hour);
+    } catch {
+      toast("Couldn't schedule the task.", "error");
+      return;
+    }
+    if (nextLine === current) return;
+    lines[line - 1] = nextLine;
+    const next = lines.join(newline);
+    const written = await bridge.file.write({
+      workspaceId: ws.workspaceId, relativePath, content: next,
+      expectedHash: read.result.revision.hash, newlineStyle: read.result.newlineStyle, hadBom: read.result.hadBom,
+    });
+    if (!written.ok) {
+      toast(written.error.code === "CONFLICT" ? `${relativePath} changed on disk — nothing was changed. Try again.` : "Couldn't schedule the task.", "error");
+      return;
+    }
+    workspaceIndex.upsert(ws.workspaceId, relativePath, next, written.result);
+    bumpIndex();
+    void docsApi.reconcileExternalChange(relativePath);
+    toast(hour === null ? "Unscheduled. @due is unchanged." : `Scheduled for ${hour > 12 ? hour - 12 : hour}:00 ${hour >= 12 ? "PM" : "AM"}. @due is unchanged.`);
+  }, [workspaceApi.workspace, todayKey, toast, bumpIndex, docsApi]);
+
+  const toggleTask = useCallback(async (relativePath: string, line: number) => {
+    const ws = workspaceApi.workspace;
+    const bridge = getBridge();
+    if (!ws || !bridge) return;
+    const read = await bridge.file.read(ws.workspaceId, relativePath);
+    if (!read.ok) { toast(`Couldn't open ${relativePath}.`, "error"); return; }
+    const newline = read.result.content.includes("\r\n") ? "\r\n" : "\n";
+    const lines = read.result.content.split(newline);
+    const current = lines[line - 1];
+    const box = current === undefined ? null : /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]/.exec(current);
+    if (current === undefined || !box) { toast("That task moved — refresh and try again.", "error"); return; }
+    lines[line - 1] = current.replace(/\[[ xX]\]/, box[2] === " " ? "[x]" : "[ ]");
+    const next = lines.join(newline);
+    const written = await bridge.file.write({
+      workspaceId: ws.workspaceId, relativePath, content: next,
+      expectedHash: read.result.revision.hash, newlineStyle: read.result.newlineStyle, hadBom: read.result.hadBom,
+    });
+    if (!written.ok) {
+      toast(written.error.code === "CONFLICT" ? `${relativePath} changed on disk — nothing was changed. Try again.` : "Couldn't update the task.", "error");
       return;
     }
     workspaceIndex.upsert(ws.workspaceId, relativePath, next, written.result);
@@ -587,11 +781,12 @@ export default function App(): JSX.Element {
   const menuOps: MenuOps = useMemo(() => ({
     openFile: (rel) => void docsApi.openFile(rel),
     beginRename: (rel) => treeApi.beginRename(rel),
-    removeEntry: (entry) => void treeApi.removeEntry(entry),
-    trashEntry: (entry) => void treeApi.removeEntry(entry),
+    removeEntry: (entry) => requestRemoveEntry(entry),
+    trashEntry: (entry) => requestRemoveEntry(entry),
     beginCreate: (dir, folder) => folder ? treeApi.beginCreate(dir, true) : void treeApi.createUntitledNote(dir),
     select: (rel) => treeApi.select(rel),
-    closeTab: (key) => docsApi.closeTab(key),
+    closeTab: (key) => requestCloseTab(key),
+    closeTabSilent: (key) => docsApi.closeTab(key),
     togglePinnedTab: (key) => docsApi.togglePinnedTab(key),
     executeCommand: (id) => commandsApi.executeCommand(id),
     refreshAll: () => refreshWorkspace(),
@@ -602,7 +797,7 @@ export default function App(): JSX.Element {
         ? { type: "folder", target: entry.relativePath }
         : { type: "file", target: entry.relativePath });
     },
-  }), [docsApi, treeApi, commandsApi.executeCommand, workspaceApi, refreshWorkspace, favoritesApi]);
+  }), [requestCloseTab, requestRemoveEntry, treeApi, commandsApi.executeCommand, workspaceApi, refreshWorkspace, favoritesApi]);
 
   const showFileMenu = useCallback((e: React.MouseEvent, entry: DirectoryEntry) => {
     e.preventDefault();
@@ -661,6 +856,25 @@ export default function App(): JSX.Element {
     () => (workspace ? workspaceIndex.list(workspace.workspaceId) : null),
     [workspace?.workspaceId, indexVersion],
   );
+  const folderCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const f of treeApi.allFiles) {
+      if (f.fileClass !== "markdown") continue;
+      const parts = f.relativePath.split("/");
+      for (let i = 1; i < parts.length; i++) {
+        const dir = parts.slice(0, i).join("/");
+        counts.set(dir, (counts.get(dir) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [treeApi.allFiles]);
+  const [pendingUpdate, setPendingUpdate] = useState<string | null>(null);
+  useEffect(() => {
+    const d = updatesApi.dialog;
+    if (d?.phase === "available" && d.latest) setPendingUpdate(d.latest);
+  }, [updatesApi.dialog]);
+  const activeDocKey = docsApi.layout.activeKey;
+  useEffect(() => { setPage(null); setSettingsOpen(false); }, [activeDocKey]);
   const activeIndexEntry = useMemo(() => {
     const rel = docsApi.activeTab?.relativePath;
     if (!workspace || !rel) return null;
@@ -886,10 +1100,20 @@ export default function App(): JSX.Element {
     const ws = workspaceApi.workspace;
     const bridge = getBridge();
     if (!ws || !bridge) { toast("Desktop bridge unavailable — open via the Electron app.", "error"); return; }
+    // Remember the text before and the revision after, so the toast can offer a real Undo.
+    let before: { content: string; newlineStyle: "lf" | "crlf"; hadBom: boolean } | null = null;
+    let afterHash = "";
     const result = await linkMentionFlow({
-      readFile: (rel) => bridge.file.read(ws.workspaceId, rel),
-      writeFile: ({ rel, content, expectedHash, newlineStyle, hadBom }) =>
-        bridge.file.write({ workspaceId: ws.workspaceId, relativePath: rel, content, expectedHash, newlineStyle, hadBom }),
+      readFile: async (rel) => {
+        const r = await bridge.file.read(ws.workspaceId, rel);
+        if (r.ok) before = { content: r.result.content, newlineStyle: r.result.newlineStyle, hadBom: r.result.hadBom };
+        return r;
+      },
+      writeFile: async ({ rel, content, expectedHash, newlineStyle, hadBom }) => {
+        const w = await bridge.file.write({ workspaceId: ws.workspaceId, relativePath: rel, content, expectedHash, newlineStyle, hadBom });
+        if (w.ok) afterHash = w.result.hash;
+        return w;
+      },
       upsertIndex: (rel, content, revision) => syncFileIndex(workspaceIndex, ws.workspaceId, rel, content, revision),
       reconcile: (rel) => docsApi.reconcileExternalChange(rel),
       refresh: async () => {
@@ -902,6 +1126,21 @@ export default function App(): JSX.Element {
     if (result.status === "conflict") toast(`${result.rel} changed on disk — mention NOT linked. Try again.`, "error");
     else if (result.status === "not-found") toast(`Mention no longer found in ${result.rel}.`, "error");
     else if (result.status === "failed") toast(`Couldn't link the mention in ${result.rel}.`, "error");
+    else if (result.status === "linked" && before) {
+      const old = before as { content: string; newlineStyle: "lf" | "crlf"; hadBom: boolean };
+      toast(`Linked “${matchedText}” in ${fileName(from).replace(/\.md$/i, "")}.`, "info", {
+        label: "Undo",
+        run: () => {
+          void (async () => {
+            const w = await bridge.file.write({ workspaceId: ws.workspaceId, relativePath: from, content: old.content, expectedHash: afterHash, newlineStyle: old.newlineStyle, hadBom: old.hadBom });
+            if (!w.ok) { toast(`${fileName(from)} changed since, so the link was left in place.`, "error"); return; }
+            syncFileIndex(workspaceIndex, ws.workspaceId, from, old.content, w.result);
+            await docsApi.reconcileExternalChange(from);
+            bumpIndex();
+          })();
+        },
+      });
+    }
   }, [workspaceApi.workspace, treeApi, docsApi, searchApi, settings.linkFormat, settings.useWikilinks, toast, bumpIndex]);
 
   // Note-file import (Step 2 copy-in, shared by sidebar and editor drops):
@@ -1030,6 +1269,97 @@ export default function App(): JSX.Element {
     }
   }, [importNoteFiles, importAttachmentFiles, treeApi]);
 
+  /* ---------- note page: "..." menu, details, plain text, focus mode ---------- */
+  const [plainDocs, setPlainDocs] = useState<ReadonlySet<string>>(new Set());
+  const [fileDetails, setFileDetails] = useState<string | null>(null);
+
+  const makeCopy = useCallback(async (key: string) => {
+    const ws = workspaceApi.workspace;
+    const doc = docsApi.layout.docs[key];
+    const bridge = getBridge();
+    if (!ws || !doc || !bridge) return;
+    const dir = parentDir(doc.relativePath);
+    const base = fileName(doc.relativePath).replace(/\.md$/i, "");
+    const taken = new Set(treeApi.allFiles.map((f) => f.relativePath.toLowerCase()));
+    let n = 1;
+    let target = joinRel(dir, `${base} copy.md`);
+    while (taken.has(target.toLowerCase())) target = joinRel(dir, `${base} copy ${++n}.md`);
+    const created = await bridge.file.create(ws.workspaceId, target);
+    if (!created.ok) { notify.errToast(created.error, "Couldn't make a copy"); return; }
+    const written = await bridge.file.write({ workspaceId: ws.workspaceId, relativePath: target, content: doc.content, expectedHash: created.result.hash, newlineStyle: doc.newlineStyle, hadBom: doc.hadBom });
+    if (!written.ok) { notify.errToast(written.error, "Couldn't make a copy"); return; }
+    await refreshWorkspaceFlow({ tree: treeApi, search: searchApi }, ws);
+    await docsApi.openFile(target);
+  }, [workspaceApi.workspace, docsApi, treeApi, searchApi, notify]);
+
+  const showNoteMenu = useCallback((key: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    const doc = docsApi.layout.docs[key];
+    if (!doc) return;
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const plain = plainDocs.has(key);
+    const entry = treeApi.allFiles.find((f) => f.relativePath === doc.relativePath);
+    const ws = workspaceApi.workspace;
+    setMenu({
+      x: r.right - 200, y: r.bottom + 4,
+      items: [
+        { label: "Find in note", shortcut: sc("editor.find"), run: () => window.dispatchEvent(new Event("takenotes:editor-find")) },
+        { label: "Show file details", run: () => setFileDetails(key) },
+        { label: "Rename", shortcut: "F2", run: () => { const i = document.querySelector<HTMLInputElement>(".note-title-input"); i?.focus(); i?.select(); } },
+        { label: "Make a copy", run: () => void makeCopy(key) },
+        { label: "Insert from a template…", run: () => window.dispatchEvent(new Event("takenotes:open-template-picker")) },
+        { label: "Version history…", run: () => void docsApi.openHistory(key) },
+        { label: plain ? "Back to the page view" : "Edit as plain text…", run: () => setPlainDocs((cur) => { const n = new Set(cur); if (n.has(key)) n.delete(key); else n.add(key); return n; }) },
+        { label: "---", run: () => undefined },
+        { label: ws && isWslKind(ws.type) ? "Delete permanently…" : "Move to trash", danger: true, disabled: !entry, run: () => entry && void treeApi.removeEntry(entry) },
+      ],
+    });
+  }, [docsApi, plainDocs, treeApi, workspaceApi.workspace, makeCopy]);
+
+  // "/ Image…" opens a file picker; the picked image is imported like a drop.
+  useEffect(() => {
+    const onPick = (): void => {
+      const doc = docsApi.activeTab;
+      if (!doc) return;
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.multiple = true;
+      input.onchange = () => {
+        const files = Array.from(input.files ?? []);
+        if (files.length === 0) return;
+        void importAttachmentFiles(files, doc.relativePath).then((links) => {
+          if (links.length > 0) window.dispatchEvent(new CustomEvent("takenotes:insert-attachment-text", { detail: links.join("\n") }));
+        });
+      };
+      input.click();
+    };
+    window.addEventListener("takenotes:pick-image", onPick);
+    return () => window.removeEventListener("takenotes:pick-image", onPick);
+  }, [docsApi.activeTab, importAttachmentFiles]);
+
+  // Esc toggles focus mode (only the page stays). It never competes with an
+  // open menu, dialog, find bar or completion list: those take Esc first.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== "Escape" || e.defaultPrevented || !workspaceApi.workspace) return;
+      if (document.querySelector("dialog[open], .ctx-menu, .cm-tooltip, .cm-panel, .command-menu, .fmt-bubble")) return;
+      const inPage = !!(e.target as HTMLElement | null)?.closest?.(".cm-editor, .note-title-input");
+      if (focusMode || (inPage && docsApi.activeTab)) { e.preventDefault(); setFocusMode((v) => !v); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusMode, docsApi.activeTab, workspaceApi.workspace]);
+
+  const validateTitle = useCallback((title: string): string | null => {
+    const doc = docsApi.activeTab;
+    if (!doc || title === "") return title === "" ? "Give the note a name." : null;
+    if (/[<>:"/\\|?*]/.test(title)) return "Names can\u2019t contain / \\ : * ? \" < > |.";
+    const dir = parentDir(doc.relativePath);
+    const clash = treeApi.allFiles.some((f) => f.relativePath !== doc.relativePath && parentDir(f.relativePath) === dir && fileName(f.relativePath).replace(/\.md$/i, "").toLowerCase() === title.toLowerCase());
+    return clash ? "A note with this name already exists in this folder." : null;
+  }, [docsApi.activeTab, treeApi.allFiles]);
+
   /* ---------- render ---------- */
   // Browser-tab mode: vite serves the same bundle to Electron AND to plain
   // browsers. Only Electron injects the preload bridge, so a browser tab can
@@ -1045,42 +1375,103 @@ export default function App(): JSX.Element {
       <div className="app">
         {bridgeBanner}
         <TitleBar workspace={null} platform={platform} onQuickOpen={() => {}} />
-        <EmptyState className="welcome-state" headingLevel={1} title="Open a workspace" description="Choose a folder of Markdown files."
-          illustration={<>
-            <img src={lockupDarkUrl} className="brand-logo only-dark" alt="takenotes" draggable={false} />
-            <img src={lockupLightUrl} className="brand-logo only-light" alt="takenotes" draggable={false} />
-          </>}
-          actions={<>
-            <Button variant="primary" onClick={() => void workspaceApi.openLocal()}>Open folder</Button>
-            {wslFeature && <Button onClick={() => void wslApi.open()}>Open WSL folder</Button>}
-          </>}>
-          <p className="supporting-copy">Your notes stay in the folder you choose.</p>
-          {recents.recentWorkspaces.length > 0 && (
-            <>
-              <hr className="sect-sep" />
-              <div className="recent-list">
-                <div className="panel-title" style={{ paddingLeft: 12 }}>Recent</div>
-                {recents.recentWorkspaces.map((r, index) => {
-                  const name = "displayName" in r ? r.displayName : r.name;
-                  const kind = "type" in r ? r.type : r.kind;
-                  const id = "id" in r ? r.id : undefined;
-                  return (
-                    <button key={id ?? `${name}-${index}`} className="recent-item" onClick={() => id ? void workspaceApi.openRecent(id) : void workspaceApi.openLocal()} title={id ? "Reopen workspace" : "Reopen via folder picker"}>
-                      <span className="n">{name}</span>
-                      <span className="d">{kind === "windows-wsl" ? "WSL" : kind === "macos-local" ? "macOS" : kind === "linux-local" ? "Linux" : "Windows"}</span>
-                    </button>
-                  );
-                })}
-                <button className="recent-item" onClick={() => void workspaceApi.openLocal()}><span className="n" style={{ color: "var(--accent)" }}>Open other folder…</span></button>
-              </div>
-            </>
+        <WelcomeScreen
+          recents={recents.recentWorkspaces}
+          servers={servers}
+          opening={workspaceApi.opening}
+          wslEnabled={Boolean(wslFeature)}
+          onOpenFolder={() => void workspaceApi.openLocal()}
+          onOpenWsl={() => void wslApi.open()}
+          onCreate={() => setWsDialog({ kind: "create" })}
+          onSignIn={() => setWsDialog({ kind: "server", address: "" })}
+          onOpenRecent={(id) => (id ? void workspaceApi.openRecent(id) : void workspaceApi.openLocal())}
+          onOpenServer={(address) => setWsDialog({ kind: "server", address })}>
+          {updatesApi.dialog?.phase === "available" && updatesApi.dialog.latest && (
+            <div className="update-banner" role="status">
+              <span>Version {updatesApi.dialog.latest} is available.</span>
+              <Button variant="primary" onClick={() => void updatesApi.download()}>Download &amp; install</Button>
+            </div>
           )}
-        </EmptyState>
-        {wslApi.dialog && <WslDialog dialog={wslApi.dialog} onDistro={(d) => void wslApi.fetchUsers(d)} onConnect={(data) => void wslApi.connect(data)} onClose={wslApi.close} />}
+        </WelcomeScreen>
+        {wslApi.dialog && <WslDialog dialog={wslApi.dialog} onDistro={(d) => void wslApi.fetchUsers(d)} onConnect={(data) => void wslApi.connect(data)} onClose={wslApi.close} onPairLink={() => { wslApi.close(); setWsDialog({ kind: "pair" }); }} />}
+        {workspaceDialogs}
+        {updatesApi.dialog && (
+          <UpdateDialog dialog={updatesApi.dialog} version={version} onClose={updatesApi.close} onDownload={() => void updatesApi.download()} />
+        )}
         <Toasts toasts={toasts} onDismiss={dismissToast} />
       </div>
     );
   }
+
+  const openFromPage = (rel: string, line?: number): void => {
+    setPage(null);
+    void docsApi.openFile(rel).then(() => { void treeApi.reveal(rel); if (line) gotoLine(line); });
+  };
+  const pageBody = (v: PageView): JSX.Element => {
+    const noIndex = <PageShell view={v}><p className="muted">No workspace index yet.</p></PageShell>;
+    if (v === "today") {
+      return todayGroups ? (
+        <TodayPage
+          groups={todayGroups.groups}
+          today={todayGroups.today}
+          daily={todayGroups.daily}
+          recents={todayGroups.recents}
+          onOpen={openFromPage}
+          onToggle={(rel, line) => void toggleTask(rel, line)}
+          onSchedule={(rel, line, hour) => void scheduleTaskAt(rel, line, hour)}
+          onNewNote={() => commandsApi.executeCommand("note.new")}
+          onNewTask={() => commandsApi.executeCommand("task.new")}
+          onOpenDaily={() => { setPage(null); commandsApi.executeCommand("note.openToday"); }}
+        />
+      ) : noIndex;
+    }
+    if (v === "tasks") return <TasksPage entries={phase3Entries} today={todayKey} onOpen={openFromPage} onToggle={(rel, line) => void toggleTask(rel, line)} />;
+    if (v === "calendar") {
+      return todayGroups && linkGraph ? (
+        <PageShell view={v}>
+          <CalendarPane
+            entries={linkGraph.entries}
+            today={todayGroups.today}
+            onOpenTask={(rel, line) => openFromPage(rel, line)}
+            onOpenNote={(rel) => openFromPage(rel)}
+            onReschedule={(rel, line, targetDate) => void rescheduleTask(rel, line, targetDate)}
+          />
+        </PageShell>
+      ) : noIndex;
+    }
+    if (v === "tags") return <PageShell view={v}><TagsPane entries={phase3Entries} runSearch={runSearchQuery} /></PageShell>;
+    if (v === "properties") {
+      return (
+        <PageShell view={v}>
+          <PropertiesPane
+            activeEntry={activeIndexEntry}
+            entries={phase3Entries}
+            registry={propertyRegistry}
+            runSearch={runSearchQuery}
+            onRename={(a, b) => renamePropertyEverywhere(a, b)}
+            renaming={renamingProp}
+          />
+        </PageShell>
+      );
+    }
+    if (v === "collections") {
+      return (
+        <PageShell view={v}>
+          <CollectionsPane collections={collectionsApi} entries={phase3Entries} onOpen={(rel) => openFromPage(rel)} runSearch={runSearchQuery} />
+        </PageShell>
+      );
+    }
+    return linkGraph ? (
+      <PageShell view={v}>
+        <GraphPane
+          entries={linkGraph.entries}
+          edges={linkGraph.edges}
+          activePath={docsApi.activeTab?.relativePath ?? null}
+          onOpen={(rel) => openFromPage(rel)}
+        />
+      </PageShell>
+    ) : noIndex;
+  };
 
   const healthError = workspaceApi.healthError;
   return (
@@ -1097,43 +1488,63 @@ export default function App(): JSX.Element {
       >Skip to editor</a>
       {bridgeBanner}
       {!focusMode && (
-        <TitleBar workspace={workspace} platform={platform} onQuickOpen={() => commandsApi.executeCommand("quickOpen.open")} />
+        <TitleBar
+          workspace={workspace}
+          platform={platform}
+          onQuickOpen={() => commandsApi.executeCommand("quickOpen.open")}
+          onNewNote={() => commandsApi.executeCommand("note.new")}
+          rightOpen={rightOpen}
+          onToggleRight={() => setRightOpen((v) => !v)}
+          switcher={
+            <WorkspaceSwitcher
+              workspace={workspace}
+              recents={recents.recentWorkspaces.filter((r): r is RecentWorkspaceInfo => "id" in r && typeof r.id === "string")}
+              dirtyCount={Object.values(docsApi.layout.docs).filter((d) => d.dirty && !d.loadError).length}
+              onOpenRecent={(id) => void workspaceApi.openRecent(id)}
+              onOpenFolder={() => void workspaceApi.openLocal()}
+              onCreate={() => setWsDialog({ kind: "create" })}
+              onClose={() => void workspaceApi.closeWorkspace()}
+              onSaveAll={async () => {
+                const keys = Object.values(docsApi.layout.docs).filter((d) => d.dirty && !d.loadError).map((d) => d.key);
+                for (const k of keys) await docsApi.save(k);
+                return true;
+              }}
+              onDiscardAll={() => { for (const d of Object.values(docsApi.layout.docs)) if (d.dirty) docsApi.discardDraft(d.key); }}
+            />
+          }
+        />
       )}
       <div className="body">
         {!focusMode && settings.ribbonVisible && (
-          <ActivityRail view={view} platform={platform} onView={(v) => { setView(v); setSidebarOpen(true); }} onSettings={() => setSettingsOpen(true)} />
+          <ActivityRail view={view} page={page} platform={platform} onView={(v) => { setView(v); setSidebarOpen(true); }} onPage={(v) => { setSettingsOpen(false); setPage((cur) => (cur === v ? null : v)); }} onSettings={() => setSettingsOpen(true)} onShortcuts={() => setShortcutsOpen(true)} />
         )}
         {!focusMode && sidebarOpen && (
           <>
             <aside className="sidebar" style={{ width: Math.min(360, Math.max(200, sidebarWidth)) }} aria-label="Sidebar">
-              <div className="sidebar-head" title={workspace.displayName}>
-                <span className="name">{workspace.displayName}
-                  {isWslKind(workspace.type) && <span className="sub">WSL{workspace.linuxUser ? ` · ${workspace.linuxUser}` : ""}</span>}
-                </span>
-                <IconButton title={`New note (${sc("note.new")})`} label="New note" onClick={() => commandsApi.executeCommand("note.new")}><Icon name="plus" /></IconButton>
-                <label className="sort-control">Sort
-                  <select
-                    aria-label="Explorer sort"
-                    value={`${treeApi.sort.key}:${treeApi.sort.dir}`}
-                    onChange={(e) => {
-                      const [key, dir] = e.target.value.split(":") as ["name" | "modified" | "created", "asc" | "desc"];
-                      treeApi.setSort({ key, dir });
-                    }}
-                  >
-                    <option value="name:asc">Name ↑</option>
-                    <option value="name:desc">Name ↓</option>
-                    <option value="modified:desc">Modified ↓</option>
-                    <option value="modified:asc">Modified ↑</option>
-                    <option value="created:desc">Created ↓</option>
-                    <option value="created:asc">Created ↑</option>
-                  </select>
-                </label>
-                <IconButton label="More actions"
-                  onClick={(e) => setMenu(buildSidebarMenu(e, { shortcut: sc, ops: menuOps }))}
-                ><Icon name="more" /></IconButton>
-                <IconButton label={paneCollapsed[view] ? "Expand pane" : "Collapse pane"} onClick={() => togglePaneCollapse(view)}>
-                  <Icon name={paneCollapsed[view] ? "chevronRight" : "chevronDown"} />
-                </IconButton>
+              <div className="sidebar-head">
+                <h2 className="sidebar-title" title={view === "files" ? workspace.displayName : undefined}>{VIEW_TITLES[view]}</h2>
+                <div className="sidebar-actions">
+                  {view === "files" ? (
+                    <>
+                      <IconButton label="Sort" title="Sort files" onClick={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        const cur = treeApi.sort;
+                        const pick = (key: "name" | "modified" | "created", dir: "asc" | "desc"): void => treeApi.setSort({ key, dir });
+                        setMenu({ x: r.left, y: r.bottom + 4, items: [
+                          { label: `${cur.key === "name" ? "✓ " : ""}Name`, run: () => pick("name", "asc") },
+                          { label: `${cur.key === "modified" ? "✓ " : ""}Modified`, run: () => pick("modified", "desc") },
+                          { label: `${cur.key === "created" ? "✓ " : ""}Created`, run: () => pick("created", "desc") },
+                        ] });
+                      }}><Icon name="sort" /></IconButton>
+                      <IconButton title={`New note (${sc("note.new")})`} label="New note" onClick={() => commandsApi.executeCommand("note.new")}><Icon name="plus" /></IconButton>
+                      <IconButton title="New folder" label="New folder" onClick={() => treeApi.beginCreate(treeApi.preferredNewNoteDir(), true)}><Icon name="folderPlus" /></IconButton>
+                    </>
+                  ) : (
+                    <IconButton label={paneCollapsed[view] ? "Expand pane" : "Collapse pane"} onClick={() => togglePaneCollapse(view)}>
+                      <Icon name={paneCollapsed[view] ? "chevronRight" : "chevronDown"} />
+                    </IconButton>
+                  )}
+                </div>
               </div>
               <div
                 className="sidebar-body"
@@ -1157,11 +1568,11 @@ export default function App(): JSX.Element {
                 }}
               >
                 {paneCollapsed[view] ? (
-                  <div className="panel-title">{view === "files" ? "Explorer" : view === "search" ? "Search" : view === "outline" ? "Outline" : view === "today" ? "Today" : view === "calendar" ? "Calendar" : view === "tags" ? "Tags" : view === "properties" ? "Properties" : view === "collections" ? "Collections" : view === "graph" ? "Graph" : "Favorites"} (collapsed)</div>
+                  <div className="panel-title">{VIEW_TITLES[view]} (collapsed)</div>
                 ) : view === "files" ? (
                   <>
                     {treeApi.creating && (
-                      <div className="tree-row" style={{ paddingLeft: 12 }}>
+                      <div className="tree-row">
                         <input
                           className="rename-input"
                           autoFocus
@@ -1187,6 +1598,8 @@ export default function App(): JSX.Element {
                       </div>
                     ) : (
                       <FileTree
+                        fileCounts={folderCounts}
+                        onMove={(rels, dir) => void treeApi.moveEntries(rels, dir)}
                         entries={treeApi.entries}
                         tree={treeApi.tree}
                         activePath={docsApi.activeTab?.relativePath ?? null}
@@ -1210,15 +1623,35 @@ export default function App(): JSX.Element {
                     onQuery={searchApi.setQuery}
                     searching={searchApi.searching}
                     searchError={searchApi.searchError}
-                    filenameHits={searchApi.filenameHits}
-                    contentHits={searchApi.contentHits}
+                    notes={searchApi.notes}
+                    matchCase={searchApi.matchCase}
+                    onMatchCase={searchApi.setMatchCase}
+                    context={searchApi.context}
+                    onContext={searchApi.setContext}
                     notice={indexNotice}
+                    onPin={(q) => { void favoritesApi.addEntry(favoritesApi.doc.groups[0]?.name ?? "default", { type: "search", target: q }); toast("Search saved to Favourites."); }}
                     onOpen={(rel, line) => {
                       void docsApi.openFile(rel).then(() => {
-                        if (line) toast(`Jumped to line ${line}. In-editor scroll lands with Stage 7.`);
+                        void treeApi.reveal(rel);
+                        if (line) window.setTimeout(() => gotoLine(line), 60);
                       });
                     }}
                   />
+                ) : view === "recent" ? (
+                  <div role="list" aria-label="Recent notes">
+                    {(() => {
+                      const known = new Set(treeApi.allFiles.map((f) => f.relativePath));
+                      const rows = recents.recents.filter((r) => known.has(r));
+                      return rows.length === 0 ? (
+                        <EmptyState title="Nothing opened yet" description="Notes you open show up here." />
+                      ) : rows.map((rel) => (
+                        <button key={rel} role="listitem" className="tree-row recent-row" onClick={() => void docsApi.openFile(rel).then(() => void treeApi.reveal(rel))}>
+                          <span className="label">{fileName(rel).replace(/\.md$/i, "")}</span>
+                          {parentDir(rel) && <span className="count">{parentDir(rel)}</span>}
+                        </button>
+                      ));
+                    })()}
+                  </div>
                 ) : view === "outline" ? (
                   <OutlinePane content={docsApi.activeTab?.content ?? null} onNavigate={gotoLine} />
                 ) : view === "today" ? (
@@ -1319,6 +1752,10 @@ export default function App(): JSX.Element {
                   />
                 )}
               </div>
+              <div className="sidebar-foot">
+                <span>{treeApi.allFiles.length.toLocaleString()} {treeApi.allFiles.length === 1 ? "note" : "notes"}</span>
+                <span className="muted">{workspace.displayName}</span>
+              </div>
             </aside>
             <div
               className="resize-handle"
@@ -1345,9 +1782,9 @@ export default function App(): JSX.Element {
         )}
         <main className="main" id="main-content" tabIndex={-1} aria-label="Editor">
           {healthError && (
-            <Notice className="pane-notice" tone="danger" announcement="assertive" title="Workspace unavailable"
-              actions={<Button onClick={() => refreshWorkspace()}>Reconnect</Button>}>
-              {healthError}
+            <Notice className="pane-notice" tone="danger" announcement="assertive" title="Connection lost"
+              actions={<Button variant="primary" onClick={() => refreshWorkspace()}>Reconnect</Button>}>
+              Keep writing. Changes save when it comes back. {healthError}
             </Notice>
           )}
           {(() => {
@@ -1387,8 +1824,8 @@ export default function App(): JSX.Element {
                   <TabStrip
                     tabs={docs}
                     activeKey={docsApi.layout.activeKey}
-                    onActivate={(k) => docsApi.activateDocKey(k)}
-                    onClose={(k) => docsApi.closeTab(k)}
+                    onActivate={(k) => { setPage(null); setSettingsOpen(false); docsApi.activateDocKey(k); }}
+                    onClose={(k) => requestCloseTab(k)}
                     onContext={(e, k) => showTabMenu(k, e)}
                     onReorder={(from, to) => docsApi.reorderTabs(from, to)}
                   />
@@ -1406,22 +1843,26 @@ export default function App(): JSX.Element {
                   </Notice>
                 )}
                 {doc?.conflict && (
-                  <Notice className="pane-notice" tone="warning" announcement="assertive" title="File changed outside takenotes"
+                  <Notice className="pane-notice" tone="warning" announcement="assertive" title="This note was changed somewhere else."
                     actions={<>
-                      <Button onClick={() => void docsApi.reloadFromDisk(doc.key)}>Reload from disk</Button>
-                      <Button onClick={() => void docsApi.keepMyVersion(doc.key)}>Keep my version</Button>
+                      <Button onClick={() => void docsApi.keepMyVersion(doc.key)}>Keep mine</Button>
+                      <Button variant="primary" onClick={() => void docsApi.reloadFromDisk(doc.key)}>Use the other one</Button>
                     </>}>
-                    Your edits to {fileName(doc.relativePath)} are still open. Choose which version to use.
+                    You also have changes in {fileName(doc.relativePath)}, so nothing was merged. Both versions are safe.
                   </Notice>
                 )}
-                {!doc ? (
+                {settingsOpen ? (
+                  <SettingsDialog asPage settings={settings} onChange={setSettings} version={version} platform={platform} hotkeys={hotkeys} updatesEnabled={platform.capabilities.updates} onCheckUpdates={() => void updatesApi.check(true)} mcp={getBridge()?.mcp} onClose={() => setSettingsOpen(false)} />
+                ) : page ? (
+                  pageBody(page)
+                ) : !doc ? (
                   <EmptyState className="pane-empty" title="Choose a note to start writing."
                     description={<><kbd className="k">{sc("quickOpen.open")}</kbd> Quick open · <kbd className="k">{sc("note.new")}</kbd> New note</>}
                     actions={treeApi.entries.length === 0 && !treeApi.sidebarLoading ? <Button variant="primary" onClick={commandsApi.newNote}>Create note</Button> : undefined} />
                 ) : doc.loadError ? (
                   <EmptyState className="pane-empty" title={`Couldn’t open ${fileName(doc.relativePath)}`}
                     description={`${doc.loadError} Your file is untouched.`}
-                    actions={<Button onClick={() => docsApi.closeTab(doc.key)}>Close tab</Button>} />
+                    actions={<Button onClick={() => requestCloseTab(doc.key)}>Close tab</Button>} />
                 ) : isCanvasPath(doc.relativePath) ? (
                   <CanvasEditor
                     docKey={doc.key}
@@ -1436,13 +1877,46 @@ export default function App(): JSX.Element {
                     relativePath={doc.relativePath}
                     lineNumbers={settings.lineNumbers}
                     wordWrap={settings.wordWrap}
-                    livePreview={settings.livePreview}
+                    livePreview={settings.livePreview && !plainDocs.has(doc.key)}
+                    validateTitle={validateTitle}
                     linkFormat={settings.linkFormat}
                     useWikilinks={settings.useWikilinks}
                     workspaceId={workspace?.workspaceId ?? ""}
                     fullWidth={settings.fullWidth}
                     inlineTitle={settings.inlineTitle}
                     reportCursor
+                    titleTools={(() => {
+                      const group = favoritesApi.doc.groups.find((g) => g.entries.some((en) => en.type === "file" && en.target === doc.relativePath));
+                      const favIndex = group ? group.entries.findIndex((en) => en.type === "file" && en.target === doc.relativePath) : -1;
+                      return (
+                        <>
+                          <IconButton
+                            className={favIndex >= 0 ? "on" : undefined}
+                            label={favIndex >= 0 ? "Remove from favorites" : "Add to favorites"}
+                            aria-pressed={favIndex >= 0}
+                            onClick={() => {
+                              if (group && favIndex >= 0) void favoritesApi.removeEntry(group.name, favIndex);
+                              else void favoritesApi.addEntry(favoritesApi.doc.groups[0]?.name ?? "default", { type: "file", target: doc.relativePath });
+                            }}
+                          ><Icon name="star" /></IconButton>
+                          <IconButton label="More actions for this note" onClick={(e) => showNoteMenu(doc.key, e)}><Icon name="more" /></IconButton>
+                        </>
+                      );
+                    })()}
+                    meta={(() => {
+                      const dirName = doc.relativePath.includes("/") ? doc.relativePath.slice(0, doc.relativePath.lastIndexOf("/")) : workspace?.displayName ?? "";
+                      const tags = [...new Set((doc.content.match(/(?:^|\s)#([A-Za-z][\w/-]*)/g) ?? []).map((t) => t.trim().slice(1).toLowerCase()))].slice(0, 6);
+                      return (
+                        <>
+                          <span>{dirName}</span>
+                          <i className="sep">·</i>
+                          <span>{editedLabel(doc.dirty || Boolean(doc.savedAt) ? Date.now() : treeApi.allFiles.find((f) => f.relativePath === doc.relativePath)?.mtimeMs)}</span>
+                          <i className="sep">·</i>
+                          <span>{docsApi.words} {docsApi.words === 1 ? "word" : "words"}</span>
+                          {tags.map((t) => <span key={t} className="tag">#{t}</span>)}
+                        </>
+                      );
+                    })()}
                     onEdit={docsApi.onEdit}
                     onCursor={docsApi.handleCursor}
                     onTitleCommit={async (title) => {
@@ -1466,29 +1940,22 @@ export default function App(): JSX.Element {
             );
           })()}
         </main>
-        {!focusMode && workspace && docsApi.activeTab && linkGraph && (
-          <aside className="sidebar right" aria-label="Links">
-            <div className="sidebar-head">
-              <span className="name" title={docsApi.activeTab.relativePath}>Links</span>
-            </div>
-            <div className="sidebar-body">
-              <BacklinksPane
-                activePath={docsApi.activeTab.relativePath}
-                edges={linkGraph.edges}
-                entries={linkGraph.entries}
-                onOpen={openLinkTarget}
-                onLinkMention={(from, matched, target) => void linkMention(from, matched, target)}
-              />
-              <OutgoingPane
-                activePath={docsApi.activeTab.relativePath}
-                edges={linkGraph.edges}
-                entries={linkGraph.entries}
-                onOpen={openLinkTarget}
-                onCreateLink={(target) => void followLink(target, docsApi.activeTab!.relativePath)}
-                onLinkMention={(from, matched, target) => void linkMention(from, matched, target)}
-              />
-            </div>
-          </aside>
+        {!focusMode && workspace && linkGraph && rightOpen && !page && !settingsOpen && (
+          <SidePanel
+            doc={docsApi.activeTab && !isCanvasPath(docsApi.activeTab.relativePath)
+              ? { key: docsApi.activeTab.key, relativePath: docsApi.activeTab.relativePath, content: docsApi.activeTab.content } : null}
+            entries={linkGraph.entries}
+            edges={linkGraph.edges}
+            registry={propertyRegistry}
+            onClose={() => setRightOpen(false)}
+            onGotoLine={gotoLine}
+            onOpen={openLinkTarget}
+            onCreate={(target) => docsApi.activeTab && void followLink(target, docsApi.activeTab.relativePath)}
+            onLinkIt={(from, matched, target) => void linkMention(from, matched, target)}
+            onEditContent={(key, content) => docsApi.onEdit(key, content)}
+            onFixAsText={(key) => setPlainDocs((cur) => new Set(cur).add(key))}
+            onPinHeading={(rel, heading) => { void favoritesApi.addEntry(favoritesApi.doc.groups[0]?.name ?? "default", { type: "heading", target: `${rel}#${heading}` }); toast("Heading added to Favourites."); }}
+          />
         )}
       </div>
       {!focusMode && (
@@ -1502,6 +1969,8 @@ export default function App(): JSX.Element {
           connection={healthError ? "disconnected" : workspace.connection}
           fileCount={treeApi.allFiles.length}
           indexWarning={indexNotice}
+          updateVersion={pendingUpdate}
+          onReviewUpdate={() => void updatesApi.check(true)}
           onOpenHistory={docsApi.activeTab ? () => void docsApi.openHistory(docsApi.activeTab!.key) : undefined}
         />
       )}
@@ -1513,6 +1982,10 @@ export default function App(): JSX.Element {
           recents={recents.recents}
           commands={commandsApi.commands}
           recentCommands={commandsApi.recentCommands}
+          tags={aggregateTags(phase3Entries ?? []).map((t) => ({ tag: t.tag, count: t.files }))}
+          onSearch={(q) => { setPage(null); setSettingsOpen(false); setView("search"); setSidebarOpen(true); searchApi.setQuery(q); }}
+          onOpenTag={(tag) => runSearchQuery(`tag:${tag}`)}
+          onAddTask={async (text, scheduled) => { await captureTask({ text, ...(scheduled ? { scheduled } : {}), target: "inbox" }); return true; }}
           onOpenFile={(rel) => { commandsApi.remember("quickOpen.open"); void docsApi.openFile(rel).then(() => void treeApi.reveal(rel)); }}
           onCreateFile={(name) => {
             commandsApi.remember("quickOpen.open");
@@ -1534,6 +2007,7 @@ export default function App(): JSX.Element {
           onClose={() => setPalette(null)}
         />
       )}
+      {shortcutsOpen && <ShortcutsDialog commands={commandsApi.commands} onClose={() => setShortcutsOpen(false)} />}
       {taskDialogOpen && workspaceApi.workspace && (
         <TaskDialog
           target={settings.taskCaptureTarget}
@@ -1541,6 +2015,22 @@ export default function App(): JSX.Element {
           onClose={() => setTaskDialogOpen(false)}
         />
       )}
+      {fileDetails && docsApi.layout.docs[fileDetails] && (() => {
+        const d = docsApi.layout.docs[fileDetails]!;
+        const f = treeApi.allFiles.find((x) => x.relativePath === d.relativePath);
+        const rows: Array<[string, string]> = [
+          ["Name", fileName(d.relativePath).replace(/\.md$/i, "")],
+          ["Folder", parentDir(d.relativePath) || "Top folder"],
+          ["Edited", editedLabel(f?.mtimeMs)],
+          ["Size", `${new Blob([d.content]).size.toLocaleString()} bytes`],
+          ["Words", String(docsApi.words)],
+        ];
+        return (
+          <Dialog title="File details" onClose={() => setFileDetails(null)} footer={<Button onClick={() => setFileDetails(null)}>Close</Button>}>
+            <dl className="pair-preview">{rows.map(([k, v]) => (<span key={k} style={{ display: "contents" }}><dt>{k}</dt><dd>{v}</dd></span>))}</dl>
+          </Dialog>
+        );
+      })()}
       {templatePickerOpen && workspaceApi.workspace && docsApi.activeTab && (
         <TemplatePicker
           allPaths={treeApi.entries.filter((e) => e.kind === "file").map((e) => e.relativePath)}
@@ -1558,9 +2048,6 @@ export default function App(): JSX.Element {
           onDone={() => void convergeImport()}
         />
       )}
-      {settingsOpen && (
-        <SettingsDialog settings={settings} onChange={setSettings} version={version} platform={platform} hotkeys={hotkeys} updatesEnabled={platform.capabilities.updates} onCheckUpdates={() => void updatesApi.check(true)} mcp={getBridge()?.mcp} onClose={() => setSettingsOpen(false)} />
-      )}
       {docsApi.historyDialog && (
         <HistoryDialog
           dialog={docsApi.historyDialog}
@@ -1575,6 +2062,20 @@ export default function App(): JSX.Element {
       )}
       {hoverCard && (
         <PreviewCard html={hoverCard.html} fullPath={hoverCard.fullPath} x={hoverCard.x} y={hoverCard.y} />
+      )}
+      {dirtyPrompt && (
+        <Dialog
+          title="Unsaved changes"
+          onClose={() => setDirtyPrompt(null)}
+          initialFocus={dirtySaveRef}
+          footer={<div className="dirty-prompt-actions"><Button variant="destructive" onClick={() => confirmDirtyDiscard()}>Discard changes</Button><Button variant="primary" ref={dirtySaveRef as React.Ref<HTMLButtonElement>} onClick={() => void confirmDirtySave()}>Save</Button></div>}
+        >
+          {dirtyPrompt.kind === "tab" ? (
+            <p>{fileName(dirtyPrompt.rel)} has unsaved changes. Save before closing? Your edits are still safe.</p>
+          ) : (
+            <p>{dirtyPrompt.dirty.length === 1 ? `${fileName(dirtyPrompt.dirty[0]!.rel)} has unsaved changes.` : `${dirtyPrompt.dirty.length} open notes under ${dirtyPrompt.entry.name} have unsaved changes.`} Save before deleting? Cancel keeps everything open.</p>
+          )}
+        </Dialog>
       )}
       <Toasts toasts={toasts} onDismiss={dismissToast} />
     </div>

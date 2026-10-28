@@ -16,6 +16,10 @@ export type CommandId =
   | "quickOpen.open"
   | "palette.open"
   | "view.toggleSidebar"
+  | "view.toggleRightPanel"
+  | "folder.new"
+  | "tasks.open"
+  | "shortcuts.show"
   | "view.toggleFocus"
   | "view.nextTab"
   | "view.prevTab"
@@ -100,6 +104,7 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "quickOpen.open", title: "Quick Open", category: "Navigation", scope: "application" },
   { id: "palette.open", title: "Command Palette", category: "Navigation", scope: "application" },
   { id: "view.toggleSidebar", title: "Toggle Sidebar", category: "View", scope: "application" },
+  { id: "view.toggleRightPanel", title: "Toggle Side Panel", category: "View", scope: "application" },
   { id: "view.toggleFocus", title: "Toggle Focus Mode", category: "View", scope: "application" },
   { id: "view.nextTab", title: "Next Tab", category: "View", scope: "workspace" },
   { id: "view.prevTab", title: "Previous Tab", category: "View", scope: "workspace" },
@@ -127,6 +132,9 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "favorites.addActive", title: "Add Active Note to Favorites", category: "Favorites", scope: "workspace" },
   { id: "template.insert", title: "Insert Template", category: "Note", scope: "editor" },
   { id: "task.new", title: "New task", category: "Tasks", scope: "workspace" },
+  { id: "folder.new", title: "New Folder", category: "File", scope: "workspace" },
+  { id: "tasks.open", title: "Tasks", category: "View", scope: "workspace" },
+  { id: "shortcuts.show", title: "Show Shortcuts", category: "Application", scope: "application" },
   { id: "today.open", title: "Today", category: "View", scope: "workspace" },
   { id: "calendar.open", title: "Calendar", category: "View", scope: "workspace" },
   { id: "tags.open", title: "Tags", category: "View", scope: "workspace" },

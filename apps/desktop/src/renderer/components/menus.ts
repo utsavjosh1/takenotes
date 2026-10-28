@@ -16,6 +16,7 @@ export type MenuOps = {
   beginCreate: (dir: string, folder: boolean) => void;
   select: (rel: string) => void;
   closeTab: (key: string) => void;
+  closeTabSilent: (key: string) => void;
   togglePinnedTab: (key: string) => void;
   executeCommand: (id: CommandId) => void;
   refreshAll: () => void;
@@ -72,14 +73,16 @@ export function buildTabMenu(
       {
         label: "Close others",
         run: () => {
-          for (const k of paneDocs(layout).map((d) => d.key).filter((k) => k !== key)) ctx.ops.closeTab(k);
+          // Bulk close stays silent: prompting per tab would be hostile.
+          for (const k of paneDocs(layout).map((d) => d.key).filter((k) => k !== key)) ctx.ops.closeTabSilent(k);
         },
       },
       {
         label: "Close to the right",
         run: () => {
           const keys = paneDocs(layout).map((d) => d.key);
-          for (const k of keys.slice(keys.indexOf(key) + 1)) ctx.ops.closeTab(k);
+          // Bulk close stays silent: prompting per tab would be hostile.
+          for (const k of keys.slice(keys.indexOf(key) + 1)) ctx.ops.closeTabSilent(k);
         },
       },
     ],

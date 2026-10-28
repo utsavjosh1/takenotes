@@ -76,7 +76,7 @@ async function safeRecoveryCapture(args: {
   workspaceId: string;
   relativePath: string;
   content: string;
-  reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
+  reason: "edit" | "save" | "close" | "shutdown" | "restore-before" | "before-overwrite" | "before-reload" | "before-agent-undo";
 }): Promise<void> {
   try {
     const bridge = getBridge()?.recovery;
@@ -105,6 +105,7 @@ export type DocumentsApi = {
   keepMyVersion: (docKey?: string) => Promise<void>;
   renameNoteTitle: (docKey: string, title: string) => Promise<boolean>;
   closeTab: (key: string) => void;
+  closeTabWithoutPreserve: (key: string) => void;
   togglePinnedTab: (key: string) => void;
   reopenClosedTab: () => Promise<void>;
   renameEntryDocs: (workspaceId: string, oldRel: string, newRel: string) => void;
@@ -215,7 +216,7 @@ export function useDocuments(
     if (!workspace || !doc || doc.loadError) return;
     const now = Date.now();
     const last = recoveryLastEditCapture.current[docKey] ?? 0;
-    if (last === 0 || now - last >= 5 * 60 * 1000) {
+    if (last === 0 || now - last >= 60 * 1000) {
       recoveryLastEditCapture.current[docKey] = now;
       void safeRecoveryCapture({ workspaceId: workspace.workspaceId, relativePath: doc.relativePath, content, reason: "edit" });
     }
@@ -426,6 +427,12 @@ export function useDocuments(
 
   const togglePinnedTab = useCallback((key: string) => {
     setLayout((l) => togglePinned(l, key));
+  }, []);
+
+  // Discard-only close: no draft flush. Bulk/quit/crash keep closeTab's silent preserve.
+  const closeTabWithoutPreserve = useCallback((key: string) => {
+    setLayout((l) => closeDocInPane(l, "main", key).layout);
+    setCursor({ line: 1, col: 1 });
   }, []);
 
   const reopenClosedTab = useCallback(async () => {
@@ -652,7 +659,7 @@ export function useDocuments(
     layout, activeTab, cursor, words, saveView, recovery, historyDialog,
     closeHistory: () => setHistoryDialog(null),
     openFile, onEdit, save, reloadFromDisk, reconcileExternalChange, keepMyVersion,
-    renameNoteTitle, closeTab, togglePinnedTab, reopenClosedTab,
+    renameNoteTitle, closeTab, closeTabWithoutPreserve, togglePinnedTab, reopenClosedTab,
     renameEntryDocs, removeEntryDocs,
     restoreDraft, discardDraft, openHistory, copyRecoverySnapshot, restoreRecoverySnapshot,
     activateDocKey, cycleTab, activateTabByIndex, reorderTabs,

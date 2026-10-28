@@ -8,6 +8,7 @@
     "./native": "./src/native/index.ts",
     "./dom": "./src/dom/index.ts",
     "./tokens.css": "./src/tokens.css",
+    "./tailwind.css": "./src/tailwind.css",
     "./dom.css": "./src/dom/styles.css"
   },
   "peerDependencies": {
@@ -15,7 +16,16 @@
     "react-dom": "19.3.0"
   },
   "peerDependenciesMeta": {
-    "react": { "optional": true },
-    "react-dom": { "optional": true }
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.7.0"
   }
 }

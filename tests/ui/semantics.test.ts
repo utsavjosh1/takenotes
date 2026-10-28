@@ -29,31 +29,30 @@ describe("live-region wiring", () => {
 
   it("search states announce once with grouped results", () => {
     const source = rendererSource("components", "search.tsx");
-    expect(source).toContain('role="status">Searching…');
-    expect(source).toContain("searchResultSummary(");
-    expect(source).toContain('role="group" aria-label="Files matching by name"');
-    expect(source).toContain('role="group" aria-label="Files matching by content"');
-    expect(source).toContain('role="status">No matches for');
+    expect(source).toContain('role="status" aria-label="Searching"');
+    expect(source).toContain('className="search-count" role="status"');
+    expect(source).toContain("<section key={note.relativePath} className=\"sres-note\" aria-label={note.title}>");
+    expect(source).toContain('<div className="search-empty" role="status">');
     expect(source).toContain('role="alert">{searchError}');
   });
 
   it("palette follows the combobox pattern", () => {
     const source = rendererSource("components", "palette.tsx");
     expect(source).toContain('role="combobox"');
-    expect(source).toContain('aria-controls="cmd-listbox"');
+    expect(source).toContain("aria-controls={listId}");
     expect(source).toContain("aria-activedescendant");
-    expect(source).toContain('id="cmd-listbox"');
+    expect(source).toContain("id={listId}");
     expect(source).toContain("cmd-opt-${i}");
-    expect(source).toContain("aria-disabled={c.enabled === false}");
+    expect(source).toContain('role="listbox"');
+    expect(source).toContain('role="option"');
+    expect(source).toContain("aria-disabled={r.disabled ? true : undefined}");
   });
 
-  it("quick-open Ctrl+Enter keeps the palette open", () => {
+  it("quick-open Ctrl+Enter opens in a new tab, Shift+Enter creates", () => {
     const source = rendererSource("components", "palette.tsx");
-    // Frozen contract: Ctrl+Enter opens but keeps the palette for
-    // multi-open (open-in-new-tab would be a no-op — openFile already tabs).
-    expect(source).toContain("Ctrl+Enter open, keep open");
-    expect(source).toContain("{ keepOpen: true }");
-    expect(source).toContain("if (!opts?.ctrl) onClose()");
+    expect(source).toContain("{ newTab: o.ctrl }");
+    expect(source).toContain("new tab");
+    expect(source).toContain('if (kind === "files" && o.shift)');
   });
 
   it("tags and properties empties use the shared EmptyState voice", () => {
