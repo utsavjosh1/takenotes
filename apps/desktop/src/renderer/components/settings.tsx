@@ -345,7 +345,7 @@ function CaptureOverlay({ onCapture, onCancel }: { onCapture: (acc: string | nul
         }}
       >
         <div className="cmd-list" role="listbox">
-          <div className="cmd-section">Press the keys for this command… (<kbd className="k">Esc</kbd> cancels)</div>
+          <div className="list-section">Press the keys for this command… (<kbd className="k">Esc</kbd> cancels)</div>
         </div>
       </div>
     </div>

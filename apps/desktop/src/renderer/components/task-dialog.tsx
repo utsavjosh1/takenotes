@@ -67,7 +67,7 @@ export function TaskDialog({ target, onSubmit, onClose }: {
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
           />
         )}
-        <div className="cmd-section">
+        <div className="list-section">
           {dest === "daily" ? "Adds a bullet to today's Daily Note (never created silently)."
             : dest === "task" ? (target === "daily" ? "Adds a task to today's Daily Note." : "Adds a task to Inbox.md.")
             : dest === "note" ? "Creates a new note from this text."

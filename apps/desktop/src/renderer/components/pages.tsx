@@ -2,7 +2,7 @@
  * Tags, Properties, Collections, Graph). They open in the main column in
  * place of the editor; every row still opens its source note. */
 import { useMemo, useState, type JSX, type ReactNode } from "react";
-import { Button, Select } from "@takenotes/ui/dom";
+import { Button, Chip, Select } from "@takenotes/ui/dom";
 import type { TodayGroups, TodayTaskItem } from "@takenotes/core/productivity/today";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import { Icon } from "./icons";
@@ -78,7 +78,7 @@ function TaskRow({ task, meta, onOpen, onToggle }: { task: { relativePath: strin
 function Card({ title, count, tone, children }: { title: ReactNode; count?: number; tone?: "bad"; children: ReactNode }): JSX.Element {
   return (
     <section className="card">
-      <h3>{title}{count !== undefined && <span className={`chip${tone === "bad" ? " bad" : ""}`}>{count}</span>}</h3>
+      <h3>{title}{count !== undefined && <Chip tone={tone === "bad" ? "priority" : "neutral"}>{count}</Chip>}</h3>
       {children}
     </section>
   );
@@ -252,9 +252,9 @@ export function TasksPage({ entries, today, onOpen, onToggle }: {
               <div key={`${t.relativePath}:${t.line}`} className={`trow${t.completed ? " done" : ""}`}>
                 <Cbx on={t.completed} label={`${t.completed ? "Mark not done" : "Mark done"}: ${t.description}`} onClick={() => onToggle(t.relativePath, t.line)} />
                 <div className="tr-t"><span>{t.description}</span><small>{displayPath(t.relativePath)}</small></div>
-                {t.priority && <span className="chip">{t.priority}</span>}
-                {t.due && <span className="chip due">Due {t.due.slice(5)}</span>}
-                {t.scheduled && <span className="chip sch">Scheduled {t.scheduled.slice(5, 10)}</span>}
+                {t.priority && <Chip>{t.priority}</Chip>}
+                {t.due && <Chip tone="due">Due {t.due.slice(5)}</Chip>}
+                {t.scheduled && <Chip tone="planned">Scheduled {t.scheduled.slice(5, 10)}</Chip>}
                 <Button size="sm" variant="ghost" onClick={() => onOpen(t.relativePath, t.line)}>Open in note</Button>
               </div>
             ))}
