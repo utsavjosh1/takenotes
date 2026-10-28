@@ -76,5 +76,5 @@ export function BlogArticle({ post }: { post: BlogPost }) {
 }
 
 export function BlogNotFound() {
-  return <section className="blog-not-found container"><span className="eyebrow">A PAGE OUT OF PLACE</span><h1>This story isn’t<br />in the <em>notebook.</em></h1><p>The link may be incomplete, or the story may have moved.</p><a className="button button-dark" href="#/blog">Back to the journal <Icon name="arrow" size={17} /></a></section>;
+  return <section className="blog-not-found container"><span className="eyebrow">A PAGE OUT OF PLACE</span><h1>This story isn’t<br />in the <em>notebook.</em></h1><p>The link may be incomplete, or the story may have moved.</p><a className="tn-button tn-button--primary tn-button--lg" href="#/blog">Back to the journal <Icon name="arrow" size={17} /></a></section>;
 }

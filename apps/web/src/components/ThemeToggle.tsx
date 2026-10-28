@@ -1,3 +1,4 @@
+import { IconButton } from "@takenotes/ui/dom";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { applyTheme, parseTheme, readThemePreference, resolveTheme, THEME_STORAGE_KEY, type Theme } from "../theme";
@@ -73,7 +74,7 @@ export function ThemeToggle() {
   }
 
   const label = `Switch to ${theme === "light" ? "dark" : "light"} theme`;
-  return <button className="theme-toggle" type="button" onClick={(event) => toggle(event.currentTarget)} aria-label={label} title={label} aria-disabled={animating}>
+  return <IconButton className="theme-toggle" label={label} pending={animating} onClick={(event) => toggle(event.currentTarget)}>
     <span className="theme-toggle-icons" aria-hidden="true"><span className="theme-icon-sun"><Icon name="sun" size={19} /></span><span className="theme-icon-moon"><Icon name="moon" size={19} /></span></span>
-  </button>;
+  </IconButton>;
 }

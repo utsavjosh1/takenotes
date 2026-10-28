@@ -7,6 +7,7 @@
   font-size: var(--fs-ui); font-weight: 500; cursor: pointer; white-space: nowrap;
   transition: background-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
 }
+a.tn-button { text-decoration: none; }
 .tn-button--sm { block-size: var(--control-h-sm); padding: 0 9px; font-size: 12.5px; }
 .tn-button--lg { block-size: var(--control-h-lg); padding: 0 16px; }
 .tn-button:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--hover); }
