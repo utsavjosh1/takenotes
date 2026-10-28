@@ -8,3 +8,11 @@ export { cn } from "./cn";
 
 export type UiDensity = "comfortable" | "compact";
 export const TAKENOTES_UI_PACKAGE = "@takenotes/ui";
+export {
+  placeOverlay, navigableIndices, menuMove, typeaheadAppend, typeaheadFind, TYPEAHEAD_MS, TOAST_MS, TOAST_QUEUE_MAX,
+  emptyToasts, toastReducer, splitOverflow, tabMove, paletteMove, flattenGroups, saveStatus,
+} from "./overlays";
+export type {
+  Rect, Size, Placement, MenuEntry, TypeaheadState, ToastKind, ToastItem, ToastState, ToastAction,
+  PaletteGroup, DocState, SaveStatus,
+} from "./overlays";

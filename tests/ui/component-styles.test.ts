@@ -14,18 +14,25 @@ describe("M2 component styles", () => {
     expect(m2).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(m2).not.toMatch(/rgba?\(/);
     for (const m of m2.matchAll(/border-radius:\s*([^;}]+)/g)) {
-      expect(["var(--r-pill)", "var(--r-in)", "var(--r-ctl)", "var(--r-max)", "50%", "4px", "5px"]).toContain(m[1]!.trim());
+      expect(["var(--r-in) var(--r-in) 0 0", "var(--r-pill)", "var(--r-dlg)", "var(--r-in)", "var(--r-ctl)", "var(--r-max)", "50%", "4px", "5px", "2px"]).toContain(m[1]!.trim());
     }
   });
 
   it("only reference tokens that exist", () => {
     const defined = new Set([...tokens.matchAll(/(--[a-z0-9-]+):/g)].map((x) => x[1]));
-    const local = new Set([...styles.matchAll(/(--[a-z0-9-]+):/g)].map((x) => x[1]));
+    // --d (tree depth) is set inline by TreeRow, not in CSS.
+    const local = new Set([...styles.matchAll(/(--[a-z0-9-]+):/g)].map((x) => x[1]).concat(["--d"]));
     const missing = new Set<string>();
     for (const x of styles.matchAll(/var\((--[a-z0-9-]+)/g)) {
       if (!defined.has(x[1]!) && !local.has(x[1]!)) missing.add(x[1]!);
     }
     expect([...missing]).toEqual([]);
+  });
+
+  it("keep text at 12px or larger", () => {
+    const sizes = [...m2.matchAll(/font(?:-size)?:\s*(\d+(?:\.\d+)?)px/g)].map((x) => Number(x[1]));
+    expect(sizes.length).toBeGreaterThan(10);
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
   });
 
   it("honour reduced motion and touch size", () => {
@@ -60,6 +67,31 @@ describe("component colour pairs meet contrast", () => {
     ["switch knob on accent (non-text)", "editor", "accent", 3],
     ["checkbox border (non-text)", "control", "editor", 3],
     ["step pending text", "muted", "app", 4.5],
+    ["toast", "app", "text", 4.5],
+    ["error toast", "editor", "bad", 4.5],
+    ["tooltip", "app", "text", 4.5],
+    ["solid danger button", "editor", "bad", 4.5],
+    ["menu item on selected", "text", "selected", 4.5],
+    ["menu item", "text", "overlay", 4.5],
+    ["menu danger item", "bad", "overlay", 4.5],
+    ["menu disabled reason", "muted", "overlay", 4.5],
+    ["menu shortcut hint", "muted", "overlay", 4.5],
+    ["banner info", "text2", "selected", 4.5],
+    ["palette secondary line", "muted", "overlay", 4.5],
+    ["palette row on selected", "text", "selected", 4.5],
+    ["palette group heading", "muted", "overlay", 4.5],
+    ["palette tag", "text2", "hover", 4.5],
+    ["tab inactive", "muted", "side", 4.5],
+    ["tab active", "text", "editor", 4.5],
+    ["tab dirty dot (non-text)", "accent", "editor", 3],
+    ["tree row", "text2", "side", 4.5],
+    ["tree row active", "text", "selected", 4.5],
+    ["tree count", "muted", "side", 4.5],
+    ["rail icon", "muted", "side", 4.5],
+    ["rail active bar (non-text)", "accent", "side", 3],
+    ["status bar text", "muted", "side", 4.5],
+    ["focus ring on page (non-text)", "accent", "editor", 3],
+    ["focus ring on sidebar (non-text)", "accent", "side", 3],
   ];
   for (const theme of ["light", "dark"] as const) {
     for (const [name, fg, bg, min] of pairs) {

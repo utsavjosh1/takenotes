@@ -17,9 +17,14 @@ export function actionState({ disabled = false, pending = false }: ActionState) 
 }
 
 export type DismissReason = "close" | "escape" | "backdrop";
-export type DialogPolicy = { dismissible?: boolean; closeOnBackdrop?: boolean };
-export function canDismissDialog(reason: DismissReason, { dismissible = true, closeOnBackdrop = false }: DialogPolicy): boolean {
-  return dismissible && (reason !== "backdrop" || closeOnBackdrop);
+/** `unsavedInput`: the dialog holds typed text, so Escape and the backdrop
+ * must not throw it away. The close button (an explicit act) still works. */
+export type DialogPolicy = { dismissible?: boolean; closeOnBackdrop?: boolean; unsavedInput?: boolean };
+export function canDismissDialog(reason: DismissReason, { dismissible = true, closeOnBackdrop = false, unsavedInput = false }: DialogPolicy): boolean {
+  if (!dismissible) return false;
+  if (reason === "backdrop") return closeOnBackdrop && !unsavedInput;
+  if (reason === "escape") return !unsavedInput;
+  return true;
 }
 
 export type FieldState = { description?: string; error?: string };
