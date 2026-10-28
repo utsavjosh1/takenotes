@@ -6,7 +6,7 @@
  */
 import { useMemo, useRef, useState, type JSX } from "react";
 import { moveRovingIndex } from "@takenotes/ui";
-import { EmptyState, Skeleton } from "@takenotes/ui/dom";
+import { EmptyState, Input, Select, Skeleton } from "@takenotes/ui/dom";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import { cellDisplay } from "@takenotes/core/collections/evaluate";
 import {
@@ -117,10 +117,10 @@ export function PropertiesPane({
         <div className="pane-toolbar" role="toolbar" aria-label="All details options">
           <p className="panel-title">All details</p>
           <label className="sort-control">Sort
-            <select aria-label="Details sort" value={sort} onChange={(e) => setSort(e.target.value as PropertySort)}>
+            <Select aria-label="Details sort" value={sort} onChange={(e) => setSort(e.target.value as PropertySort)}>
               <option value="name">Name</option>
               <option value="frequency">Frequency</option>
-            </select>
+            </Select>
           </label>
         </div>
         {entries === null ? (
@@ -157,7 +157,7 @@ export function PropertiesPane({
                 <span className="tag-count">{s.files}</span>
               </button>
               {renamingKey === s.name ? (
-                <input
+                <Input
                   className="rename-input"
                   autoFocus
                   aria-label={`Rename detail ${s.name}`}

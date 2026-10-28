@@ -5,7 +5,7 @@
  */
 import { useMemo, useRef, useState, type JSX } from "react";
 import { moveRovingIndex } from "@takenotes/ui";
-import { EmptyState, Skeleton } from "@takenotes/ui/dom";
+import { EmptyState, Select, Skeleton } from "@takenotes/ui/dom";
 import {
   aggregateTags,
   buildTagTree,
@@ -104,10 +104,10 @@ export function TagsPane({
           <button className={mode === "flat" ? "active" : ""} aria-pressed={mode === "flat"} onClick={() => setMode("flat")}>Flat</button>
         </div>
         <label className="sort-control">Sort
-          <select aria-label="Tags sort" value={sort} onChange={(e) => setSort(e.target.value as TagSort)}>
+          <Select aria-label="Tags sort" value={sort} onChange={(e) => setSort(e.target.value as TagSort)}>
             <option value="name">Name</option>
             <option value="frequency">Frequency</option>
-          </select>
+          </Select>
         </label>
       </div>
       {counts.length === 0 ? (

@@ -33,6 +33,7 @@ a.tn-button { text-decoration: none; }
   background: var(--editor); color: var(--text); font: inherit; font-size: var(--fs-ui);
 }
 .ui-textarea { resize: vertical; line-height: var(--lh-ui); }
+.ui-select { inline-size: auto; max-inline-size: 100%; }
 .tn-field-control::placeholder { color: var(--faint); opacity: 1; }
 .tn-field-control[aria-invalid="true"] { border-color: var(--bad); }
 .tn-field-help, .tn-field-error { margin: 0; font-size: var(--fs-small); overflow-wrap: anywhere; }
@@ -43,7 +44,6 @@ a.tn-button { text-decoration: none; }
 .tn-setting-description { flex: 1; min-inline-size: 0; font-weight: 500; overflow-wrap: anywhere; }
 .tn-setting-description p { font-weight: 400; color: var(--muted); font-size: var(--fs-small); margin: var(--space-1) 0 0; }
 .tn-setting-row select { inline-size: auto; max-inline-size: 100%; }
-.tn-setting-row input[type="checkbox"] { appearance: auto; accent-color: var(--accent); inline-size: 24px; block-size: 24px; flex: none; margin: 0; }
 
 .tn-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
 .tn-empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-6); text-align: center; color: var(--text); }
@@ -77,8 +77,7 @@ a.tn-button { text-decoration: none; }
   .tn-button { block-size: var(--control-h-touch); }
   .tn-icon-button { inline-size: var(--control-h-touch); block-size: var(--control-h-touch); }
   .tn-setting-row { min-block-size: calc(var(--control-h-touch) + 8px); }
-  .tn-setting-row input[type="checkbox"] { inline-size: var(--control-h-touch); block-size: var(--control-h-touch); }
-}
+  }
 @media (prefers-reduced-motion: reduce) { .tn-button { transition: none; transform: none; } }
 @media (forced-colors: active) {
   .tn-button, .tn-field-control,   .tn-button:disabled { color: GrayText; border-color: GrayText; }

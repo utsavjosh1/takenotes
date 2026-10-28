@@ -1,6 +1,6 @@
 import { useEffect, useState, type JSX } from "react";
 import { moveRovingIndex } from "@takenotes/ui";
-import { Button, Dialog, SettingRow } from "@takenotes/ui/dom";
+import { Button, Dialog, Input, Select, SettingRow, Switch } from "@takenotes/ui/dom";
 import type { McpClientsSummary, TakeNotesApi } from "../../preload/index";
 import type { Settings } from "./types";
 import type { HotkeysApi } from "../hooks/use-hotkeys";
@@ -62,32 +62,32 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
         <div className="settings-content" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`}>
           {tab === "General" && (<>
             <SettingRow label="Confirm before moving to trash" description="Ask first when deleting notes.">
-              {(control) => <input {...control} type="checkbox" checked={settings.confirmTrash} onChange={(e) => set("confirmTrash", e.target.checked)} />}
+              {(control) => <Switch {...control} checked={settings.confirmTrash} onChange={(e) => set("confirmTrash", e.target.checked)} />}
             </SettingRow>
             <SettingRow label="Show activity ribbon" description="Rail with Explorer, Search, On this page, Favorites. Off hides it; palette still switches panes.">
-              {(control) => <input {...control} type="checkbox" checked={settings.ribbonVisible} onChange={(e) => set("ribbonVisible", e.target.checked)} />}
+              {(control) => <Switch {...control} checked={settings.ribbonVisible} onChange={(e) => set("ribbonVisible", e.target.checked)} />}
             </SettingRow>
             {platform.capabilities.wsl && (
               <SettingRow label="Enable WSL workspaces" description="Show WSL folder options. Off keeps a plain notetaking app.">
-                {(control) => <input {...control} type="checkbox" checked={settings.wslEnabled} onChange={(e) => set("wslEnabled", e.target.checked)} />}
+                {(control) => <Switch {...control} checked={settings.wslEnabled} onChange={(e) => set("wslEnabled", e.target.checked)} />}
               </SettingRow>
             )}
           </>)}
           {tab === "Appearance" && (<>
             <SettingRow label="Theme" description="Follow system, or pick light / dark. Applies instantly; cursor, scroll, and undo are preserved.">
-              {(control) => <select {...control} value={settings.theme} onChange={(e) => set("theme", e.target.value as Settings["theme"])}>
+              {(control) => <Select {...control} value={settings.theme} onChange={(e) => set("theme", e.target.value as Settings["theme"])}>
                 <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
-              </select>}
+              </Select>}
             </SettingRow>
             <SettingRow label="Accent" description="Links, focus rings, and selection. Every pair holds AA on the editor surface.">
-              {(control) => <select {...control} value={settings.accent} onChange={(e) => set("accent", e.target.value as Settings["accent"])}>
+              {(control) => <Select {...control} value={settings.accent} onChange={(e) => set("accent", e.target.value as Settings["accent"])}>
                 <option value="violet">Violet</option><option value="blue">Blue</option><option value="graphite">Graphite</option>
-              </select>}
+              </Select>}
             </SettingRow>
             <SettingRow label="Editor font" description="Writing surface only; interface stays OS-native. No downloads, works offline.">
-              {(control) => <select {...control} value={settings.editorFont} onChange={(e) => set("editorFont", e.target.value as Settings["editorFont"])}>
+              {(control) => <Select {...control} value={settings.editorFont} onChange={(e) => set("editorFont", e.target.value as Settings["editorFont"])}>
                 <option value="system">System sans</option><option value="serif">Serif</option><option value="mono">Monospace</option>
-              </select>}
+              </Select>}
             </SettingRow>
             <SettingRow label="Zoom" description="Whole-app zoom, 80–200%. View menu and palette adjust it too.">
               <span className="zoom-control" role="group" aria-label="Zoom">
@@ -98,73 +98,73 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
               </span>
             </SettingRow>
             <SettingRow label="Inline title" description="Editable note title above the editor. Off hides it; the file name still shows in tabs.">
-              {(control) => <input {...control} type="checkbox" checked={settings.inlineTitle} onChange={(e) => set("inlineTitle", e.target.checked)} />}
+              {(control) => <Switch {...control} checked={settings.inlineTitle} onChange={(e) => set("inlineTitle", e.target.checked)} />}
             </SettingRow>
             <SettingRow label="Window frame" description="Native forces the OS title bar on every platform. Takes effect after restart — the current window keeps its frame until then.">
-              {(control) => <select {...control} value={settings.frameStyle} onChange={(e) => set("frameStyle", e.target.value as Settings["frameStyle"])}>
+              {(control) => <Select {...control} value={settings.frameStyle} onChange={(e) => set("frameStyle", e.target.value as Settings["frameStyle"])}>
                 <option value="auto">System default</option><option value="native">Native frame</option>
-              </select>}
+              </Select>}
             </SettingRow>
           </>)}
           {tab === "Editor" && <>
             <SettingRow label="Font size" description="13–20px. Default 16px.">
-              {(control) => <select {...control} value={settings.fontSize} onChange={(e) => set("fontSize", Number(e.target.value))}>
+              {(control) => <Select {...control} value={settings.fontSize} onChange={(e) => set("fontSize", Number(e.target.value))}>
                 {[13, 14, 15, 16, 17, 18, 20].map((n) => <option key={n} value={n}>{n}px</option>)}
-              </select>}
+              </Select>}
             </SettingRow>
             <SettingRow label="Readable line width" description="Centered column for prose.">
-              {(control) => <select {...control} value={settings.readableWidth} onChange={(e) => set("readableWidth", Number(e.target.value))}>
+              {(control) => <Select {...control} value={settings.readableWidth} onChange={(e) => set("readableWidth", Number(e.target.value))}>
                 {[640, 720, 760, 820, 900].map((n) => <option key={n} value={n}>{n}px</option>)}
-              </select>}
+              </Select>}
             </SettingRow>
             <SettingRow label="Full width" description="Use the whole editor for tables and code.">
-              {(control) => <input {...control} type="checkbox" checked={settings.fullWidth} onChange={(e) => set("fullWidth", e.target.checked)} />}
+              {(control) => <Switch {...control} checked={settings.fullWidth} onChange={(e) => set("fullWidth", e.target.checked)} />}
             </SettingRow>
             <SettingRow label="Word wrap" description="Wrap long lines in the editor.">
-              {(control) => <input {...control} type="checkbox" checked={settings.wordWrap} onChange={(e) => set("wordWrap", e.target.checked)} />}
+              {(control) => <Switch {...control} checked={settings.wordWrap} onChange={(e) => set("wordWrap", e.target.checked)} />}
             </SettingRow>
             <SettingRow label="Line numbers" description="Show gutter line numbers.">
-              {(control) => <input {...control} type="checkbox" checked={settings.lineNumbers} onChange={(e) => set("lineNumbers", e.target.checked)} />}
+              {(control) => <Switch {...control} checked={settings.lineNumbers} onChange={(e) => set("lineNumbers", e.target.checked)} />}
             </SettingRow>
             <SettingRow label="Live preview" description="Show formatting as you type; the line you are on shows plain text. Off shows plain text everywhere.">
-              {(control) => <input {...control} type="checkbox" checked={settings.livePreview} onChange={(e) => set("livePreview", e.target.checked)} />}
+              {(control) => <Switch {...control} checked={settings.livePreview} onChange={(e) => set("livePreview", e.target.checked)} />}
             </SettingRow>
           </>}
           {tab === "Files & links" && <>
             <SettingRow label="Search exclusions" description="Always skipped: .git, node_modules, dist, build, coverage." />
             <SettingRow label="Link style" description="How [[ autocomplete writes new links. Shortest uses the bare note name.">
-              {(control) => <select {...control} value={settings.linkFormat} onChange={(e) => set("linkFormat", e.target.value as Settings["linkFormat"])}>
+              {(control) => <Select {...control} value={settings.linkFormat} onChange={(e) => set("linkFormat", e.target.value as Settings["linkFormat"])}>
                 <option value="shortest">Shortest</option><option value="relative">Relative</option><option value="absolute">Absolute</option>
-              </select>}
+              </Select>}
             </SettingRow>
             <SettingRow label="Link to notes with [[double brackets]]" description="On writes [[links]]. Off writes [label](path.md) links (file links; #heading/#^block refinements stay [[…]]). Either form always opens.">
-              {(control) => <input {...control} type="checkbox" checked={settings.useWikilinks} onChange={(e) => set("useWikilinks", e.target.checked)} />}
+              {(control) => <Switch {...control} checked={settings.useWikilinks} onChange={(e) => set("useWikilinks", e.target.checked)} />}
             </SettingRow>
             <SettingRow label="Update links on rename" description="Rewrite [[links]] when a note or folder moves. Off asks first and renames only.">
-              {(control) => <input {...control} type="checkbox" checked={settings.autoUpdateLinks} onChange={(e) => set("autoUpdateLinks", e.target.checked)} />}
+              {(control) => <Switch {...control} checked={settings.autoUpdateLinks} onChange={(e) => set("autoUpdateLinks", e.target.checked)} />}
             </SettingRow>
             <SettingRow label="Attachment location" description="Where pasted and dropped files land. Subfolder nests the folder below; Folder uses it at the root.">
-              {(control) => <select {...control} value={settings.attachmentLocation} onChange={(e) => set("attachmentLocation", e.target.value as Settings["attachmentLocation"])}>
+              {(control) => <Select {...control} value={settings.attachmentLocation} onChange={(e) => set("attachmentLocation", e.target.value as Settings["attachmentLocation"])}>
                 <option value="root">Workspace root</option><option value="same-folder">Same folder as note</option><option value="subfolder">Subfolder below note</option><option value="folder">Folder</option>
-              </select>}
+              </Select>}
             </SettingRow>
             <SettingRow label="Attachment folder" description="Root-relative folder for Folder mode, subfolder name for Subfolder mode.">
-              {(control) => <input {...control} type="text" value={settings.attachmentFolder} placeholder="attachments" onChange={(e) => set("attachmentFolder", e.target.value)} />}
+              {(control) => <Input {...control} type="text" value={settings.attachmentFolder} placeholder="attachments" onChange={(e) => set("attachmentFolder", e.target.value)} />}
             </SettingRow>
             <SettingRow label="Unsupported files" description="Import and link unknown file kinds, or skip them with a notice.">
-              {(control) => <select {...control} value={settings.attachmentUnsupported} onChange={(e) => set("attachmentUnsupported", e.target.value as Settings["attachmentUnsupported"])}>
+              {(control) => <Select {...control} value={settings.attachmentUnsupported} onChange={(e) => set("attachmentUnsupported", e.target.value as Settings["attachmentUnsupported"])}>
                 <option value="link">Import + link</option><option value="skip">Skip</option>
-              </select>}
+              </Select>}
             </SettingRow>
           </>}
           {tab === "Daily notes & templates" && <>
             <SettingRow label="Template folder" description="Ordinary folder of .md templates, relative to the workspace root. Insert Template renders {{title}}, {{date}}, {{time}} only.">
-              {(control) => <input {...control} type="text" value={settings.templateFolder} placeholder="Templates" onChange={(e) => set("templateFolder", e.target.value)} />}
+              {(control) => <Input {...control} type="text" value={settings.templateFolder} placeholder="Templates" onChange={(e) => set("templateFolder", e.target.value)} />}
             </SettingRow>
             <SettingRow label="New tasks go to" description="Daily appends to today's Daily Note (never created silently); Inbox appends to Inbox.md.">
-              {(control) => <select {...control} value={settings.taskCaptureTarget} onChange={(e) => set("taskCaptureTarget", e.target.value as Settings["taskCaptureTarget"])}>
+              {(control) => <Select {...control} value={settings.taskCaptureTarget} onChange={(e) => set("taskCaptureTarget", e.target.value as Settings["taskCaptureTarget"])}>
                 <option value="daily">Today's Daily Note</option><option value="inbox">Inbox.md</option>
-              </select>}
+              </Select>}
             </SettingRow>
           </>}
           {tab === "Agents (MCP)" && <AutomationTab mcp={mcp} />}
@@ -235,7 +235,7 @@ export function AutomationTab({ mcp }: { mcp?: TakeNotesApi["mcp"] }): JSX.Eleme
   return (<>
     {error && <p className="inline-error" role="alert">{error}</p>}
     <SettingRow label="Sidecar command" description="Agents run this over stdio (JSON-RPC). The app must be open — otherwise calls fail fast.">
-      {(control) => <input {...control} type="text" readOnly value={summary?.sidecarCommand ?? "…"} onFocus={(e) => e.target.select()} />}
+      {(control) => <Input {...control} type="text" readOnly value={summary?.sidecarCommand ?? "…"} onFocus={(e) => e.target.select()} />}
     </SettingRow>
     <h3 className="settings-h">Pending approval</h3>
     {!summary ? <p className="muted">Loading…</p>
@@ -243,13 +243,13 @@ export function AutomationTab({ mcp }: { mcp?: TakeNotesApi["mcp"] }): JSX.Eleme
         : summary.pending.map((clientId) => (
           <div className="mcp-client-row" key={clientId}>
             <span className="mcp-client-id">{clientId}</span>
-            <select
+            <Select
               aria-label={`Workspace for ${clientId}`}
               value={approveFor[clientId] ?? summary.workspaces[0]?.id ?? ""}
               onChange={(e) => setApproveFor((prev) => ({ ...prev, [clientId]: e.target.value }))}
             >
               {summary.workspaces.map((w) => <option key={w.id} value={w.id}>{w.displayName}</option>)}
-            </select>
+            </Select>
             <Button
               disabled={summary.workspaces.length === 0}
               onClick={() => {

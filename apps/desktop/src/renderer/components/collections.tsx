@@ -4,7 +4,7 @@
  * with named presentations; definitions travel as
  * `.takenotes/collections/*.yaml`. MVP renders table + list only.
  */
-import { Skeleton } from "@takenotes/ui/dom";
+import { Button, Input, Select, Skeleton } from "@takenotes/ui/dom";
 import { useMemo, useState, type JSX } from "react";
 import { evaluateCollectionView } from "@takenotes/core/collections/evaluate";
 import type { CollectionViewKind } from "@takenotes/core/collections/store";
@@ -58,7 +58,7 @@ export function CollectionsPane({
   return (
     <div className="collections-pane">
       <div className="pane-toolbar" role="toolbar" aria-label="Collections">
-        <select
+        <Select
           aria-label="Collection"
           value={active?.file ?? ""}
           onChange={(e) => {
@@ -70,20 +70,20 @@ export function CollectionsPane({
           {collections.files.map((f) => (
             <option key={f.file} value={f.file}>{f.doc.name}</option>
           ))}
-        </select>
+        </Select>
         {view && active && active.doc.views.length > 1 && (
-          <select aria-label="View" value={view.name} onChange={(e) => setViewName(e.target.value)}>
+          <Select aria-label="View" value={view.name} onChange={(e) => setViewName(e.target.value)}>
             {active.doc.views.map((v) => (
               <option key={v.name} value={v.name}>{v.name} ({v.kind})</option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
 
       {active && view ? (
         <>
           <p className="pane-hint" title={active.doc.query}>
-            Query: <button className="linklike" title="Run in Search" onClick={() => runSearch(active.doc.query)}>{active.doc.query || "(empty — matches nothing)"}</button>
+            Query: <Button size="sm" variant="ghost" title="Run in Search" onClick={() => runSearch(active.doc.query)}>{active.doc.query || "(empty — matches nothing)"}</Button>
           </p>
           {result === null ? (
             <Skeleton label="Loading results" />
@@ -105,9 +105,9 @@ export function CollectionsPane({
                 {result.rows.map((r) => (
                   <tr key={r.relativePath}>
                     <td>
-                      <button className="linklike" title={displayPath(r.relativePath)} onClick={() => onOpen(r.relativePath)}>
+                      <Button size="sm" variant="ghost" title={displayPath(r.relativePath)} onClick={() => onOpen(r.relativePath)}>
                         {r.title}
-                      </button>
+                      </Button>
                     </td>
                     {Object.values(r.cells).map((v, i) => (
                       <td key={i}>{v || "—"}</td>
@@ -120,9 +120,9 @@ export function CollectionsPane({
             <ul className="collection-list">
               {result.rows.map((r) => (
                 <li key={r.relativePath}>
-                  <button className="linklike" title={displayPath(r.relativePath)} onClick={() => onOpen(r.relativePath)}>
+                  <Button size="sm" variant="ghost" title={displayPath(r.relativePath)} onClick={() => onOpen(r.relativePath)}>
                     {r.title}
-                  </button>
+                  </Button>
                   {Object.entries(r.cells).filter(([, v]) => v).map(([k, v]) => (
                     <span key={k} className="collection-cell">{k}: {v}</span>
                   ))}
@@ -132,7 +132,7 @@ export function CollectionsPane({
           )}
           {result !== null && result.ok && result.truncated && <p className="pane-hint">Showing the first {result.rows.length} matches.</p>}
           <div className="pane-toolbar" role="toolbar" aria-label="View management">
-            <input
+            <Input
               className="rename-input"
               aria-label="New view name"
               placeholder={`New ${newKind} view…`}
@@ -146,7 +146,7 @@ export function CollectionsPane({
                 e.stopPropagation();
               }}
             />
-            <select
+            <Select
               aria-label="New view kind"
               value={newKind}
               onChange={(e) => setNewKind(e.target.value === "table" ? "table" : "list")}
@@ -154,7 +154,7 @@ export function CollectionsPane({
             >
               <option value="list">List</option>
               <option value="table">Table</option>
-            </select>
+            </Select>
             {active.doc.views.length > 1 && (
               <button title={`Delete view ${view.name}`} onClick={() => { void collections.removeView(active.file, view.name); setViewName(null); }}>
                 Delete view
@@ -178,7 +178,7 @@ export function CollectionsPane({
       )}
 
       <div className="pane-toolbar" role="toolbar" aria-label="New collection">
-        <input
+        <Input
           className="rename-input"
           aria-label="New collection name"
           placeholder="New collection…"

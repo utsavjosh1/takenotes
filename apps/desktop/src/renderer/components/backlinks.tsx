@@ -1,4 +1,5 @@
 import { useMemo, useState, type JSX } from "react";
+import { Input, Select } from "@takenotes/ui/dom";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import type { Edge } from "@takenotes/core/index/edges";
 import {
@@ -146,7 +147,7 @@ function PaneControls({
 }): JSX.Element {
   return (
     <div className="link-controls" role="search">
-      <input
+      <Input
         className="link-filter"
         type="search"
         placeholder="Filter mentions…"
@@ -154,7 +155,7 @@ function PaneControls({
         value={query}
         onChange={(e) => onQuery(e.target.value)}
       />
-      <select
+      <Select
         className="link-sort"
         aria-label="Sort mentions"
         value={sort}
@@ -162,7 +163,7 @@ function PaneControls({
       >
         <option value="name">Name</option>
         <option value="modified">Modified</option>
-      </select>
+      </Select>
     </div>
   );
 }

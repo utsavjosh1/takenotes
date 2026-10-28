@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { Checkbox, Input } from "@takenotes/ui/dom";
 import { moveRovingIndex } from "@takenotes/ui";
 import { HITS_PER_PAGE, SEARCH_FILTERS, type NoteHits, type SearchHit } from "@takenotes/core/search/hits";
 import { displayPath } from "./types";
@@ -74,7 +75,7 @@ export function SearchPanel(p: SearchPanelProps): JSX.Element {
     <div className="search-panel">
       <div className="search-box">
         <label className="search-label" htmlFor="search-input">Search notes</label>
-        <input id="search-input" ref={inputRef} className="search-input" type="search" value={query} placeholder="Search notes…"
+        <Input id="search-input" ref={inputRef} className="search-input" type="search" value={query} placeholder="Search notes…"
           aria-invalid={searchError ? true : undefined} aria-describedby={searchError ? "search-err" : undefined}
           onChange={(e) => p.onQuery(e.target.value)} />
         {searchError && <p id="search-err" className="search-err" role="alert">{searchError}</p>}
@@ -87,7 +88,7 @@ export function SearchPanel(p: SearchPanelProps): JSX.Element {
           <button type="button" className="search-pin" onClick={() => p.onPin?.(query.trim())}>☆ Save this search to Favourites</button>
         )}
         <div className="search-opts">
-          <label className="search-check"><input type="checkbox" checked={p.matchCase} onChange={(e) => p.onMatchCase(e.target.checked)} /> Match case</label>
+          <Checkbox label="Match case" checked={p.matchCase} onChange={(e) => p.onMatchCase(e.target.checked)} />
           <label className="search-range">Context lines <b>{p.context}</b>
             <input type="range" min={0} max={3} step={1} value={p.context} aria-label="Context lines" onChange={(e) => p.onContext(Number(e.target.value))} />
           </label>

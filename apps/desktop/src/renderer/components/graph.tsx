@@ -8,7 +8,7 @@
  * sliders, tag nodes + tags toggle, time-lapse. Nodes are notes;
  * ghosts/attachments appear only under their opt-in toggles.
  */
-import { Skeleton } from "@takenotes/ui/dom";
+import { Checkbox, Input, Skeleton } from "@takenotes/ui/dom";
 import { useMemo, useState, type JSX } from "react";
 import {
   buildGraph,
@@ -117,19 +117,19 @@ export function GraphPane({
       </div>
 
       <div className="pane-toolbar" role="toolbar" aria-label="Graph filters">
-        <input
+        <Input
           className="rename-input" aria-label="Filter by search" placeholder="Filter: search grammar…"
           value={query} onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
         />
-        <label title="Hide notes with no links"><input type="checkbox" checked={!showOrphans} onChange={(e) => setShowOrphans(!e.target.checked)} /> Hide orphans</label>
-        <label title="Show links to nonexistent notes as ghost nodes"><input type="checkbox" checked={includeUnresolved} onChange={(e) => setIncludeUnresolved(e.target.checked)} /> Unresolved</label>
-        <label title="Show attachment targets as nodes"><input type="checkbox" checked={includeAttachments} onChange={(e) => setIncludeAttachments(e.target.checked)} /> Attachments</label>
+        <span title="Hide notes with no links"><Checkbox label="Hide orphans" checked={!showOrphans} onChange={(e) => setShowOrphans(!e.target.checked)} /></span>
+        <span title="Show links to nonexistent notes as ghost nodes"><Checkbox label="Unresolved" checked={includeUnresolved} onChange={(e) => setIncludeUnresolved(e.target.checked)} /></span>
+        <span title="Show attachment targets as nodes"><Checkbox label="Attachments" checked={includeAttachments} onChange={(e) => setIncludeAttachments(e.target.checked)} /></span>
       </div>
       {!filtered.ok && <p className="inline-error" style={{ padding: "0 12px" }}>{filtered.error}</p>}
 
       <div className="pane-toolbar" role="toolbar" aria-label="Graph groups">
-        <input
+        <Input
           className="rename-input" aria-label="Group query" placeholder="Group: query → color…"
           value={groupQuery} onChange={(e) => setGroupQuery(e.target.value)}
           onKeyDown={(e) => {
