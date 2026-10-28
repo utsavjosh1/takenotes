@@ -2,7 +2,7 @@
  * Tags, Properties, Collections, Graph). They open in the main column in
  * place of the editor; every row still opens its source note. */
 import { useMemo, useState, type JSX, type ReactNode } from "react";
-import { Button, Chip, Select } from "@takenotes/ui/dom";
+import { Button, Card, Chip, Select } from "@takenotes/ui/dom";
 import type { TodayGroups, TodayTaskItem } from "@takenotes/core/productivity/today";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import { Icon } from "./icons";
@@ -75,12 +75,12 @@ function TaskRow({ task, meta, onOpen, onToggle }: { task: { relativePath: strin
   );
 }
 
-function Card({ title, count, tone, children }: { title: ReactNode; count?: number; tone?: "bad"; children: ReactNode }): JSX.Element {
+function PageCard({ title, count, tone, children }: { title: ReactNode; count?: number; tone?: "bad"; children: ReactNode }): JSX.Element {
   return (
-    <section className="card">
+    <Card as="section" className="page-card">
       <h3>{title}{count !== undefined && <Chip tone={tone === "bad" ? "priority" : "neutral"}>{count}</Chip>}</h3>
       {children}
-    </section>
+    </Card>
   );
 }
 
@@ -114,7 +114,7 @@ export function TodayPage({ groups, today, daily, recents, onOpen, onToggle, onS
           </div>
         </header>
         <div className="grid-2">
-          <Card title={<><Icon name="calendar" /> Daily note</>}>
+          <PageCard title={<><Icon name="calendar" /> Daily note</>}>
             {daily.exists ? (
               <>
                 <p className="muted">{displayPath(daily.relativePath)} exists.</p>
@@ -126,19 +126,19 @@ export function TodayPage({ groups, today, daily, recents, onOpen, onToggle, onS
                 <Button variant="primary" onClick={onOpenDaily}>Create today&rsquo;s note</Button>
               </>
             )}
-          </Card>
-          <Card title="Recent">
+          </PageCard>
+          <PageCard title="Recent">
             {recents.length === 0 ? <p className="muted">No recent notes yet.</p> : recents.map((r) => (
               <button key={r} className="rp-item" onClick={() => onOpen(r)} title={displayPath(r)}>
                 <b>{fileName(r)}</b><small>{displayPath(r)}</small>
               </button>
             ))}
-          </Card>
+          </PageCard>
         </div>
         <div className="grid-3">
-          <Card title="Overdue" count={groups.overdue.length} tone="bad">{rows(groups.overdue, (t) => `${fileName(t.relativePath)} · due ${t.due ?? ""}`)}</Card>
-          <Card title="Due today" count={groups.dueToday.length}>{rows(groups.dueToday, (t) => fileName(t.relativePath))}</Card>
-          <Card title="Scheduled today" count={groups.scheduledToday.length}>{rows(groups.scheduledToday, (t) => `${t.scheduled ?? ""} · ${fileName(t.relativePath)}`)}</Card>
+          <PageCard title="Overdue" count={groups.overdue.length} tone="bad">{rows(groups.overdue, (t) => `${fileName(t.relativePath)} · due ${t.due ?? ""}`)}</PageCard>
+          <PageCard title="Due today" count={groups.dueToday.length}>{rows(groups.dueToday, (t) => fileName(t.relativePath))}</PageCard>
+          <PageCard title="Scheduled today" count={groups.scheduledToday.length}>{rows(groups.scheduledToday, (t) => `${t.scheduled ?? ""} · ${fileName(t.relativePath)}`)}</PageCard>
         </div>
         <Timeline groups={groups} today={today} onSchedule={onSchedule} onOpen={onOpen} />
       </div>
@@ -166,7 +166,7 @@ function Timeline({ groups, today, onSchedule, onOpen }: {
   };
   const allow = (e: React.DragEvent, key: number | "none"): void => { e.preventDefault(); setOver(key); };
   return (
-    <section className="card" aria-label={`Timeline for ${today}`}>
+    <Card as="section" className="page-card" aria-label={`Timeline for ${today}`}>
       <h3>Timeline</h3>
       <p className="hint">Drag a task onto an hour to set @scheduled. @due is never changed.</p>
       <div className="timeline">
@@ -194,7 +194,7 @@ function Timeline({ groups, today, onSchedule, onOpen }: {
           <div key={`${t.relativePath}:${t.line}`} className="blk" draggable onDragStart={(e) => dragStart(e, t.relativePath, t.line)}>{t.description}</div>
         ))}
       </div>
-    </section>
+    </Card>
   );
 }
 

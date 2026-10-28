@@ -1,27 +1,19 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { colors, space, radius, fontSize, lineHeight, targetSize, publicColors, publicRadius, layout, controlHeight, type, fonts, motion, easing, zIndex } from "../../packages/ui/src/theme.ts";
+import { colors, space, canvasPalette, publicColors, publicRadius, layout, controlHeight, type, fonts, motion, easing, zIndex } from "../../packages/ui/src/theme.ts";
 
-const lines = ["/* Generated from src/theme.ts. Run npm run ui:tokens; do not edit by hand. */", "", ":root {"];
-for (const [prefix, values, unit] of [
-  ["space", space, "px"], ["radius", radius, "px"], ["font-size", fontSize, "rem"],
-  ["line-height", lineHeight, ""], ["target", targetSize, "px"],
-]) {
-  for (const [name, value] of Object.entries(values)) {
-    lines.push(`  --tn-${prefix}-${name}: ${unit === "rem" ? value / 16 : value}${unit};`);
-  }
-}
-lines.push("}", "");
-const colorLines = (theme) => Object.entries(colors[theme]).map(([name, value]) => `  --tn-${name}: ${value};`);
+const lines = ["/* Generated from src/theme.ts. Run npm run ui:tokens; do not edit by hand. */", ""];
+// Colour values are written per theme (not as aliases), so a themed subtree
+// such as <div data-theme="dark"> re-resolves on its own.
+const colorLines = (theme) => Object.entries(publicColors).map(([name, key]) => `  --${name}: ${colors[theme][key]};`);
 lines.push(':root, [data-theme="light"] {', "  color-scheme: light;", ...colorLines("light"), "}", "");
 // "System": follow the OS unless the page pins a theme with data-theme.
 lines.push("@media (prefers-color-scheme: dark) {", '  :root:not([data-theme="light"]) {', "    color-scheme: dark;", ...colorLines("dark").map((l) => `  ${l}`), "  }", "}", "");
 lines.push('[data-theme="dark"] {', "  color-scheme: dark;", ...colorLines("dark"), "}", "");
 
-// Public names. Declared on [data-theme] too so a themed subtree re-resolves.
-lines.push(":root, [data-theme] {");
-for (const [name, key] of Object.entries(publicColors)) lines.push(`  --${name}: var(--tn-${key});`);
+lines.push(":root {");
 for (const [name, value] of Object.entries(publicRadius)) lines.push(`  --r-${name}: ${value}px;`);
 lines.push("  --r-pill: 99px;");
+for (const [name, value] of Object.entries(canvasPalette)) lines.push(`  --canvas-${name}: ${value};`);
 for (const [name, value] of Object.entries(space)) lines.push(`  --space-${name}: ${value}px;`);
 for (const [name, value] of Object.entries(layout)) lines.push(`  --${name}: ${value}px;`);
 for (const [name, value] of Object.entries(controlHeight)) lines.push(`  --control-h${name === "default" ? "" : `-${name}`}: ${value}px;`);

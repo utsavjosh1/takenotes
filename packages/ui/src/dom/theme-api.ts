@@ -54,7 +54,6 @@ function applyAccent(hex: string, el: ThemeRoot): boolean {
   const derived = deriveAccent(hex, theme);
   for (const p of ACCENT_PROPS) {
     el.style.setProperty(`--${p}`, derived[p]);
-    el.style.setProperty(`--tn-${p}`, derived[p]);
   }
   return true;
 }
@@ -64,7 +63,7 @@ function applyAccent(hex: string, el: ThemeRoot): boolean {
 export function setAccent(hex: string | null, root?: ThemeRoot): boolean {
   const el = rootEl(root);
   if (hex === null) {
-    for (const p of ACCENT_PROPS) { el.style.removeProperty(`--${p}`); el.style.removeProperty(`--tn-${p}`); }
+    for (const p of ACCENT_PROPS) el.style.removeProperty(`--${p}`);
     remember(ACCENT_KEY, null);
     return true;
   }

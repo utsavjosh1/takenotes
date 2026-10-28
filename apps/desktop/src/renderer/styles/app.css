@@ -277,6 +277,7 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .note-title-input::placeholder { color: var(--muted); }
 .note-title-input:focus { outline: none; }
+/* stylelint-disable declaration-no-important -- CodeMirror injects its own theme with high specificity */
 .cm-editor { background: transparent !important; font-size: var(--fs); min-height: calc(100vh - var(--titlebar-h) - var(--tabstrip-h) - var(--statusbar-h) - 160px); }
 .cm-editor.cm-focused { outline: none !important; }
 .cm-editor .cm-scroller { min-height: inherit; }
@@ -287,6 +288,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .cm-editor .cm-lineNumbers .cm-gutterElement { padding: 0 var(--space-2) 0 0; }
 .cm-editor .cm-activeLineGutter { background: transparent !important; color: var(--text2); }
 .cm-editor .cm-activeLine { background: transparent !important; }
+/* stylelint-enable declaration-no-important */
 .tok-heading { font-weight: 600; color: var(--text); }
 .tok-meta { color: var(--muted); }
 .tok-code { font-family: var(--font-mono); background: var(--code); border-radius: var(--r-ctl); }
@@ -639,8 +641,7 @@ button.tag-row, button.prop-row .prop-main { cursor: pointer; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
 @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
-.card { border: 1px solid var(--line); border-radius: var(--r-max); background: var(--side); padding: 14px; min-width: 0; }
-.card .muted { margin: 4px 0 8px; }
+.page-card .muted { margin: 4px 0 8px; }
 
 
 
@@ -714,8 +715,8 @@ button.tag-row, button.prop-row .prop-main { cursor: pointer; }
 .tl-drop.over { background: var(--selected); }
 .blk { background: var(--selected); border-left: 3px solid var(--accent); border-radius: var(--r-in); padding: 5px 8px; font-size: 13px; cursor: grab; }
 .blk .linkbtn { padding: 0; color: var(--text); }
-.card.drop { margin-top: 14px; min-height: 90px; }
-.card.drop-active { outline: 2px dashed var(--accent); }
+.page-card.drop { margin-top: 14px; min-height: 90px; }
+.page-card.drop-active { outline: 2px dashed var(--accent); }
 .trow[draggable="true"] { cursor: grab; }
 .tree-row .count { font-size: 12px; color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; margin-left: auto; flex: none; }
 .tree-row:hover .count, .tree-row:focus-within .count { opacity: 0; }

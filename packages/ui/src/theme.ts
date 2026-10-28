@@ -100,8 +100,8 @@ export const lineHeight = { ui: 1.4, heading: 1.3, body: 1.65 } as const;
 export const targetSize = { control: 36, icon: 32, row: 32, touch: 48, "touch-row": 52 } as const;
 
 /** Public token names (prototype vocabulary) -> the colour key that holds the
- * value. tokens.css emits each as `--<name>: var(--tn-<key>)`. The `--tn-*`
- * names are deprecated and go away in M6. */
+ * value. tokens.css writes each as `--<name>: <value>` in every theme block.
+ */
 export const publicColors = {
   app: "surface-app", side: "surface-sidebar", editor: "surface-editor", panel: "surface-panel",
   overlay: "surface-overlay", hover: "surface-hover", selected: "surface-selected",
@@ -118,7 +118,11 @@ export const publicColors = {
 
 /** Shape: 4 small controls and menu items, 6 inputs/buttons/chips, 8 dialogs
  * and menus, 10 cards. Nothing rounder except pills (99px). */
-export const publicRadius = { ctl: 4, in: 6, dlg: 8, max: 10 } as const;
+export const publicRadius = { ctl: 4, in: 6, dlg: 8, max: 10, check: 5 } as const;
+
+/** The six preset card colours of a canvas (JSON Canvas presets 1-6). Data colours,
+ * the same in both themes; written as `--canvas-N`. */
+export const canvasPalette = { 1: "#e45649", 2: "#d2842a", 3: "#b09a2a", 4: "#50a14f", 5: "#0184bc", 6: "#a626a4" } as const;
 
 /** Layout in px. `measure` is the writing column (plus 48px side padding). */
 export const layout = {

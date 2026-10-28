@@ -212,7 +212,7 @@ p { margin: 0; }
 .terminal-body { padding: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.7; color: var(--brand-f0e6c8); }
 .terminal-body p { margin: 0; }
 .terminal-body span { color: var(--brand-9fe08b); }
-.terminal-muted { color: var(--control) !important; }
+.terminal-muted.terminal-muted { color: var(--control); }
 .terminal-cursor { display: inline-block; width: 8px; height: 14px; background: var(--brand-amber); vertical-align: -2px; margin-left: 6px; animation: blink 1.1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 .terminal-tag { margin-top: 12px; display: inline-flex; gap: 8px; align-items: center; background: color-mix(in srgb, var(--brand-white) 14%, transparent); border: 1px solid color-mix(in srgb, var(--brand-white) 35%, transparent); color: var(--ok); border-radius: var(--r-pill); padding: 6px 10px; font-family: var(--font); font-size: 12px; font-weight: 650; }
@@ -282,9 +282,9 @@ p { margin: 0; }
 .download-actions .tn-button--primary:hover { background: var(--brand-white); border-color: var(--brand-white); filter: none; }
 .download-actions .tn-button:not(.tn-button--primary) { background: transparent; border-color: color-mix(in srgb, var(--brand-white) 38%, transparent); color: var(--brand-white); }
 .download-actions .tn-button:not(.tn-button--primary):hover { background: var(--brand-white); color: var(--brand-ink); }
-.download-platform { margin-top: 16px !important; font-size: 13px !important; color: var(--brand-9c9174) !important; }
+.download-platform.download-platform { margin-top: 16px; font-size: 13px; color: var(--brand-9c9174); }
 .prerelease-notice { display: flex; gap: 12px; text-align: left; background: color-mix(in srgb, var(--brand-white) 7%, transparent); border: 1px solid color-mix(in srgb, var(--brand-white) 14%, transparent); border-radius: var(--r-max); padding: 16px; margin: 24px auto 0; max-width: 720px; }
-.prerelease-notice p { color: var(--text2) !important; font-size: 14px !important; line-height: 1.6 !important; }
+.download-card .prerelease-notice p { color: var(--text2); font-size: 14px; line-height: 1.6; }
 .notice-dot { width: 10px; height: 10px; flex: none; margin-top: 5px; border-radius: var(--r-pill); background: var(--brand-ffb02e); box-shadow: 0 0 0 6px color-mix(in srgb, var(--brand-white) 18%, transparent); }
 
 /* Footer */
@@ -335,5 +335,7 @@ p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+  /* stylelint-disable declaration-no-important -- reduced-motion reset must beat every component rule */
   *, *::before, *::after { animation: none !important; transition: none !important; }
+  /* stylelint-enable declaration-no-important */
 }

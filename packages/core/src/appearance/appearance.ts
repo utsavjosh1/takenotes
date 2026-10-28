@@ -29,7 +29,7 @@ export type AppearanceTheme = "light" | "dark";
 
 type AccentPair = { accent: string; accentHover: string; selection: string };
 
-/** Per-accent, per-theme tokens applied over `--tn-*` as `[data-accent]`
+/** Per-accent, per-theme tokens applied over the public colour tokens as `[data-accent]`
  * overrides. `accent-soft` (selected-row tick wash) is derived in CSS via
  * `color-mix` from `--accent`, so it follows automatically. */
 export const ACCENT_TOKENS: Record<AppearanceAccent, Record<AppearanceTheme, AccentPair>> = {

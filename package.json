@@ -2,7 +2,7 @@
   "name": "takenotes",
   "version": "0.1.10",
   "private": true,
-  "description": "takenotes — filesystem-first local Markdown notebook for Windows with WSL awareness.",
+  "description": "takenotes \u2014 filesystem-first local Markdown notebook for Windows with WSL awareness.",
   "author": {
     "name": "Utsav Joshi",
     "email": "utsav304joshi@gmail.com"
@@ -44,13 +44,14 @@
     "package:linux": "npm run build && electron-builder --linux AppImage deb --x64 --publish never",
     "demo:seed": "node tools/scripts/seed-demo-workspace.mjs",
     "storybook": "storybook dev -p 6006 -c packages/ui/.storybook --no-open",
-    "storybook:build": "storybook build -c packages/ui/.storybook -o packages/ui/storybook-static --quiet"
+    "storybook:build": "storybook build -c packages/ui/.storybook -o packages/ui/storybook-static --quiet",
+    "lint:css": "stylelint \"apps/**/*.css\" \"packages/**/*.css\"",
+    "audit:ui": "node tools/scripts/audit-ui.mjs"
   },
   "devDependencies": {
     "@electron/fuses": "2.1.3",
     "@eslint/js": "10.0.1",
     "@storybook/react-vite": "^10.6.5",
-    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "26.6.2",
     "@vitejs/plugin-react": "6.1.1",
     "electron": "44.4.3",
@@ -59,7 +60,7 @@
     "eslint": "10.12.0",
     "globals": "17.12.0",
     "storybook": "^10.6.5",
-    "tailwindcss": "^4.3.3",
+    "stylelint": "^17.16.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.0",
     "vite": "^8.3.2",

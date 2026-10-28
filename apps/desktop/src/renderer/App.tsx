@@ -6,7 +6,8 @@ import type { DirectoryEntry, WorkspaceInfo } from "@takenotes/contracts/ipc";
 import type { CommandId } from "@takenotes/core/commands/registry";
 import { usePlatform } from "./hooks/use-platform";
 import { WelcomeScreen, readRecentServers, rememberServer, type RecentServer } from "./components/welcome";
-import { CreateWorkspaceDialog, ErrorDialog, PairDialog, ServerSignInDialog } from "./components/workspace-dialogs";
+import { CreateWorkspaceDialog, PairDialog, ServerSignInDialog } from "./components/workspace-dialogs";
+import { ErrorDialog } from "@takenotes/ui/dom";
 import { WorkspaceSwitcher } from "./components/ws-switcher";
 import type { RecentWorkspaceInfo } from "@takenotes/contracts/ipc";
 import { PAGE_VIEWS, PageShell, TasksPage, TodayPage, type PageView } from "./components/pages";
@@ -349,8 +350,9 @@ export default function App(): JSX.Element {
   const workspaceDialogs = (
     <>
       {workspaceApi.openError && (
-        <ErrorDialog error={workspaceApi.openError} onClose={workspaceApi.clearOpenError}
-          onAction={() => { workspaceApi.clearOpenError(); void workspaceApi.openLocal(); }} />
+        <ErrorDialog title={workspaceApi.openError.title} cause={workspaceApi.openError.cause} details={workspaceApi.openError.details}
+          action={{ label: workspaceApi.openError.action, run: () => { workspaceApi.clearOpenError(); void workspaceApi.openLocal(); } }}
+          onClose={workspaceApi.clearOpenError} />
       )}
       {wsDialog?.kind === "create" && (
         <CreateWorkspaceDialog existing={recents.recentWorkspaces.map((r) => ("displayName" in r ? r.displayName : r.name))}
