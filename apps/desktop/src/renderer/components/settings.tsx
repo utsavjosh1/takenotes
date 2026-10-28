@@ -64,7 +64,7 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
             <SettingRow label="Confirm before moving to trash" description="Ask first when deleting notes.">
               {(control) => <input {...control} type="checkbox" checked={settings.confirmTrash} onChange={(e) => set("confirmTrash", e.target.checked)} />}
             </SettingRow>
-            <SettingRow label="Show activity ribbon" description="Rail with Explorer, Search, Outline, Favorites. Off hides it; palette still switches panes.">
+            <SettingRow label="Show activity ribbon" description="Rail with Explorer, Search, On this page, Favorites. Off hides it; palette still switches panes.">
               {(control) => <input {...control} type="checkbox" checked={settings.ribbonVisible} onChange={(e) => set("ribbonVisible", e.target.checked)} />}
             </SettingRow>
             {platform.capabilities.wsl && (
@@ -126,7 +126,7 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
             <SettingRow label="Line numbers" description="Show gutter line numbers.">
               {(control) => <input {...control} type="checkbox" checked={settings.lineNumbers} onChange={(e) => set("lineNumbers", e.target.checked)} />}
             </SettingRow>
-            <SettingRow label="Live preview" description="Render markdown in place; the cursor line shows raw source. Off shows plain source everywhere.">
+            <SettingRow label="Live preview" description="Show formatting as you type; the line you are on shows plain text. Off shows plain text everywhere.">
               {(control) => <input {...control} type="checkbox" checked={settings.livePreview} onChange={(e) => set("livePreview", e.target.checked)} />}
             </SettingRow>
           </>}
@@ -137,7 +137,7 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
                 <option value="shortest">Shortest</option><option value="relative">Relative</option><option value="absolute">Absolute</option>
               </select>}
             </SettingRow>
-            <SettingRow label="Use [[Wikilinks]]" description="On writes [[links]]. Off writes [label](path.md) Markdown links (file links; #heading/#^block refinements stay [[…]]). Either form always opens.">
+            <SettingRow label="Link to notes with [[double brackets]]" description="On writes [[links]]. Off writes [label](path.md) links (file links; #heading/#^block refinements stay [[…]]). Either form always opens.">
               {(control) => <input {...control} type="checkbox" checked={settings.useWikilinks} onChange={(e) => set("useWikilinks", e.target.checked)} />}
             </SettingRow>
             <SettingRow label="Update links on rename" description="Rewrite [[links]] when a note or folder moves. Off asks first and renames only.">
@@ -180,7 +180,7 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
               <img src={lockupDarkUrl} className="only-dark" alt="takenotes" draggable={false} />
               <img src={lockupLightUrl} className="only-light" alt="takenotes" draggable={false} />
             </div>
-            <SettingRow label="takenotes" description={`Version ${version}. Filesystem-native Markdown notebook.`} />
+            <SettingRow label="takenotes" description={`Version ${version}. A notebook made of plain text files.`} />
             <SettingRow label="Source" description="Local-first. Your files stay where they are." />
           </>}
         </div>

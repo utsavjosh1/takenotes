@@ -1602,7 +1602,7 @@ export default function App(): JSX.Element {
                         onToggle={(d) => void treeApi.toggleDir(d)}
                         onOpen={(en) => {
                           if (en.fileClass === "markdown" || en.fileClass === "text" || isCanvasPath(en.relativePath)) { void docsApi.openFile(en.relativePath).then(() => void treeApi.reveal(en.relativePath)); }
-                          else toast("Only Markdown, text, and canvas files open in this MVP.");
+                          else toast("Only notes, text and canvas files open here.");
                         }}
                         onSelect={(rel) => treeApi.select(rel)}
                         onContext={showFileMenu}

@@ -77,8 +77,8 @@ export function TitleBar({
 export const SIDEBAR_VIEWS = ["files", "search", "outline", "recent", "favorites", "today", "calendar", "tags", "properties", "collections", "graph"] as const;
 export type SidebarView = (typeof SIDEBAR_VIEWS)[number];
 export const VIEW_TITLES: Record<SidebarView, string> = {
-  files: "Files", search: "Search", outline: "Outline", recent: "Recent", favorites: "Favourites", today: "Today",
-  calendar: "Calendar", tags: "Tags", properties: "Properties", collections: "Collections", graph: "Graph",
+  files: "Files", search: "Search", outline: "On this page", recent: "Recent", favorites: "Favourites", today: "Today",
+  calendar: "Calendar", tags: "Tags", properties: "Details", collections: "Collections", graph: "Graph",
 };
 
 export function ActivityRail({

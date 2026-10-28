@@ -111,7 +111,7 @@ export function TagsPane({
         </label>
       </div>
       {counts.length === 0 ? (
-        <EmptyState title="No tags yet" description="Add `#tag` inline or a `tags:` property." />
+        <EmptyState title="No tags yet" description="Add #tag in a note, or a tags: line at the top." />
       ) : (
         <div ref={listRef} onKeyDown={onListKeyDown}>
           {mode === "tree" ? (

@@ -16,7 +16,7 @@ export const PAGE_TITLES: Record<PageView, { title: string; sub: string }> = {
   tasks: { title: "Tasks", sub: "Every task across this workspace" },
   calendar: { title: "Calendar", sub: "Event notes and scheduled tasks" },
   tags: { title: "Tags", sub: "Nested tags use slashes, for example #project/web" },
-  properties: { title: "Properties", sub: "Frontmatter fields used across your notes" },
+  properties: { title: "Details", sub: "Fields you add at the top of your notes" },
   collections: { title: "Collections", sub: "Saved queries shown as a table or a list" },
   graph: { title: "Graph", sub: "Notes as nodes, links as edges" },
 };

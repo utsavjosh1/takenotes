@@ -208,7 +208,7 @@ export function BacklinksPane({
     [unlinked, query, byPath, entries, sort],
   );
   return (
-    <section aria-label="Backlinks">
+    <section aria-label="Linked from">
       <PaneControls query={query} onQuery={setQuery} sort={sort} onSort={setSort} />
       <details open>
         <summary className="panel-title">Linked mentions · {visibleLinked.length}</summary>

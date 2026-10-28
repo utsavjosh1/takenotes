@@ -64,7 +64,7 @@ describe("live-region wiring", () => {
     expect(tags).toContain("<EmptyState title=\"No workspace index yet\"");
     const props = rendererSource("components", "properties-view.tsx");
     expect(props).toContain("<EmptyState title=\"No active note\"");
-    expect(props).toContain("<EmptyState title=\"No properties in this workspace\"");
+    expect(props).toContain("<EmptyState title=\"No details in this workspace\"");
   });
 
   it("outline roves with Enter-to-navigate", () => {

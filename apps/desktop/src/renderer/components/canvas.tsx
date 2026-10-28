@@ -320,7 +320,7 @@ export function CanvasEditor({
           <input
             className="rename-input"
             autoFocus
-            aria-label={adding === "link" ? "URL" : "Vault-relative path"}
+            aria-label={adding === "link" ? "URL" : "Path inside the workspace"}
             placeholder={adding === "link" ? "https://…" : adding === "image" ? "images/pic.png" : "Notes/My note.md"}
             value={addPath}
             onChange={(e) => setAddPath(e.target.value)}
@@ -553,7 +553,7 @@ export function CanvasEditor({
                   <textarea
                     className="c-text"
                     aria-label="Text card"
-                    placeholder="Markdown…"
+                    placeholder="Write a note…"
                     value={n.text}
                     onChange={(ev) => {
                       const r = setNodeText(doc, n.id, ev.target.value);
