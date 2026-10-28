@@ -3,6 +3,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { moveRovingIndex } from "../../packages/ui/src/behavior";
 
+function uiSource(name: string): string {
+  return readFileSync(join(__dirname, "..", "..", "packages", "ui", "src", name), "utf8");
+}
+
 function rendererSource(name: string): string {
   return readFileSync(
     join(__dirname, "..", "..", "apps", "desktop", "src", "renderer", name),
@@ -64,18 +68,26 @@ describe("keyboard wiring", () => {
     expect(source).toContain("moveRovingIndex");
   });
 
-  it("tab strip roves with automatic activation", () => {
-    const source = rendererSource(join("components", "overlays.tsx"));
-    expect(source).toContain("data-tab-key");
-    expect(source).toContain("moveRovingIndex");
-    expect(source).toContain('"Delete"');
+  it("tab strip roves with automatic activation (shared Tabs)", () => {
+    const tabs = uiSource(join("dom", "tabs.tsx"));
+    expect(tabs).toContain("data-tab-id");
+    expect(tabs).toContain("tabMove");
+    expect(tabs).toContain('"Delete"');
+    expect(tabs).toContain("e.button === 1");
+    // The desktop strip is only an adapter over the shared component.
+    const adapter = rendererSource(join("components", "overlays.tsx"));
+    expect(adapter).toContain("<Tabs");
+    expect(adapter).toContain("onReorder");
   });
 
-  it("context menu arrows between items and returns focus", () => {
-    const source = rendererSource(join("components", "overlays.tsx"));
-    expect(source).toContain('aria-label="Actions"');
-    expect(source).toContain(".ctx-item:not(:disabled)");
-    expect(source).toContain("opener");
+  it("context menu arrows between items and returns focus (shared Menu)", () => {
+    const menu = uiSource(join("dom", "menu.tsx"));
+    expect(menu).toContain("menuMove");
+    expect(menu).toContain('role="menu"');
+    const hook = uiSource(join("dom", "use-overlay.ts"));
+    expect(hook).toContain("opener");
+    expect(hook).toContain('"Escape"');
+    expect(rendererSource(join("components", "overlays.tsx"))).toContain('label="Actions"');
   });
 
   it("file tree exposes one Tab stop with travelling focus", () => {

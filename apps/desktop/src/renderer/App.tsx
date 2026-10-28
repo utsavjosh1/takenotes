@@ -38,7 +38,7 @@ import { lineForBlockId, lineForHeadingFragment, previewExcerpt } from "@takenot
 import type { ParsedTakenotesUri } from "@takenotes/core/uri/parse";
 import { renderMarkdown } from "@takenotes/core/markdown/render";
 import { SearchPanel } from "./components/search";
-import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
+import { ContextMenu, TabStrip } from "./components/overlays";
 import { CommandMenu } from "./components/palette";
 import { TemplatePicker } from "./components/template-picker";
 import { ImportDialog } from "./components/import-dialog";
@@ -72,7 +72,6 @@ function mimeExt(mime: string): string {
 }
 import { isWslKind } from "@takenotes/platform/filesystem";
 import { fileName, joinRel, parentDir, type CtxMenu } from "./components/types";
-import { useToastStore } from "./stores/toasts";
 import { useSettingsStore } from "./stores/settings";
 import { useIndexMeta } from "./stores/index-meta";
 import { useNotify } from "./hooks/use-notify";
@@ -131,8 +130,6 @@ export default function App(): JSX.Element {
   const { toast } = notify;
   const settings = useSettingsStore((s) => s.settings);
   const setSettings = useSettingsStore((s) => s.setAll);
-  const toasts = useToastStore((s) => s.toasts);
-  const dismissToast = useToastStore((s) => s.dismiss);
   const indexVersion = useIndexMeta((s) => s.version);
   const indexNotice = useIndexMeta((s) => s.notice);
   const bumpIndex = useIndexMeta((s) => s.bump);
@@ -1343,7 +1340,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== "Escape" || e.defaultPrevented || !workspaceApi.workspace) return;
-      if (document.querySelector("dialog[open], .ctx-menu, .cm-tooltip, .cm-panel, .command-menu, .fmt-bubble")) return;
+      if (document.querySelector("dialog[open], .ui-menu, .ui-palette, .ui-popover, .cm-tooltip, .cm-panel, .fmt-bubble")) return;
       const inPage = !!(e.target as HTMLElement | null)?.closest?.(".cm-editor, .note-title-input");
       if (focusMode || (inPage && docsApi.activeTab)) { e.preventDefault(); setFocusMode((v) => !v); }
     };
@@ -1398,7 +1395,6 @@ export default function App(): JSX.Element {
         {updatesApi.dialog && (
           <UpdateDialog dialog={updatesApi.dialog} version={version} onClose={updatesApi.close} onDownload={() => void updatesApi.download()} />
         )}
-        <Toasts toasts={toasts} onDismiss={dismissToast} />
       </div>
     );
   }
@@ -2077,7 +2073,6 @@ export default function App(): JSX.Element {
           )}
         </Dialog>
       )}
-      <Toasts toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

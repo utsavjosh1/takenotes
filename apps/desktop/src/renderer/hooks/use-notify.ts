@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useToastStore } from "../stores/toasts";
+import { useToast } from "@takenotes/ui/dom";
 import { friendlyError } from "../error-text";
 import type { ToastAction } from "../components/types";
 
@@ -12,14 +12,17 @@ export type Notify = {
  * PERMISSION_DENIED never reads as NOT_FOUND. Takes the structured
  * `{ code, message }` every IPC result carries. */
 export function useNotify(): Notify {
-  const push = useToastStore((s) => s.push);
-  const toast = useCallback((text: string, kind: "info" | "error" = "info", action?: ToastAction) => push(text, kind, action), [push]);
+  const { show } = useToast();
+  const toast = useCallback(
+    (text: string, kind: "info" | "error" = "info", action?: ToastAction) => show(text, { kind, ...(action ? { undo: action } : {}) }),
+    [show],
+  );
   const errToast = useCallback(
     (error: { code: string; message: string }, prefix?: string) => {
       const text = friendlyError(error.code, error.message);
-      push(prefix ? `${prefix} — ${text}` : text, "error");
+      show(prefix ? `${prefix} — ${text}` : text, { kind: "error" });
     },
-    [push],
+    [show],
   );
   return { toast, errToast };
 }

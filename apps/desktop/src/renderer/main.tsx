@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import { Button, EmptyState } from "@takenotes/ui/dom";
+import { Button, EmptyState, ToastProvider } from "@takenotes/ui/dom";
 import "@takenotes/ui/tokens.css";
 import "@takenotes/ui/tailwind.css";
 import "@takenotes/ui/dom.css";
@@ -45,7 +45,9 @@ if (!el) throw new Error("Missing #root element.");
 createRoot(el).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <ToastProvider>
+        <App />
+      </ToastProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 );

@@ -37,22 +37,25 @@ describe("live-region wiring", () => {
   });
 
   it("palette follows the combobox pattern", () => {
-    const source = rendererSource("components", "palette.tsx");
+    // The overlay is the shared CommandPalette; desktop only supplies rows.
+    expect(rendererSource("components", "palette.tsx")).toContain("<CommandPalette");
+    const source = readFileSync(join(__dirname, "..", "..", "packages", "ui", "src", "dom", "command-palette.tsx"), "utf8");
     expect(source).toContain('role="combobox"');
     expect(source).toContain("aria-controls={listId}");
     expect(source).toContain("aria-activedescendant");
     expect(source).toContain("id={listId}");
-    expect(source).toContain("cmd-opt-${i}");
+    expect(source).toContain("optionId(i)");
     expect(source).toContain('role="listbox"');
     expect(source).toContain('role="option"');
-    expect(source).toContain("aria-disabled={r.disabled ? true : undefined}");
+    expect(source).toContain("aria-disabled={row.item.disabledReason ? true : undefined}");
   });
 
   it("quick-open Ctrl+Enter opens in a new tab, Shift+Enter creates", () => {
     const source = rendererSource("components", "palette.tsx");
     expect(source).toContain("{ newTab: o.ctrl }");
     expect(source).toContain("new tab");
-    expect(source).toContain('if (kind === "files" && o.shift)');
+    expect(source).toContain('if (kind === "files" && how.shift)');
+    expect(source).toContain('keys: ["Shift", "Enter"]');
   });
 
   it("tags and properties empties use the shared EmptyState voice", () => {
