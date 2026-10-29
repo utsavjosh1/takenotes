@@ -130,11 +130,12 @@ function normalizeTag(raw: string): string | null {
   return t;
 }
 
-/** `YYYY-MM-DD` with an optional `THH:MM[:SS]`; range-checked (incl. leap
+/** `YYYY-MM-DD` with an optional `THH:MM[:SS]` (a space also separates, as in
+ * `@scheduled(2026-10-28 14:00)`); range-checked (incl. leap
  * years) so `2026-13-40` is ignored, never indexed. No `Date` construction
  * (no timezone reinterpretation) and no natural language — deterministic. */
 export function isExplicitDate(value: string): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(value.trim());
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(value.trim());
   if (!m) return false;
   const year = Number(m[1]);
   const month = Number(m[2]);
@@ -220,8 +221,8 @@ function parseTaskLine(line: string, lineNo: number): IndexTask | null {
   let tm: RegExpExecArray | null;
   while ((tm = TOKEN_RE.exec(rest)) !== null) {
     const value = tm[2]!.trim();
-    if (tm[1] === "due" && isExplicitDate(value)) due = value;
-    else if (tm[1] === "scheduled" && isExplicitDate(value)) scheduled = value;
+    if (tm[1] === "due" && isExplicitDate(value)) due = value.replace(" ", "T");
+    else if (tm[1] === "scheduled" && isExplicitDate(value)) scheduled = value.replace(" ", "T");
     else if (tm[1] === "priority" && value) priority = value.toLowerCase();
   }
   TOKEN_RE.lastIndex = 0;
@@ -268,7 +269,19 @@ export function parseDocument(
     if (close > 0) {
       // Bad YAML degrades to `{}` — the file is still indexed.
       try {
-        const parsed: unknown = parseYaml(lines.slice(1, close).join("\n"));
+        // logLevel "error": a collection used as a mapping key only earns a
+        // yaml dev warning ("Keys with collection values will be
+        // stringified…") — pure console noise on every index of such a
+        // note. "error" mutes warnings but still throws on real syntax
+        // errors, preserving the `{}` degradation below. ("silent" would
+        // also swallow errors and accept corrupt frontmatter — wrong.)
+        // logLevel "error": a collection used as a mapping key only earns a
+        // yaml dev warning ("Keys with collection values will be
+        // stringified…") — pure console noise on every index of such a
+        // note. "error" mutes warnings but still throws on real syntax
+        // errors, preserving the `{}` degradation below. ("silent" would
+        // also swallow errors and accept corrupt frontmatter — wrong.)
+        const parsed: unknown = parseYaml(lines.slice(1, close).join("\n"), { logLevel: "error" });
         if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
           frontmatter = parsed as Record<string, unknown>;
         }

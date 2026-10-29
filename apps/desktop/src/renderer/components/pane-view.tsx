@@ -2,24 +2,24 @@ import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } fr
 import type { EditorView } from "@codemirror/view";
 import { openSearchPanel } from "@codemirror/search";
 import { createEditor } from "../editor/create-editor";
+import { flashLine } from "../editor/flash";
 import type { LinkCompleteDeps } from "../editor/complete";
 import { workspaceIndex } from "../index/workspace-index";
 import { aliasCandidates, blockCandidates, fileCandidates, type LinkFormat } from "@takenotes/core/links/completion";
 import {
-  applyLinkUrl,
+  applyLinkAddress,
   cmdBold,
-  cmdBullet,
-  cmdCode,
   cmdHeading,
   cmdItalic,
-  cmdLink,
-  cmdOrdered,
-  cmdQuote,
   cmdStrike,
   cmdTask,
+  LINK_ADDRESS_ERROR,
   linkAt,
+  validWebAddress,
   wikilinkAt,
 } from "../editor/format";
+import { Button, Dialog, TextField } from "@takenotes/ui/dom";
+import { resolveLinkTarget } from "@takenotes/core/index/edges";
 import { displayPath, fileName } from "./types";
 
 type FormatCommand = (view: EditorView) => boolean;
@@ -28,24 +28,21 @@ type BubbleState = {
   top: number;
   left: number;
   below: boolean;
-  /** Set when the cursor sits inside a link label: offers URL editing. */
-  linkUrl: string | null;
 };
+
+/** Set when Enter in the title should land the caret in the page, even if the rename remounts the editor. */
+let focusBodyAfterMount = false;
 
 const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 const mod = isMac ? "\u2318" : "Ctrl";
 
-const FORMAT_BUTTONS: { label: ReactNode; title: string; run: FormatCommand }[] = [
+const FORMAT_BUTTONS: { label: ReactNode; title: string; run: FormatCommand | "link" }[] = [
   { label: <b>B</b>, title: `Bold (${mod}+B)`, run: cmdBold },
   { label: <i>I</i>, title: `Italic (${mod}+I)`, run: cmdItalic },
   { label: <s>S</s>, title: `Strikethrough (${mod}+Shift+X)`, run: cmdStrike },
-  { label: <span className="fmt-mono">code</span>, title: `Code (${mod}+Shift+E)`, run: cmdCode },
-  { label: <span className="fmt-mono">link</span>, title: `Link (${mod}+K)`, run: cmdLink },
   { label: <b>H</b>, title: `Heading (${mod}+Shift+H)`, run: cmdHeading },
-  { label: <span aria-hidden>•</span>, title: `Bullet list (${mod}+Shift+8)`, run: cmdBullet },
-  { label: <span aria-hidden>1.</span>, title: `Numbered list (${mod}+Shift+7)`, run: cmdOrdered },
-  { label: <span aria-hidden>☑</span>, title: `Task (${mod}+Shift+9)`, run: cmdTask },
-  { label: <span aria-hidden>❝</span>, title: `Quote (${mod}+Shift+Q)`, run: cmdQuote },
+  { label: <span aria-hidden>☑</span>, title: `To-do (${mod}+Shift+9)`, run: cmdTask },
+  { label: <span className="fmt-under">Link</span>, title: `Link (${mod}+K)`, run: "link" },
 ];
 
 function noteTitle(relativePath: string): string {
@@ -84,6 +81,9 @@ export function PaneView({
   onTitleCommit,
   onOpenWikilink,
   onHoverLink,
+  titleTools,
+  meta,
+  validateTitle,
 }: {
   docKey: string;
   content: string;
@@ -108,6 +108,12 @@ export function PaneView({
    * (400ms debounce); App resolves + renders the card at its root so this
    * file never renders a second reading surface (single-surface invariant). */
   onHoverLink?: (target: string | null, x: number, y: number) => void;
+  /** Star / more buttons beside the title (shell-owned). */
+  titleTools?: ReactNode;
+  /** One quiet line under the title: folder · words · tags. */
+  meta?: ReactNode;
+  /** Live title check (plain-words problem or null); shown under the title. */
+  validateTitle?: (title: string) => string | null;
 }): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -120,15 +126,33 @@ export function PaneView({
   cbRef.current.onHoverLink = onHoverLink;
   const [titleDraft, setTitleDraft] = useState(() => noteTitle(relativePath));
   const [bubble, setBubble] = useState<BubbleState | null>(null);
+  const [linkDialog, setLinkDialog] = useState<{ initial: string } | null>(null);
   const [linkDraft, setLinkDraft] = useState("");
-  const linkAnchorRef = useRef(0);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const linkFieldRef = useRef<HTMLInputElement>(null);
+  const titleError = validateTitle ? validateTitle(titleDraft.trim()) : null;
 
   useEffect(() => {
     setTitleDraft(noteTitle(relativePath));
   }, [relativePath]);
 
+  // A brand-new empty note opens with its title selected, so typing names it.
+  useEffect(() => {
+    if (content === "" && /^Untitled( \d+)?$/.test(noteTitle(relativePath))) {
+      const t = window.setTimeout(() => {
+        const input = ref.current?.closest(".editor-col")?.querySelector<HTMLInputElement>(".note-title-input");
+        input?.focus();
+        input?.select();
+      }, 50);
+      return () => window.clearTimeout(t);
+    }
+    return undefined;
+    // Only on open: later edits must not steal focus back to the title.
+  }, [docKey]);
+
   const commitTitle = (): void => {
     const next = titleDraft.trim();
+    if (titleError) return;
     if (!next || next === noteTitle(relativePath)) {
       setTitleDraft(noteTitle(relativePath));
       return;
@@ -179,6 +203,18 @@ export function PaneView({
       lineNumbers,
       wordWrap,
       livePreview,
+      onLink: (v) => {
+        const sel = v.state.selection.main;
+        const link = sel.empty ? linkAt(v.state, sel.head) : null;
+        setLinkDraft(link?.url ?? "");
+        setLinkError(null);
+        setLinkDialog({ initial: link?.url ?? "" });
+      },
+      title: noteTitle(linkCtx.current.relativePath),
+      linkExists: (target) => {
+        const files = workspaceIndex.list(linkCtx.current.workspaceId).map((e) => e.relativePath);
+        return resolveLinkTarget(target, files) !== null || files.some((f) => noteTitle(f).toLowerCase() === target.trim().toLowerCase());
+      },
       ...(linkCompleter ? { linkCompleter } : {}),
       onChange: (c) => {
         renderedRef.current = c;
@@ -190,6 +226,7 @@ export function PaneView({
       onSelectionActivity: (v) => cbRef.current.onSelectionActivity(v),
     });
     viewRef.current = session.view;
+    if (focusBodyAfterMount) { focusBodyAfterMount = false; session.view.focus(); }
     // Ctrl/Cmd+click on a wikilink label opens the target note. Plain
     // clicks only move the cursor — the editor never navigates away, and
     // external URLs never open from here.
@@ -299,14 +336,7 @@ export function PaneView({
       const left = Math.max(130, Math.min(coords.left, window.innerWidth - 130));
       const below = coords.top < 84;
       if (!sel.empty) {
-        setBubble({ top: below ? coords.bottom + 8 : coords.top - 8, left, below, linkUrl: null });
-        return;
-      }
-      const link = linkAt(view.state, sel.head);
-      if (link) {
-        linkAnchorRef.current = sel.head;
-        setLinkDraft(link.url);
-        setBubble({ top: below ? coords.bottom + 8 : coords.top - 8, left, below, linkUrl: link.url });
+        setBubble({ top: below ? coords.bottom + 8 : coords.top - 8, left, below });
         return;
       }
       setBubble(null);
@@ -320,12 +350,12 @@ export function PaneView({
     return () => window.removeEventListener("scroll", hideBubble, true);
   }, [hideBubble]);
 
-  const commitLinkUrl = useCallback(() => {
+  const submitLink = (): void => {
+    if (!validWebAddress(linkDraft)) { setLinkError(LINK_ADDRESS_ERROR); return; }
     const view = viewRef.current;
-    if (!view) return;
-    if (applyLinkUrl(view, linkAnchorRef.current, linkDraft.trim())) setBubble(null);
-    view.focus();
-  }, [linkDraft]);
+    setLinkDialog(null);
+    if (view) { applyLinkAddress(view, linkDraft); view.focus(); }
+  };
 
   // Step 2 Outline click-navigate + Favorites anchor jumps: scroll to a
   // 1-based line without disturbing selection more than necessary.
@@ -339,6 +369,7 @@ export function PaneView({
       const pos = view.state.doc.line(clamped).from;
       view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
       view.focus();
+      flashLine(view, pos);
     };
     window.addEventListener("takenotes:goto-line", onGotoLine);
     return () => window.removeEventListener("takenotes:goto-line", onGotoLine);
@@ -392,7 +423,15 @@ export function PaneView({
     const view = viewRef.current;
     if (!view || content === renderedRef.current) return;
     if (view.hasFocus) return;
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+    // Replace only what differs, so the caret, scroll and undo history survive.
+    const cur = view.state.doc.toString();
+    let start = 0;
+    const max = Math.min(cur.length, content.length);
+    while (start < max && cur.charCodeAt(start) === content.charCodeAt(start)) start++;
+    let endCur = cur.length;
+    let endNew = content.length;
+    while (endCur > start && endNew > start && cur.charCodeAt(endCur - 1) === content.charCodeAt(endNew - 1)) { endCur--; endNew--; }
+    view.dispatch({ changes: { from: start, to: endCur, insert: content.slice(start, endNew) } });
     renderedRef.current = content;
   }, [content]);
 
@@ -410,14 +449,28 @@ export function PaneView({
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
+                focusBodyAfterMount = true;
                 commitTitle();
                 viewRef.current?.focus();
+                window.setTimeout(() => { focusBodyAfterMount = false; }, 600);
               }
             }}
           />
+          {titleTools && <div className="title-tools">{titleTools}</div>}
         </div>}
+        {inlineTitle && titleError && <p className="note-title-error" role="alert">{titleError}</p>}
+        {inlineTitle && meta && <div className="note-meta">{meta}</div>}
         <div ref={ref} aria-label={`Editing ${displayPath(relativePath)}`} />
       </div>
+      {linkDialog && (
+        <Dialog title="Add a link" onClose={() => { setLinkDialog(null); viewRef.current?.focus(); }} initialFocus={linkFieldRef}
+          footer={<><Button onClick={() => { setLinkDialog(null); viewRef.current?.focus(); }}>Cancel</Button><Button variant="primary" onClick={submitLink}>Add link</Button></>}>
+          <form onSubmit={(e) => { e.preventDefault(); submitLink(); }}>
+            <TextField label="Web address" ref={linkFieldRef} value={linkDraft} placeholder="https://example.com"
+              error={linkError ?? undefined} onChange={(e) => { setLinkDraft(e.target.value); setLinkError(null); }} />
+          </form>
+        </Dialog>
+      )}
       {bubble && (
         <div
           className="fmt-bubble"
@@ -426,38 +479,25 @@ export function PaneView({
           style={{ top: bubble.top, left: bubble.left, transform: bubble.below ? "translate(-50%, 0)" : "translate(-50%, -100%)" }}
           onMouseDown={(e) => e.preventDefault()}
         >
-          {bubble.linkUrl !== null ? (
-            <input
-              className="fmt-link-input"
-              aria-label="Link destination"
-              placeholder="https://…"
-              value={linkDraft}
-              onChange={(e) => setLinkDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commitLinkUrl();
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
+          {FORMAT_BUTTONS.map((b) => (
+            <button
+              key={b.title}
+              className="fmt-btn"
+              title={b.title}
+              aria-label={b.title.split(" (")[0]}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                if (b.run === "link") {
+                  const v = viewRef.current;
+                  if (!v) return;
                   setBubble(null);
-                  viewRef.current?.focus();
-                }
+                  setLinkDraft(""); setLinkError(null); setLinkDialog({ initial: "" });
+                } else runCmd(b.run);
               }}
-            />
-          ) : (
-            FORMAT_BUTTONS.map((b) => (
-              <button
-                key={b.title}
-                className="fmt-btn"
-                title={b.title}
-                aria-label={b.title.split(" (")[0]}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => runCmd(b.run)}
-              >
-                {b.label}
-              </button>
-            ))
-          )}
+            >
+              {b.label}
+            </button>
+          ))}
         </div>
       )}
     </div>

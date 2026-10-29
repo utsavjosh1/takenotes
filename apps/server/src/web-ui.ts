@@ -21,6 +21,9 @@ textarea { min-height: 240px; font-family: monospace; }
 .banner.conflict { background: #fde8e8; }
 .banner.ok { background: #e6f6e6; }
 .banner.info { background: #eef; }
+table { width: 100%; border-collapse: collapse; margin: .5rem 0; }
+td, th { text-align: left; padding: .25rem .5rem; border-bottom: 1px solid #ddd; font-size: .9rem; }
+.revoked { opacity: .5; }
 </style>
 </head>
 <body>
@@ -43,6 +46,20 @@ textarea { min-height: 240px; font-family: monospace; }
   <div id="conflict" class="banner conflict"></div>
   <textarea id="editor"></textarea>
   <button id="btn-save">Save</button>
+  <h2>Agents (MCP)</h2>
+  <p>Give an AI agent scoped access to selected workspaces. Tokens are shown once.</p>
+  <input id="agent-label" placeholder="Label (e.g. claude-code)" maxlength="64" />
+  <select id="agent-workspace"></select>
+  <label><input id="agent-readonly" type="checkbox" /> read-only</label>
+  <button id="btn-agent-create">Create token</button>
+  <div id="agent-status" class="banner info"></div>
+  <div id="agent-new" style="display:none">
+    <p>Copy now — it will not be shown again:</p>
+    <pre id="agent-token"></pre>
+    <p>Client config:</p>
+    <pre id="agent-config"></pre>
+  </div>
+  <table id="agent-table"><tbody></tbody></table>
 </div>
 <script>
 let csrf = null;
@@ -84,11 +101,14 @@ async function refreshWorkspaces() {
     opt.textContent = w.displayName;
     sel.appendChild(opt);
   }
+  await refreshAgents();
 }
 document.getElementById("btn-refresh").onclick = refreshWorkspaces;
 async function logout(expired) {
   await api("/api/auth/logout", {});
   csrf = null; baseline = null;
+  document.getElementById("agent-new").style.display = "none";
+  document.getElementById("agent-token").textContent = "";
   document.getElementById("view-app").style.display = "none";
   document.getElementById("view-login").style.display = "block";
   show("login-error", expired ? "Session expired. Log in again." : "");
@@ -124,6 +144,63 @@ document.getElementById("btn-save").onclick = async () => {
   show("conflict", "");
   show("status", "Saved. revision " + body.result.hash.slice(0, 12));
   document.getElementById("btn-open").click();
+};
+async function refreshAgents() {
+  const sel = document.getElementById("agent-workspace");
+  sel.innerHTML = "";
+  for (const o of document.getElementById("workspaces").options) {
+    const opt = document.createElement("option");
+    opt.value = o.value; opt.textContent = o.textContent;
+    sel.appendChild(opt);
+  }
+  const { status, body } = await api("/api/rpc/agents.list", {});
+  if (status === 401) return await logout(true);
+  const tbody = document.querySelector("#agent-table tbody");
+  tbody.innerHTML = "";
+  if (!body.ok) return;
+  for (const t of body.result) {
+    const tr = document.createElement("tr");
+    if (t.revokedAt) tr.className = "revoked";
+    for (const text of [t.label, t.scope, t.workspaceIds.length + " workspace(s)", new Date(t.createdAt).toLocaleDateString()]) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    const td = document.createElement("td");
+    if (t.revokedAt) { td.textContent = "revoked"; }
+    else {
+      const b = document.createElement("button");
+      b.textContent = "Revoke";
+      b.onclick = async () => {
+        await api("/api/rpc/agents.revoke", { id: t.id });
+        await refreshAgents();
+      };
+      td.appendChild(b);
+    }
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+}
+document.getElementById("btn-agent-create").onclick = async () => {
+  const label = document.getElementById("agent-label").value.trim();
+  const workspaceId = document.getElementById("agent-workspace").value;
+  const scope = document.getElementById("agent-readonly").checked ? "read" : "write";
+  const { status, body } = await api("/api/rpc/agents.create", { label, workspaceIds: [workspaceId], scope });
+  if (status === 401) return await logout(true);
+  if (!body.ok) { show("agent-status", "Could not create: " + body.error.message); return; }
+  show("agent-status", "");
+  const token = body.result.token;
+  document.getElementById("agent-token").textContent = token;
+  document.getElementById("agent-config").textContent = JSON.stringify({
+    mcpServers: { takenote: {
+      command: "node",
+      args: ["takenotes-mcp.cjs", "--server", location.origin],
+      env: { TAKENOTES_TOKEN: token },
+    } },
+  }, null, 2);
+  document.getElementById("agent-new").style.display = "block";
+  document.getElementById("agent-label").value = "";
+  await refreshAgents();
 };
 (async () => {
   const res = await fetch("/api/auth/session");

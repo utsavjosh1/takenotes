@@ -198,3 +198,23 @@ export function rewriteScheduledToken(line: string, targetDate: string): string 
     return `@scheduled(${targetDate}${suffix})`;
   });
 }
+
+/** Set `@scheduled` to `date` at `hour:00` (`2026-10-28T14:00`). Same rules
+ * as `rewriteScheduledToken`: only the scheduled token changes; `@due` and
+ * every other byte are untouched. Throws on a bad date or hour. */
+export function rewriteScheduledHour(line: string, date: string, hour: number): string {
+  if (!assertDailyDate(date)) throw new Error("Date must be YYYY-MM-DD.");
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) throw new Error("Hour must be 0-23.");
+  const value = `${date}T${String(hour).padStart(2, "0")}:00`;
+  SCHEDULED_TOKEN_RE.lastIndex = 0;
+  const has = SCHEDULED_TOKEN_RE.test(line);
+  SCHEDULED_TOKEN_RE.lastIndex = 0;
+  return has
+    ? line.replace(SCHEDULED_TOKEN_RE, `@scheduled(${value})`)
+    : `${line.replace(/\s+$/, "")} @scheduled(${value})`;
+}
+
+/** Remove the `@scheduled` token (and the space before it). `@due` stays. */
+export function removeScheduledToken(line: string): string {
+  return line.replace(/\s*@scheduled\([^)]*\)/g, "");
+}

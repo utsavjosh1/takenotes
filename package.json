@@ -25,6 +25,7 @@
     "server:start": "node dist-server/server.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "ui:tokens": "node tools/scripts/generate-ui-tokens.mjs",
+    "icons:export": "node tools/scripts/export-app-icons.mjs",
     "ui:tokens:check": "node tools/scripts/generate-ui-tokens.mjs --check",
     "lint": "eslint .",
     "test": "vitest run",
@@ -46,6 +47,7 @@
   "devDependencies": {
     "@electron/fuses": "2.1.3",
     "@eslint/js": "10.0.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "26.6.2",
     "@vitejs/plugin-react": "6.1.1",
     "electron": "44.4.3",
@@ -53,6 +55,7 @@
     "esbuild": "0.28.2",
     "eslint": "10.13.0",
     "globals": "17.12.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.1",
     "vite": "8.3.4",

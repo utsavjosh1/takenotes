@@ -99,7 +99,7 @@ export function shortcutLabelsFor(platform: DesktopPlatform): Record<string, str
   const ids: CommandId[] = [
     "note.new", "editor.save", "note.close", "quickOpen.open", "app.closeWindow",
     "search.open", "palette.open", "editor.find", "settings.open",
-    "view.toggleSidebar", "view.toggleFocus", "view.nextTab", "view.prevTab",
+    "shortcuts.show", "view.toggleSidebar", "view.toggleRightPanel", "view.toggleFocus", "view.nextTab", "view.prevTab",
     "tree.rename", "tree.trash",
   ];
   for (const id of ids) {

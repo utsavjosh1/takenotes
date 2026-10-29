@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { Button, EmptyState } from "@takenotes/ui/dom";
 import "@takenotes/ui/tokens.css";
+import "@takenotes/ui/tailwind.css";
 import "@takenotes/ui/dom.css";
 import "./styles/tokens.css";
 import "./styles/app.css";

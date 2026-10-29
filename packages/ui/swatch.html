@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>takenotes tokens</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="./src/tokens.css">
+<style>
+  body{margin:0;padding:24px;background:var(--tn-surface-app);color:var(--tn-text-primary);font:14px/1.4 system-ui,sans-serif}
+  h1{font-size:20px;margin:0 0 12px}
+  button{background:var(--tn-action-fill);color:var(--tn-action-text);border:0;border-radius:var(--tn-radius-control);padding:6px 12px;font:inherit;cursor:pointer;margin-bottom:16px}
+  button:focus-visible{outline:2px solid var(--tn-accent);outline-offset:2px}
+  #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+  .sw{border:1px solid var(--tn-border-subtle);border-radius:var(--tn-radius-dialog);background:var(--tn-surface-editor);padding:8px;font-size:12px}
+  .chip{height:36px;border-radius:var(--tn-radius-control);border:1px solid var(--tn-border-subtle);margin-bottom:6px}
+  code{color:var(--tn-text-muted)}
+</style>
+<h1>takenotes design tokens</h1>
+<button id="t">Toggle light / dark (<span id="m">light</span>)</button>
+<div id="grid"></div>
+<script>
+  const root = document.documentElement, grid = document.getElementById("grid");
+  const names = new Set();
+  for (const sheet of document.styleSheets) for (const rule of sheet.cssRules)
+    for (const n of rule.style ? [...rule.style] : []) if (n.startsWith("--tn-") && !/space|font-size|line-height|target|radius/.test(n)) names.add(n);
+  function paint() {
+    grid.replaceChildren();
+    for (const n of [...names].sort()) {
+      const v = getComputedStyle(root).getPropertyValue(n).trim();
+      const el = document.createElement("div"); el.className = "sw";
+      const chip = document.createElement("div"); chip.className = "chip";
+      chip.style.background = n === "--tn-shadow-overlay" ? "var(--tn-surface-overlay)" : `var(${n})`;
+      if (n === "--tn-shadow-overlay") chip.style.boxShadow = v;
+      el.append(chip, Object.assign(document.createElement("div"), { textContent: n.replace("--tn-", "") }), Object.assign(document.createElement("code"), { textContent: v }));
+      grid.append(el);
+    }
+  }
+  document.getElementById("t").onclick = () => {
+    const next = root.dataset.theme === "dark" ? "light" : "dark";
+    root.dataset.theme = next; document.getElementById("m").textContent = next; paint();
+  };
+  paint();
+</script>

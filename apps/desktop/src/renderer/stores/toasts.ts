@@ -1,11 +1,11 @@
 import { create } from "zustand";
-import type { Toast } from "../components/types";
+import type { Toast, ToastAction } from "../components/types";
 
 let toastId = 1;
 
 type ToastStore = {
   toasts: Toast[];
-  push: (text: string, kind?: Toast["kind"]) => void;
+  push: (text: string, kind?: Toast["kind"], action?: ToastAction) => void;
   dismiss: (id: number) => void;
 };
 
@@ -14,9 +14,9 @@ type ToastStore = {
  * pushable from any component without prop threading. */
 export const useToastStore = create<ToastStore>()((set) => ({
   toasts: [],
-  push: (text, kind = "info") => {
+  push: (text, kind = "info", action) => {
     const id = toastId++;
-    set((s) => ({ toasts: [...s.toasts.slice(-3), { id, kind, text }] }));
+    set((s) => ({ toasts: [...s.toasts.slice(-3), { id, kind, text, ...(action ? { action } : {}) }] }));
     if (kind === "info") {
       setTimeout(() => {
         set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));

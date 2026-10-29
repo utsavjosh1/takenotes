@@ -25,9 +25,15 @@ export type CommandsDeps = {
   checkUpdates: () => void;
   setView: (v: SidebarView) => void;
   setSidebarOpen: (v: boolean | ((p: boolean) => boolean)) => void;
+  setRightOpen: (v: boolean | ((p: boolean) => boolean)) => void;
+  /** Opens a main-column page (same as the rail buttons). */
+  openPage: (p: "today" | "calendar" | "tags" | "tasks") => void;
+  openShortcuts: () => void;
   toggleFocusMode: () => void;
   openSettings: () => void;
   openPalette: (initialQuery: string) => void;
+  /** Single-tab close prompts on dirty; bulk paths use silent closeTab. */
+  requestCloseTab?: (key: string) => void;
   /** Step 2 override-aware label (defaults to platform.shortcutLabel). */
   shortcutLabel?: (id: CommandId) => string;
   /** Step 2 Favorites: palette-accessible add of the active note. */
@@ -101,7 +107,7 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       "note.new": () => newNote(),
       "note.open": () => deps.openPalette(""),
       "note.openToday": () => { void openToday(); },
-      "note.close": () => { const a = activeDoc(docs.layout); if (a) docs.closeTab(a.key); },
+      "note.close": () => { const a = activeDoc(docs.layout); if (a) (deps.requestCloseTab ?? docs.closeTab)(a.key); },
       "note.reopenClosed": () => { void docs.reopenClosedTab(); },
       "workspace.open": () => { deps.openLocal(); },
       "workspace.openWsl": () => { deps.openWslDialog(); },
@@ -112,6 +118,7 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       "quickOpen.open": () => deps.openPalette(""),
       "palette.open": () => deps.openPalette(">"),
       "view.toggleSidebar": () => deps.setSidebarOpen((v) => !v),
+      "view.toggleRightPanel": () => deps.setRightOpen((v) => !v),
       "view.toggleFocus": () => deps.toggleFocusMode(),
       // Step 9 zoom quick-adjust: events keep settings (the persisted
       // factor) as the single source — App applies them without
@@ -138,9 +145,12 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       "favorites.addActive": () => deps.addActiveToFavorites?.(),
       "template.insert": () => window.dispatchEvent(new CustomEvent("takenotes:open-template-picker")),
       "task.new": () => window.dispatchEvent(new CustomEvent("takenotes:open-task-dialog")),
-      "today.open": () => { deps.setView("today"); deps.setSidebarOpen(true); },
-      "calendar.open": () => { deps.setView("calendar"); deps.setSidebarOpen(true); },
-      "tags.open": () => { deps.setView("tags"); deps.setSidebarOpen(true); },
+      "today.open": () => deps.openPage("today"),
+      "calendar.open": () => deps.openPage("calendar"),
+      "tags.open": () => deps.openPage("tags"),
+      "tasks.open": () => deps.openPage("tasks"),
+      "folder.new": () => { deps.setView("files"); deps.setSidebarOpen(true); tree.beginCreate(tree.preferredNewNoteDir(), true); },
+      "shortcuts.show": () => deps.openShortcuts(),
       "properties.open": () => { deps.setView("properties"); deps.setSidebarOpen(true); },
       "collections.open": () => { deps.setView("collections"); deps.setSidebarOpen(true); },
       "graph.open": () => { deps.setView("graph"); deps.setSidebarOpen(true); },
@@ -157,13 +167,18 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       if (id === "workspace.refresh" || id === "workspace.close" || id === "search.open" || id === "note.openToday") return workspace !== null;
       if (id === "workspace.openWsl") return platform.capabilities.wsl && deps.wslEnabled;
       if (id === "app.checkForUpdates") return platform.capabilities.updates;
-      // Registered but disabled until recent-workspace switching lands.
-      if (id === "workspace.switch") return false;
+      // workspace.switch stays registered-but-disabled: P1 requires the ID
+      // (see P1_REQUIRED_COMMAND_IDS), but no switcher UI exists yet — the
+      // palette has no workspace mode and recents live only on the welcome
+      // screen. Do NOT retarget this to openLocal: that would mislabel the
+      // folder picker as a switcher. Enable for real once a recent-workspace
+      // picker lands.
       if (id === "tree.expandAll" || id === "tree.collapseAll") return workspace !== null;
       if (id === "favorites.addActive") return activeDoc(docs.layout) !== null;
       if (id === "template.insert") return workspace !== null && activeDoc(docs.layout) !== null;
       if (id === "task.new" || id === "canvas.new" || id === "file.import") return workspace !== null;
-      if (id === "today.open") return workspace !== null;
+      if (id === "today.open" || id === "tasks.open" || id === "folder.new") return workspace !== null;
+      if (id === "shortcuts.show") return true;
       if (id === "calendar.open") return workspace !== null;
       if (id === "tags.open" || id === "properties.open" || id === "collections.open" || id === "graph.open") return workspace !== null;
       return runners[id] !== undefined;
