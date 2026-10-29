@@ -4,12 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "help": "echo 'Expo scaffold only: add expo/react-native dependencies before running a mobile app.'"
+    "help": "echo 'M0: Expo runtime deps not yet installed. Run: npx expo install expo expo-router expo-file-system expo-secure-store expo-sharing expo-document-picker @react-native-async-storage/async-storage'",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.json",
+    "test": "vitest run --root ../.. tests/mobile/m0-seam.test.ts tests/mobile/m1-browse.test.ts tests/mobile/m2-edit.test.ts tests/mobile/m3-polish.test.ts"
   },
   "dependencies": {
     "@takenotes/contracts": "0.0.8",
     "@takenotes/core": "0.0.8",
     "@takenotes/platform": "0.0.8",
     "@takenotes/ui": "0.0.8"
+  },
+  "exports": {
+    "./adapters/*": "./src/adapters/*.ts",
+    "./browse/*": "./src/browse/*.ts",
+    "./capture/*": "./src/capture/*.ts",
+    "./editor/*": "./src/editor/*.ts",
+    "./index/*": "./src/index/*.ts",
+    "./settings/*": "./src/settings/*.ts",
+    "./share/*": "./src/share/*.ts",
+    "./workspace/*": "./src/workspace/*.ts",
+    "./sync/*": "./src/sync/*.ts"
   }
 }

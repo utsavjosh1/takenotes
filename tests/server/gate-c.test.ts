@@ -63,7 +63,41 @@ async function makeHarness(options: { insecure?: boolean; sessionTtlMs?: number 
 }
 
 function cleanup(h: Harness): void {
-  rmSync(h.dataDir, { recursive: true, force: true });
+  // Windows CI (windows-latest) intermittently fails recursive temp cleanup
+  // with ENOTEMPTY/EBUSY/EPERM: AV indexing, lingering file handles, or
+  // async server persistence can hold the dir briefly after the test ends.
+  // Retry with backoff; never fail the suite over temp-dir teardown.
+  // See PR #48 check-windows flake: ENOTEMPTY on takenotes-gatec-* cleanup.
+  const delays = [25, 100, 400];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      rmSync(h.dataDir, { recursive: true, force: true, maxRetries: 5 });
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      const retryable = code === "ENOTEMPTY" || code === "EBUSY" || code === "EPERM";
+      if (!retryable || attempt >= delays.length) {
+        // Last resort: best-effort async retry in background, don't fail test.
+        // No .unref(): the timer must keep the process alive so the final
+        // removal attempt runs before exit (else h.dataDir leaks on Windows).
+        if (retryable) {
+          setTimeout(() => {
+            try {
+              rmSync(h.dataDir, { recursive: true, force: true, maxRetries: 5 });
+            } catch {
+              // ignore — OS temp reaper will collect it
+            }
+          }, 1000);
+          return;
+        }
+        throw err;
+      }
+      const start = Date.now();
+      while (Date.now() - start < (delays[attempt] ?? 100)) {
+        // tiny busy-wait: keeps cleanup synchronous for `finally` semantics
+      }
+    }
+  }
 }
 
 describe("Gate C cookie contract", () => {
@@ -308,7 +342,11 @@ describe("Gate C restart + rotation", () => {
       await expect(FileOwnerAuth.bootstrap(join(dir, "app"), NEXT_PASSWORD)).rejects.toThrow(/already initialized/);
       await expect(FileOwnerAuth.open({ appDir: join(dir, "missing") })).rejects.toThrow(/TAKENOTES_PASSWORD/);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+      } catch {
+        // ignore Windows AV/handle flake on temp teardown — same as cleanup()
+      }
     }
   });
 

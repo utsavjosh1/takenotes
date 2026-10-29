@@ -157,8 +157,12 @@ export function useCommands(deps: CommandsDeps): CommandsApi {
       if (id === "workspace.refresh" || id === "workspace.close" || id === "search.open" || id === "note.openToday") return workspace !== null;
       if (id === "workspace.openWsl") return platform.capabilities.wsl && deps.wslEnabled;
       if (id === "app.checkForUpdates") return platform.capabilities.updates;
-      // Registered but disabled until recent-workspace switching lands.
-      if (id === "workspace.switch") return false;
+      // workspace.switch stays registered-but-disabled: P1 requires the ID
+      // (see P1_REQUIRED_COMMAND_IDS), but no switcher UI exists yet — the
+      // palette has no workspace mode and recents live only on the welcome
+      // screen. Do NOT retarget this to openLocal: that would mislabel the
+      // folder picker as a switcher. Enable for real once a recent-workspace
+      // picker lands.
       if (id === "tree.expandAll" || id === "tree.collapseAll") return workspace !== null;
       if (id === "favorites.addActive") return activeDoc(docs.layout) !== null;
       if (id === "template.insert") return workspace !== null && activeDoc(docs.layout) !== null;

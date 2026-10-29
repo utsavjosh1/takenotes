@@ -1,8 +1,9 @@
 /**
  * Core NoteService (ADR-0014, Gate A).
  *
- * Canonical `note.read/update` orchestration shared by every transport
- * (IPC today, HTTP tomorrow). Owns workspace resolution, path policy,
+ * Canonical `note.read/update/create` orchestration shared by every transport
+ * (IPC today, HTTP tomorrow) and every host (desktop, server, mobile).
+ * Owns workspace resolution, path policy,
  * confinement, BOM/newline handling, and `expectedRevision` CONFLICT.
  * Host IO goes through `HostFilesystem` — never `node:fs` directly.
  *
@@ -153,6 +154,52 @@ export class CoreNoteService {
       return { error: appError("CONFLICT", "The file changed on disk. Reload before saving.") };
     }
     const bytes = encodeUtf8(content, newlineStyle, hadBom, false);
+    if (bytes.length > MAX_FILE_BYTES) {
+      return { error: appError("TOO_LARGE", "This file is too large to edit safely.") };
+    }
+    try {
+      await this.host.writeBytesAtomic(r.absolutePath, bytes);
+    } catch (err) {
+      return { error: mapFsError(err as NodeJS.ErrnoException, "file") };
+    }
+    try {
+      const st = await this.host.stat(r.absolutePath);
+      return { revision: revisionOfBytes(bytes, st.mtimeMs) };
+    } catch (err) {
+      return { error: mapFsError(err as NodeJS.ErrnoException, "file") };
+    }
+  }
+
+  /** Create a new note. Fails `ALREADY_EXISTS` when present — never
+   *  overwrites (updates own that path via `expectedRevision`). Callers
+   *  ensure parent directories first (hosts differ: desktop fs vs mobile
+   *  sandbox). New files are LF without BOM; newlines/BOM only matter on
+   *  subsequent updates.
+   *
+   *  Race caveat: existence is check-then-write — the `HostFilesystem`
+   *  seam has no exclusive-create primitive, so two concurrent creators
+   *  may both succeed (last wins) instead of one failing `ALREADY_EXISTS`.
+   *  Desktop's `createTextFile` stays stronger (`wx`); do not replace it
+   *  with this method until the seam grows exclusive write. Safe for
+   *  single-writer flows (first-run Inbox, explicit Daily create). */
+  async create(
+    ws: CoreWorkspace,
+    relativePathInput: string,
+    content: string,
+  ): Promise<{ revision: FileRevision } | { error: AppError }> {
+    const v = validateNoteRelativePath(ws.kind, relativePathInput);
+    if ("error" in v) return v;
+    const r = await this.resolveInsideRoot(ws.root, ws.kind, v.relativePath);
+    if ("error" in r) return r;
+    try {
+      await this.host.stat(r.absolutePath);
+      return { error: appError("ALREADY_EXISTS", "Note already exists.") };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        return { error: mapFsError(err as NodeJS.ErrnoException, "file") };
+      }
+    }
+    const bytes = encodeUtf8(content, "lf", false, true);
     if (bytes.length > MAX_FILE_BYTES) {
       return { error: appError("TOO_LARGE", "This file is too large to edit safely.") };
     }
