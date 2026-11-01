@@ -2,7 +2,7 @@
  * Platform capabilities (§5, §180). Callers branch on *capabilities*, not on
  * OS identity — e.g. `capabilities.wsl` instead of `platform === "windows"`.
  */
-import type { DesktopPlatform } from "./types.js";
+import type { DesktopPlatform, MobilePlatform } from "./types.js";
 
 export type PlatformCapabilities = {
   /** WSL workspace support. Windows-only capability (§2, §184). */
@@ -90,4 +90,34 @@ export function getCapabilities(platform: DesktopPlatform): PlatformCapabilities
     case "linux":
       return { ...LINUX };
   }
+}
+
+/** Mobile capabilities. Callers branch on these, never on `Platform.OS`
+ *  directly. Mobile is offline-only, sandbox-only: no WSL, no system
+ *  trash, no menu bar, no window controls. */
+export type MobileCapabilities = {
+  platform: MobilePlatform;
+  /** App-sandbox filesystem only; no user-visible FS root. */
+  sandboxOnly: true;
+  /** No OS trash mapping — deletes are permanent with confirm. */
+  supportsSystemTrash: false;
+  /** Share sheet / Files app import-export is the escape hatch. */
+  supportsShareSheet: true;
+  /** Haptics available for toggle/record affordances. */
+  haptics: boolean;
+  /** Offline-first; network only for future LAN pair (V2). */
+  offlineOnly: true;
+};
+
+export function getMobileCapabilities(platform: MobilePlatform): MobileCapabilities {
+  return {
+    platform,
+    sandboxOnly: true,
+    supportsSystemTrash: false,
+    supportsShareSheet: true,
+    // Both iOS (CoreHaptics) and Android (Vibrator) provide haptics for
+    // toggle/record affordances; callers branch on this, never Platform.OS.
+    haptics: platform === "ios" || platform === "android",
+    offlineOnly: true,
+  };
 }

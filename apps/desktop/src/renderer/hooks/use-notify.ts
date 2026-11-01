@@ -1,9 +1,10 @@
 import { useCallback } from "react";
 import { useToastStore } from "../stores/toasts";
 import { friendlyError } from "../error-text";
+import type { ToastAction } from "../components/types";
 
 export type Notify = {
-  toast: (text: string, kind?: "info" | "error") => void;
+  toast: (text: string, kind?: "info" | "error", action?: ToastAction) => void;
   errToast: (error: { code: string; message: string }, prefix?: string) => void;
 };
 
@@ -12,7 +13,7 @@ export type Notify = {
  * `{ code, message }` every IPC result carries. */
 export function useNotify(): Notify {
   const push = useToastStore((s) => s.push);
-  const toast = useCallback((text: string, kind: "info" | "error" = "info") => push(text, kind), [push]);
+  const toast = useCallback((text: string, kind: "info" | "error" = "info", action?: ToastAction) => push(text, kind, action), [push]);
   const errToast = useCallback(
     (error: { code: string; message: string }, prefix?: string) => {
       const text = friendlyError(error.code, error.message);

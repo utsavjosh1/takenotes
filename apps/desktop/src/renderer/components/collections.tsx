@@ -6,6 +6,7 @@
  */
 import { useMemo, useState, type JSX } from "react";
 import { evaluateCollectionView } from "@takenotes/core/collections/evaluate";
+import type { CollectionViewKind } from "@takenotes/core/collections/store";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import type { CollectionsApi } from "../hooks/use-collections";
 import { displayPath } from "./types";
@@ -25,6 +26,7 @@ export function CollectionsPane({
   const [viewName, setViewName] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newView, setNewView] = useState("");
+  const [newKind, setNewKind] = useState<CollectionViewKind>("list");
 
   const active = collections.files.find((f) => f.file === (selected ?? collections.files[0]?.file)) ?? null;
   const view = active ? (active.doc.views.find((v) => v.name === (viewName ?? active.doc.views[0]?.name)) ?? active.doc.views[0]!) : null;
@@ -132,17 +134,26 @@ export function CollectionsPane({
             <input
               className="rename-input"
               aria-label="New view name"
-              placeholder="New list view…"
+              placeholder={`New ${newKind} view…`}
               value={newView}
               onChange={(e) => setNewView(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && newView.trim()) {
-                  void collections.addView(active.file, { name: newView.trim(), kind: "list" });
+                  void collections.addView(active.file, { name: newView.trim(), kind: newKind });
                   setNewView("");
                 }
                 e.stopPropagation();
               }}
             />
+            <select
+              aria-label="New view kind"
+              value={newKind}
+              onChange={(e) => setNewKind(e.target.value === "table" ? "table" : "list")}
+              title="View kind"
+            >
+              <option value="list">List</option>
+              <option value="table">Table</option>
+            </select>
             {active.doc.views.length > 1 && (
               <button title={`Delete view ${view.name}`} onClick={() => { void collections.removeView(active.file, view.name); setViewName(null); }}>
                 Delete view

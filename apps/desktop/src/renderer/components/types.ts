@@ -20,7 +20,8 @@ export type TabState = {
   pinned?: boolean;
 };
 
-export type Toast = { id: number; kind: "info" | "error"; text: string };
+export type ToastAction = { label: string; run: () => void };
+export type Toast = { id: number; kind: "info" | "error"; text: string; action?: ToastAction };
 export type CtxMenu = {
   x: number;
   y: number;

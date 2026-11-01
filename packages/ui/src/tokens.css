@@ -11,10 +11,11 @@
   --tn-space-10: 40px;
   --tn-space-12: 48px;
   --tn-space-16: 64px;
-  --tn-radius-row: 6px;
-  --tn-radius-control: 8px;
-  --tn-radius-menu: 12px;
-  --tn-radius-dialog: 16px;
+  --tn-radius-row: 4px;
+  --tn-radius-control: 6px;
+  --tn-radius-menu: 6px;
+  --tn-radius-dialog: 8px;
+  --tn-radius-max: 10px;
   --tn-font-size-secondary: 0.75rem;
   --tn-font-size-control: 0.875rem;
   --tn-font-size-heading: 1.25rem;
@@ -40,12 +41,15 @@
   --tn-surface-input: #fffdf7;
   --tn-surface-hover: #ece4d1;
   --tn-surface-selected: #ece8ff;
+  --tn-surface-panel: #fbf7ef;
   --tn-text-primary: #191817;
   --tn-text-secondary: #4c4a45;
   --tn-text-muted: #6c6558;
+  --tn-text-faint: #968d7d;
   --tn-border-subtle: #e5dcc8;
   --tn-border-control: #8a806d;
   --tn-accent: #4f41d6;
+  --tn-accent-soft: #e3dcff;
   --tn-accent-hover: #4032ba;
   --tn-action-fill: #1d1c1a;
   --tn-action-text: #fffdf7;
@@ -56,9 +60,16 @@
   --tn-danger-text: #a53240;
   --tn-danger-surface: #fcebed;
   --tn-selection: #e3dcff;
+  --tn-shadow-overlay: 0 12px 40px rgba(40,30,10,.18);
   --tn-code-surface: #f3ecdd;
   --tn-highlight-surface: #ffdf8e;
   --tn-scrollbar: #8a7d63;
+  --tn-graph-1: #e45649;
+  --tn-graph-2: #986801;
+  --tn-graph-3: #50a14f;
+  --tn-graph-4: #4078f2;
+  --tn-graph-5: #a626a4;
+  --tn-graph-6: #0184bc;
 }
 
 [data-theme="dark"] {
@@ -70,12 +81,15 @@
   --tn-surface-input: #191613;
   --tn-surface-hover: #322b22;
   --tn-surface-selected: #342b50;
+  --tn-surface-panel: #1d1a15;
   --tn-text-primary: #f4ecd9;
   --tn-text-secondary: #d9cfae;
   --tn-text-muted: #b7ad9b;
+  --tn-text-faint: #8f8677;
   --tn-border-subtle: #38322a;
   --tn-border-control: #887d69;
   --tn-accent: #ad9fff;
+  --tn-accent-soft: #2c2a48;
   --tn-accent-hover: #c3b9ff;
   --tn-action-fill: #f4ecd9;
   --tn-action-text: #191817;
@@ -86,7 +100,14 @@
   --tn-danger-text: #ffadb5;
   --tn-danger-surface: #3b2025;
   --tn-selection: #493968;
+  --tn-shadow-overlay: 0 12px 40px rgba(0,0,0,.5);
   --tn-code-surface: #26211a;
   --tn-highlight-surface: #59451b;
   --tn-scrollbar: #857861;
+  --tn-graph-1: #e06c75;
+  --tn-graph-2: #d8a657;
+  --tn-graph-3: #98c379;
+  --tn-graph-4: #61afef;
+  --tn-graph-5: #c678dd;
+  --tn-graph-6: #56b6c2;
 }

@@ -9,10 +9,10 @@ import { validatePosixRelativePath, validateWorkspaceId } from "./path-security.
 import { workspaceKeyFor } from "./drafts.js";
 
 export const RECOVERY_VERSION = 1;
-export const RECOVERY_THROTTLE_MS = 5 * 60 * 1000;
+export const RECOVERY_THROTTLE_MS = 60 * 1000;
 export const RECOVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
-export type RecoveryReason = "edit" | "save" | "close" | "shutdown" | "restore-before";
+export type RecoveryReason = "edit" | "save" | "close" | "shutdown" | "restore-before" | "before-overwrite" | "before-reload" | "before-agent-undo";
 
 /**
  * Stable recovery namespace for one opened Workspace (H-01).
@@ -115,7 +115,7 @@ function validateRecoveryPath(workspaceIdInput: unknown, relativePathInput: unkn
 }
 
 function isRecoveryReason(v: unknown): v is RecoveryReason {
-  return v === "edit" || v === "save" || v === "close" || v === "shutdown" || v === "restore-before";
+  return typeof v === "string" && ["edit", "save", "close", "shutdown", "restore-before", "before-overwrite", "before-reload", "before-agent-undo"].includes(v);
 }
 
 function isRecord(v: unknown): v is RecoveryRecord {

@@ -257,3 +257,31 @@ export function applyLinkUrl(view: EditorView, labelPos: number, url: string): b
   view.dispatch(view.state.update({ changes: edit, userEvent: "input.format" }));
   return true;
 }
+
+/** Web addresses accepted by the Link dialog: http(s) with a real host. */
+export function validWebAddress(value: string): boolean {
+  try {
+    const u = new URL(value.trim());
+    return (u.protocol === "http:" || u.protocol === "https:") && (u.hostname.includes(".") || u.hostname === "localhost");
+  } catch {
+    return false;
+  }
+}
+
+export const LINK_ADDRESS_ERROR = "Enter a full web address, like https://example.com";
+
+/** Applies a validated address: edits the link under the caret, wraps the
+ * selection, or inserts the address as its own label. */
+export function applyLinkAddress(view: EditorView, url: string): void {
+  const state = view.state;
+  const { from, to } = state.selection.main;
+  const addr = url.trim();
+  if (from === to) {
+    const link = linkAt(state, from);
+    if (link) { view.dispatch({ changes: { from: link.urlFrom, to: link.urlTo, insert: addr }, userEvent: "input.format" }); return; }
+    view.dispatch({ changes: { from, insert: `[${addr}](${addr})` }, userEvent: "input.format" });
+    return;
+  }
+  const label = state.sliceDoc(from, to);
+  view.dispatch({ changes: { from, to, insert: `[${label}](${addr})` }, selection: { anchor: from + label.length + 2 + addr.length + 2 }, userEvent: "input.format" });
+}

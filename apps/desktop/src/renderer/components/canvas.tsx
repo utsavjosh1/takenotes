@@ -372,6 +372,11 @@ export function CanvasEditor({
       )}
       {opError && <p className="inline-error" style={{ padding: "0 12px" }}>{opError}</p>}
 
+      {doc.nodes.length === 0 && (
+        <p className="pane-hint" style={{ padding: "8px 12px" }}>
+          Empty canvas — add a card with + Text or + Note above. Drag to pan, scroll to zoom.
+        </p>
+      )}
       <div className="pane-toolbar" role="toolbar" aria-label="Canvas view">
         <button onClick={() => zoomAt(300, 230, 1.25)} aria-label="Zoom in">+</button>
         <button onClick={() => zoomAt(300, 230, 0.8)} aria-label="Zoom out">−</button>

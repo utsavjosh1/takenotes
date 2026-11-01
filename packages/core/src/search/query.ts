@@ -428,6 +428,9 @@ class Parser {
         if (lname === "path") return { node: { kind: "path", value: v } };
         if (lname === "content") return { node: { kind: "content", value: v } };
         if (lname === "section") return { node: { kind: "section", value: v } };
+        // `task:open` / `task:done` select by state; any other value matches task text.
+        if (lname === "task" && v === "open") return { node: { kind: "taskTodo" } };
+        if (lname === "task" && v === "done") return { node: { kind: "taskDone" } };
         if (lname === "task") return { node: { kind: "task", value: v } };
         if (lname === "block") return { node: { kind: "block", value: v } };
         return { node: { kind: "ignoreCase", value: v } };

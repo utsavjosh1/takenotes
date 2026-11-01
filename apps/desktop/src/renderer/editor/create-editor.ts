@@ -3,8 +3,11 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, ViewUpdate, key
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
-import { wikilinkCompletionSource, type LinkCompleteDeps } from "./complete";
+import { addBlockButton } from "./add-block";
+import { slashCompletionSource, wikilinkCompletionSource, type LinkCompleteDeps } from "./complete";
 import { search, searchKeymap } from "@codemirror/search";
+import { createFindPanel } from "./find-panel";
+import { flashField } from "./flash";
 import { wysiwyg } from "./wysiwyg";
 import {
   cmdBold,
@@ -32,10 +35,16 @@ export type EditorOptions = {
   wordWrap: boolean;
   /** Live preview (default on). Off renders plain markdown source. */
   livePreview?: boolean;
+  /** Whether a `[[target]]` resolves to a note (unresolved links render amber). */
+  linkExists?: (target: string) => boolean;
+  /** Note title: a first heading repeating it is hidden on the page. */
+  title?: string;
   /** `[[` file/heading completion (absent = no link completer). */
   linkCompleter?: LinkCompleteDeps;
   onChange: (content: string) => void;
   onCursor?: (line: number, col: number) => void;
+  /** Ctrl+K: the host opens its Link dialog (falls back to inline `[](url)`). */
+  onLink?: (view: EditorView) => void;
   /** Selection/focus changes for the floating format bubble. */
   onSelectionActivity?: (view: EditorView) => void;
 };
@@ -103,7 +112,6 @@ export function createEditor(parent: HTMLElement, initialContent: string, opts: 
     { tag: tags.link, class: "tok-link" },
     { tag: tags.url, class: "tok-link" },
     { tag: [tags.meta, tags.processingInstruction, tags.comment], class: "tok-meta" },
-    { tag: tags.list, class: "tok-meta" },
     { tag: tags.quote, class: "tok-quote" },
   ]);
 
@@ -132,8 +140,8 @@ export function createEditor(parent: HTMLElement, initialContent: string, opts: 
       ".cm-activeLine": { backgroundColor: "transparent" },
       ".tok-heading": { fontWeight: "700", color: "var(--text-primary)" },
       ".tok-h1": { fontSize: "1.75em", lineHeight: "1.25" },
-      ".tok-h2": { fontSize: "1.45em", lineHeight: "1.3" },
-      ".tok-h3": { fontSize: "1.2em" },
+      ".tok-h2": { fontSize: "1.4em", lineHeight: "1.3" },
+      ".tok-h3": { fontSize: "1.15em", lineHeight: "1.35" },
       ".tok-h4": { fontSize: "1.05em" },
       ".tok-h5": { fontSize: "1em" },
       ".tok-h6": { fontSize: "0.95em", color: "var(--text-secondary)" },
@@ -162,23 +170,41 @@ export function createEditor(parent: HTMLElement, initialContent: string, opts: 
     // Find + replace panel (replace/replace-all buttons ship inside the
     // panel) with match highlighting. openSearchPanel works without this,
     // but the static extension keeps replace reliably available.
-    search(),
+    search({ top: true, createPanel: createFindPanel }),
     // Markdown-backed WYSIWYG: inline marks hide, task markers become
     // live checkboxes, tables/callouts/code/media earn in-editor styling.
     // The doc stays plain Markdown on this single surface. The cursor
     // line always reveals raw source; `livePreview: false` shows source
     // everywhere (settings kill-switch).
-    wysiwyg({ livePreview: opts.livePreview !== false }),
+    wysiwyg({
+      livePreview: opts.livePreview !== false,
+      ...(opts.linkExists ? { linkExists: opts.linkExists } : {}),
+      ...(opts.title ? { title: opts.title } : {}),
+    }),
     // `[[` file/heading completion (Step 4): files disambiguate by
     // folder path, `[[file#` completes headings, insertion honors the
     // link-generation setting. Absent without a completer.
-    ...(opts.linkCompleter
-      ? [autocompletion({ override: [wikilinkCompletionSource(opts.linkCompleter)], activateOnTyping: true })]
-      : []),
+    autocompletion({
+      override: opts.linkCompleter ? [wikilinkCompletionSource(opts.linkCompleter), slashCompletionSource()] : [slashCompletionSource()],
+      activateOnTyping: true,
+    }),
+    // Typing "[] " at the start of a line makes a to-do, like the other
+    // silent shortcuts ("# ", "- ", "> " already work as plain text).
+    EditorView.inputHandler.of((view, from, to, text) => {
+      if (text !== " ") return false;
+      const line = view.state.doc.lineAt(from);
+      const before = view.state.sliceDoc(line.from, from);
+      if (!/^\s*\[\]$/.test(before)) return false;
+      const indent = /^\s*/.exec(before)![0];
+      view.dispatch({ changes: { from: line.from, to, insert: `${indent}- [ ] ` }, selection: { anchor: line.from + indent.length + 6 } });
+      return true;
+    }),
+    flashField,
+    addBlockButton(),
     closeBrackets(),
     // Indent guides for nested lists/tasks (Step 1 editor basics).
     indentGuides(),
-    placeholder("Start writing…"),
+    placeholder("Start writing, or press / for blocks"),
     syntaxHighlighting(highlight),
     theme,
     // markdownKeymap: Enter continues lists/quotes. indentWithTab: Tab /
@@ -193,7 +219,7 @@ export function createEditor(parent: HTMLElement, initialContent: string, opts: 
       { key: "Mod-i", run: cmdItalic, preventDefault: true },
       { key: "Mod-Shift-x", run: cmdStrike, preventDefault: true },
       { key: "Mod-Shift-e", run: cmdCode, preventDefault: true },
-      { key: "Mod-k", run: cmdLink, preventDefault: true },
+      { key: "Mod-k", run: (v) => (opts.onLink ? (opts.onLink(v), true) : cmdLink(v)), preventDefault: true },
       { key: "Mod-Shift-8", run: cmdBullet, preventDefault: true },
       { key: "Mod-Shift-7", run: cmdOrdered, preventDefault: true },
       { key: "Mod-Shift-9", run: cmdTask, preventDefault: true },

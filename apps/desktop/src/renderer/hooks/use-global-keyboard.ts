@@ -46,6 +46,8 @@ export function useGlobalKeyboard(deps: GlobalKeyboardDeps): void {
         keyCommand === "note.reopenClosed" ||
         keyCommand === "search.open" ||
         keyCommand === "view.toggleSidebar" ||
+        keyCommand === "view.toggleRightPanel" ||
+        keyCommand === "shortcuts.show" ||
         keyCommand === "view.toggleFocus" ||
         keyCommand === "settings.open" ||
         keyCommand.startsWith("view.tab")

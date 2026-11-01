@@ -67,3 +67,19 @@ editing, sync, multi-user, public API docs, WebSocket, Caddy/Tailscale specifics
 - Gate B parity tests (`tests/server/http-note.test.ts`) use the
   `SingleOwnerAuth` harness (`src/server/auth.ts`), which is TRANSPORT
   PARITY PROOF ONLY — not production auth.
+
+## MCP for AI agents (ADR-0017)
+
+The server exposes MCP at `POST /mcp`, authenticated by per-agent tokens. It is loopback-only unless you bind elsewhere.
+
+```bash
+# create (the token is printed once; only its hash is stored)
+node dist-server/server.cjs token create --label claude-code --workspace <id> [--read-only]
+node dist-server/server.cjs token create --label cursor --all
+node dist-server/server.cjs token list
+node dist-server/server.cjs token revoke <id-prefix>      # takes effect immediately, no restart
+```
+
+Stdio-only clients use the bridge: `TAKENOTES_TOKEN=tn_agent_… node takenotes-mcp.cjs --server http://127.0.0.1:3000`.
+`read` tokens are refused every mutating tool. Calls are audited in `$TAKENOTES_DATA/app/mcp-activity.jsonl`.
+Browser origins, batches, SSE and bodies over 1 MiB are rejected. Limits: 120 requests/min per token and 20 failed attempts/min per client (then `429` + `Retry-After`). Tokens can also be created and revoked in the server web UI under **Agents (MCP)** after logging in.

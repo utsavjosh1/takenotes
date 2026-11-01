@@ -1,7 +1,7 @@
 /**
- * Step 2 Favorites pane: groups + ordered entries over `.takenotes/favorites.yaml`.
- * Unresolved targets render muted but retained (same rule as links-to-nonexistent).
- * Editing is inline (rename-row pattern); only group delete confirms.
+ * Favourites: one calm list over `.takenotes/favorites.yaml`. Pin a note, folder, saved search
+ * or heading; drag to reorder. A target that no longer exists is greyed with "Not found" and kept
+ * until you remove it. Removing a favourite never touches the note itself, so it needs no confirmation.
  */
 import { useState, type JSX } from "react";
 import { Button } from "@takenotes/ui/dom";
@@ -19,10 +19,11 @@ export type FavoriteAnchorOpen = (rel: string, frag: string, isBlock: boolean) =
 
 function labelOf(entry: FavoriteEntry): string {
   if (entry.alias?.trim()) return entry.alias.trim();
-  if (entry.type === "search") return `Search: ${entry.target}`;
-  if (entry.type === "file" || entry.type === "folder") return fileName(entry.target);
+  if (entry.type === "search") return entry.target;
+  if (entry.type === "file") return fileName(entry.target).replace(/\.md$/i, "");
+  if (entry.type === "folder") return fileName(entry.target);
   const split = splitAnchorTarget(entry.target);
-  return split ? `${fileName(split.rel)}#${split.frag}` : entry.target;
+  return split ? `${fileName(split.rel).replace(/\.md$/i, "")} › ${split.frag}` : entry.target;
 }
 
 /** Unresolved when the target file/folder is absent from the workspace listing. */
@@ -34,16 +35,6 @@ export function isFavoriteResolved(entry: FavoriteEntry, filesLower: Set<string>
   if (!split) return false;
   return filesLower.has(split.rel.toLowerCase());
 }
-
-const NEW_TYPES: FavoriteEntry["type"][] = ["file", "folder", "search", "heading", "block"];
-
-const TARGET_HINT: Record<FavoriteEntry["type"], string> = {
-  file: "path/to/Note.md",
-  folder: "path/to/folder",
-  search: "search query",
-  heading: "Note.md#Heading",
-  block: "Note.md#^id",
-};
 
 export function FavoritesPane({
   doc,
@@ -61,208 +52,88 @@ export function FavoritesPane({
   open: FavoriteOpen;
   openAnchor?: FavoriteAnchorOpen;
 }): JSX.Element {
-  const [newGroup, setNewGroup] = useState("");
-  const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
-  const [aliasEditor, setAliasEditor] = useState<{ group: string; index: number } | null>(null);
-  const [aliasDraft, setAliasDraft] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, { target: string; type: FavoriteEntry["type"] }>>({});
+  // Drag to reorder: a line shows where the row will land.
+  const [drag, setDrag] = useState<{ group: string; index: number } | null>(null);
+  const [drop, setDrop] = useState<{ group: string; index: number; after: boolean } | null>(null);
 
-  if (favorites.loading) {
-    return (
-      <div className="pane-placeholder">
-        <p className="panel-title">Favorites</p>
-        <p>Loading…</p>
-      </div>
-    );
-  }
+  if (favorites.loading) return <p className="fav-note" role="status">Loading…</p>;
   if (favorites.loadError) {
     return (
-      <div className="pane-placeholder">
-        <p className="panel-title">Favorites</p>
-        <p>Couldn&apos;t load favorites.</p>
-        <p className="inline-error">{favorites.loadError}</p>
-        <Button onClick={() => void favorites.reload()}>Retry</Button>
+      <div className="fav-note" role="alert">
+        <p>Couldn’t load your favourites.</p>
+        <Button onClick={() => void favorites.reload()}>Try again</Button>
+        <details className="err-details"><summary>Details</summary><pre>{favorites.loadError}</pre></details>
       </div>
     );
   }
-
-  const commitAlias = (): void => {
-    if (!aliasEditor) return;
-    void favorites.setAlias(aliasEditor.group, aliasEditor.index, aliasDraft.trim() ? aliasDraft : null);
-    setAliasEditor(null);
-  };
-
-  const commitGroupRename = (oldName: string): void => {
-    if (renameDraft.trim() && renameDraft.trim() !== oldName) void favorites.renameGroup(oldName, renameDraft.trim());
-    setRenamingGroup(null);
-  };
-
-  return (
-    <div>
-      {doc.groups.map((group) => {
-        const draft = drafts[group.name] ?? { target: "", type: "file" as const };
-        const setDraft = (patch: Partial<typeof draft>): void =>
-          setDrafts((d) => ({ ...d, [group.name]: { ...draft, ...patch } }));
-        return (
-          <section key={group.name} aria-label={`Favorites group ${group.name}`}>
-            <div className="panel-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              {renamingGroup === group.name ? (
-                <input
-                  className="rename-input"
-                  autoFocus
-                  aria-label="Rename group"
-                  value={renameDraft}
-                  onChange={(e) => setRenameDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitGroupRename(group.name);
-                    else if (e.key === "Escape") setRenamingGroup(null);
-                    e.stopPropagation();
-                  }}
-                  onBlur={() => commitGroupRename(group.name)}
-                />
-              ) : (
-                <span>{group.name}</span>
-              )}
-              <span className="row-actions" style={{ display: "inline-flex" }}>
-                <Button variant="quiet" onClick={() => { setRenamingGroup(group.name); setRenameDraft(group.name); }}>Rename</Button>
-                {doc.groups.length > 1 && (
-                  <Button
-                    variant="quiet"
-                    onClick={() => {
-                      if (window.confirm(`Delete group "${group.name}"? Entries are removed from favorites (files untouched).`)) {
-                        void favorites.deleteGroup(group.name);
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                )}
-              </span>
-            </div>
-            {group.entries.map((entry, i) => {
-              const resolved = isFavoriteResolved(entry, files, dirs);
-              const editingThisAlias = aliasEditor?.group === group.name && aliasEditor.index === i;
-              return (
-                <div key={`${entry.type}:${entry.target}`} className="tree-row" style={{ paddingLeft: 12 }} title={displayPath(entry.target)}>
-                  {editingThisAlias ? (
-                    <input
-                      className="rename-input"
-                      autoFocus
-                      aria-label={`Alias for ${labelOf(entry)}`}
-                      placeholder="Alias (empty clears)"
-                      value={aliasDraft}
-                      onChange={(e) => setAliasDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") commitAlias();
-                        else if (e.key === "Escape") setAliasEditor(null);
-                        e.stopPropagation();
-                      }}
-                      onBlur={commitAlias}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <button
-                      className={`row-label${resolved ? "" : " unresolved"}`}
-                      title={resolved ? displayPath(entry.target) : `${displayPath(entry.target)} (target missing — kept)`}
-                      onClick={() => {
-                        if (entry.type === "file") open.openFile(entry.target);
-                        else if (entry.type === "folder") open.revealDir(entry.target);
-                        else if (entry.type === "search") open.runSearch(entry.target);
-                        else {
-                          const split = splitAnchorTarget(entry.target);
-                          if (split) {
-                            if (openAnchor) openAnchor(split.rel, split.frag, entry.type === "block");
-                            else open.openFile(split.rel);
-                          }
-                        }
-                      }}
-                    >
-                      {labelOf(entry)}
-                      {!resolved && " (missing)"}
-                    </button>
-                  )}
-                  <span className="row-actions">
-                    <Button
-                      variant="quiet"
-                      title={i === 0 ? "Already first" : "Move up"}
-                      onClick={() => void favorites.moveEntry(group.name, i, i - 1)}
-                    >
-                      ↑
-                    </Button>
-                    <Button
-                      variant="quiet"
-                      title={i === group.entries.length - 1 ? "Already last" : "Move down"}
-                      onClick={() => void favorites.moveEntry(group.name, i, i + 1)}
-                    >
-                      ↓
-                    </Button>
-                    <Button
-                      variant="quiet"
-                      title="Edit alias"
-                      onClick={() => { setAliasEditor({ group: group.name, index: i }); setAliasDraft(entry.alias ?? ""); }}
-                    >
-                      Alias
-                    </Button>
-                    <Button variant="quiet" title="Remove from favorites" onClick={() => void favorites.removeEntry(group.name, i)}>
-                      Remove
-                    </Button>
-                  </span>
-                </div>
-              );
-            })}
-            <div className="tree-row" style={{ paddingLeft: 12, gap: 4 }}>
-              <select
-                aria-label={`New favorite type in ${group.name}`}
-                value={draft.type}
-                onChange={(e) => setDraft({ type: e.target.value as FavoriteEntry["type"] })}
-              >
-                {NEW_TYPES.map((t) => <option key={t} value={t}>{t[0]!.toUpperCase() + t.slice(1)}</option>)}
-              </select>
-              <input
-                className="rename-input"
-                placeholder={TARGET_HINT[draft.type]}
-                aria-label={`New favorite target in ${group.name}`}
-                value={draft.target}
-                onChange={(e) => setDraft({ target: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && draft.target.trim()) {
-                    void favorites.addEntry(group.name, { type: draft.type, target: draft.target.trim() });
-                    setDraft({ target: "" });
-                  }
-                  e.stopPropagation();
-                }}
-              />
-              <Button
-                variant="quiet"
-                onClick={() => {
-                  if (!draft.target.trim()) return;
-                  void favorites.addEntry(group.name, { type: draft.type, target: draft.target.trim() });
-                  setDraft({ target: "" });
-                }}
-              >
-                Add
-              </Button>
-            </div>
-          </section>
-        );
-      })}
-      <div className="tree-row" style={{ paddingLeft: 12, gap: 4 }}>
-        <input
-          className="rename-input"
-          placeholder="New group name"
-          aria-label="New group name"
-          value={newGroup}
-          onChange={(e) => setNewGroup(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && newGroup.trim()) { void favorites.addGroup(newGroup.trim()); setNewGroup(""); }
-            e.stopPropagation();
-          }}
-        />
-        <Button variant="quiet" onClick={() => { if (newGroup.trim()) { void favorites.addGroup(newGroup.trim()); setNewGroup(""); } }}>
-          Add group
-        </Button>
+  const total = doc.groups.reduce((n, g) => n + g.entries.length, 0);
+  if (total === 0) {
+    return (
+      <div className="fav-note">
+        <b>No favourites yet</b>
+        <p>Click the star on a note, or right-click a note or folder and choose Add to favourites.</p>
       </div>
+    );
+  }
+  const finishDrop = (): void => {
+    if (drag && drop && drag.group === drop.group) {
+      let to = drop.index + (drop.after ? 1 : 0);
+      if (drag.index < to) to -= 1;
+      if (to !== drag.index) void favorites.moveEntry(drag.group, drag.index, to);
+    }
+    setDrag(null); setDrop(null);
+  };
+  const openEntry = (entry: FavoriteEntry): void => {
+    if (entry.type === "file") open.openFile(entry.target);
+    else if (entry.type === "folder") open.revealDir(entry.target);
+    else if (entry.type === "search") open.runSearch(entry.target);
+    else {
+      const split = splitAnchorTarget(entry.target);
+      if (!split) return;
+      if (openAnchor) openAnchor(split.rel, split.frag, entry.type === "block");
+      else open.openFile(split.rel);
+    }
+  };
+  return (
+    <div className="fav-list">
+      {doc.groups.map((group) => group.entries.length === 0 ? null : (
+        <section key={group.name} aria-label={doc.groups.length > 1 ? group.name : "Favourites"}>
+          {doc.groups.length > 1 && <h4 className="fav-group">{group.name}</h4>}
+          {group.entries.map((entry, i) => {
+            const resolved = isFavoriteResolved(entry, files, dirs);
+            const cls = `fav-row${resolved ? "" : " missing"}${drop?.group === group.name && drop.index === i ? (drop.after ? " drop-after" : " drop-before") : ""}`;
+            return (
+              <div key={`${entry.type}:${entry.target}`} className={cls} draggable
+                onDragStart={(e) => { setDrag({ group: group.name, index: i }); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("takenotes/favorite", String(i)); }}
+                onDragOver={(e) => {
+                  if (!drag) return;
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setDrop({ group: group.name, index: i, after: e.clientY > r.top + r.height / 2 });
+                }}
+                onDrop={(e) => { e.preventDefault(); finishDrop(); }}
+                onDragEnd={() => { setDrag(null); setDrop(null); }}>
+                <button className="fav-main" disabled={!resolved} onClick={() => openEntry(entry)} title={displayPath(entry.target)}>
+                  <span className="fav-label">{labelOf(entry)}</span>
+                  <small>{resolved ? kindHint(entry) : "Not found"}</small>
+                </button>
+                {!resolved
+                  ? <button className="fav-remove always" onClick={() => void favorites.removeEntry(group.name, i)}>Remove</button>
+                  : <button className="fav-remove" aria-label={`Remove ${labelOf(entry)} from favourites`} title="Remove from favourites" onClick={() => void favorites.removeEntry(group.name, i)}>×</button>}
+              </div>
+            );
+          })}
+        </section>
+      ))}
     </div>
   );
+}
+
+function kindHint(entry: FavoriteEntry): string {
+  if (entry.type === "folder") return "Folder";
+  if (entry.type === "search") return "Saved search";
+  if (entry.type === "heading") return "Heading";
+  if (entry.type === "block") return "Block";
+  const dir = entry.target.includes("/") ? entry.target.slice(0, entry.target.lastIndexOf("/")) : "";
+  return dir || "Note";
 }

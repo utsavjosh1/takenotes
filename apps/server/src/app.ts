@@ -11,6 +11,9 @@ import type { SingleOwnerAuth } from "./auth.js";
 import type { FileOwnerAuth } from "./auth-store.js";
 import { PersistentServerWorkspaceRegistry } from "./workspace-registry.js";
 import { WEB_UI_HTML } from "./web-ui.js";
+import type { AgentTokenStore } from "./agent-tokens.js";
+import { mountAgentsApi, mountMcp, type McpRateOptions } from "./mcp-http.js";
+import type { McpActivityEntry } from "@takenotes/core/mcp/activity";
 
 /** Minimal gate both auth implementations satisfy (Gate B harness + Gate C store). */
 export type AuthGate = {
@@ -25,6 +28,11 @@ export type TakenotesServerOptions = {
   /** Persistent auth store enabling `/api/auth/*`. Absent in Gate-B harness mode. */
   authStore?: FileOwnerAuth | null;
   version?: string;
+  /** Enables `POST /mcp` (ADR-0017). Absent = MCP over HTTP is off. */
+  agentTokens?: AgentTokenStore;
+  onMcpActivity?: (entry: McpActivityEntry) => void | Promise<void>;
+  /** Overrides MCP rate limits (tests pin the clock). */
+  mcpRate?: McpRateOptions;
 };
 
 function ok<T>(result: T): IpcResult<T> {
@@ -133,7 +141,21 @@ export function createTakenotesServer(options: TakenotesServerOptions): Hono {
     });
   }
 
+  if (options.agentTokens) {
+    mountMcp(app, {
+      tokens: options.agentTokens,
+      registry: options.registry,
+      host: options.host ?? new LinuxHostFilesystem(),
+      onActivity: options.onMcpActivity,
+      rate: options.mcpRate,
+    });
+  }
+
   app.use("/api/rpc/*", (c, next) => options.auth.require(c, next));
+
+  if (options.agentTokens) {
+    mountAgentsApi(app, { tokens: options.agentTokens, registry: options.registry });
+  }
 
   app.post("/api/rpc/workspace.list", (c) => {
     const out = options.registry.list().map((w) => ({ workspaceId: w.workspaceId, displayName: w.displayName }));

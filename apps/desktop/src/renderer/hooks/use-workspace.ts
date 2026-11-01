@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { WorkspaceInfo } from "@takenotes/contracts/ipc";
+import { describeOpenFolderError, type FriendlyError } from "@takenotes/core/workspace/onboarding";
 import { getBridge } from "../bridge";
 import type { Notify } from "./use-notify";
 
@@ -9,6 +10,13 @@ export type WorkspaceApi = {
   openLocal: () => Promise<void>;
   openRecent: (id: string) => Promise<void>;
   closeWorkspace: () => Promise<void>;
+  /** Creates `<Documents>/<name>` and opens it. Returns a plain-words problem, or null on success. */
+  createWorkspace: (name: string) => Promise<string | null>;
+  /** Open failure shown as a dialog (cause, collapsed details, next action). */
+  openError: FriendlyError | null;
+  clearOpenError: () => void;
+  /** True while a folder or recent workspace is loading (welcome skeleton). */
+  opening: boolean;
   /** WSL-index/tree failure banner; null = connected. */
   healthError: string | null;
   reportHealth: (message: string | null) => void;
@@ -27,6 +35,8 @@ export function useWorkspace(notify: Notify, hooks: WorkspaceOpenedHooks): Works
   const { toast } = notify;
   const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<FriendlyError | null>(null);
+  const [opening, setOpening] = useState(false);
 
   const reportHealth = useCallback((message: string | null) => {
     setHealthError(message);
@@ -42,20 +52,41 @@ export function useWorkspace(notify: Notify, hooks: WorkspaceOpenedHooks): Works
     // Index builds in the background: open stays fast on big workspaces.
   }, [workspace, hooks, reportHealth]);
 
+  const fail = useCallback((e: { code: string; message: string; detail?: string }) => {
+    setOpenError(describeOpenFolderError(e.code, e.message, e.detail));
+  }, []);
+
   const openLocal = useCallback(async () => {
     const bridge = getBridge();
     if (!bridge) { toast("Desktop bridge unavailable — open via the Electron app.", "error"); return; }
     const res = await bridge.workspace.openLocal();
-    if (!res.ok) { toast(res.error.message, "error"); return; }
-    if (res.result) void openWorkspace(res.result);
-  }, [openWorkspace, toast]);
+    if (!res.ok) { fail(res.error); return; }
+    if (res.result) {
+      setOpening(true);
+      try { await openWorkspace(res.result); } finally { setOpening(false); }
+    }
+  }, [openWorkspace, toast, fail]);
 
   const openRecent = useCallback(async (id: string) => {
     const bridge = getBridge();
     if (!bridge) { toast("Desktop bridge unavailable — open via the Electron app.", "error"); return; }
-    const res = await bridge.workspace.openRecent(id);
-    if (!res.ok) { toast(res.error.message, "error"); return; }
-    await openWorkspace(res.result);
+    setOpening(true);
+    try {
+      const res = await bridge.workspace.openRecent(id);
+      if (!res.ok) { fail(res.error); return; }
+      await openWorkspace(res.result);
+    } finally { setOpening(false); }
+  }, [openWorkspace, toast, fail]);
+
+  const createWorkspace = useCallback(async (name: string): Promise<string | null> => {
+    const bridge = getBridge();
+    if (!bridge) return "Creating a workspace needs the desktop app.";
+    const res = await bridge.workspace.create(name);
+    if (!res.ok) return res.error.message;
+    setOpening(true);
+    try { await openWorkspace(res.result); } finally { setOpening(false); }
+    toast(`Created “${name}”`, "info");
+    return null;
   }, [openWorkspace, toast]);
 
   const closeWorkspace = useCallback(async () => {
@@ -66,5 +97,8 @@ export function useWorkspace(notify: Notify, hooks: WorkspaceOpenedHooks): Works
     hooks.onClosed();
   }, [workspace, hooks, reportHealth]);
 
-  return { workspace, openWorkspace, openLocal, openRecent, closeWorkspace, healthError, reportHealth };
+  return {
+    workspace, openWorkspace, openLocal, openRecent, closeWorkspace, createWorkspace, healthError, reportHealth,
+    openError, clearOpenError: () => setOpenError(null), opening,
+  };
 }

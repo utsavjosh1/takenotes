@@ -10,9 +10,9 @@ import lockupLightUrl from "../assets/brand/takenotes-lockup-light.svg";
 import type { PlatformState } from "../hooks/use-platform";
 import type { CommandId } from "@takenotes/core/commands/registry";
 
-const TABS = ["General", "Appearance", "Editor", "Files", "Automation", "Shortcuts", "About"] as const;
+const TABS = ["General", "Editor", "Appearance", "Hotkeys", "Files & links", "Daily notes & templates", "Agents (MCP)", "Updates", "About"] as const;
 
-export function SettingsDialog({ settings, onChange, version, platform, hotkeys, updatesEnabled, onCheckUpdates, mcp, onClose }: {
+export function SettingsDialog({ settings, onChange, version, platform, hotkeys, updatesEnabled, onCheckUpdates, mcp, onClose, asPage = false }: {
   settings: Settings;
   onChange: (s: Settings) => void;
   version: string;
@@ -22,11 +22,12 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
   onCheckUpdates: () => void;
   mcp?: TakeNotesApi["mcp"];
   onClose: () => void;
+  /** Render as a full page in the main column (prototype) instead of a dialog. */
+  asPage?: boolean;
 }): JSX.Element {
   const [tab, setTab] = useState<(typeof TABS)[number]>("General");
   const set = <K extends keyof Settings>(k: K, v: Settings[K]): void => onChange({ ...settings, [k]: v });
-  return (
-    <Dialog title="Settings" size="wide" onClose={onClose} closeOnBackdrop>
+  const layout = (
       <div className="settings-layout">
         {/* Step 9 keyboard nav: vertical tablist with roving tabindex —
           arrows/Home/End move with automatic activation, matching the
@@ -129,7 +130,7 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
               {(control) => <input {...control} type="checkbox" checked={settings.livePreview} onChange={(e) => set("livePreview", e.target.checked)} />}
             </SettingRow>
           </>}
-          {tab === "Files" && <>
+          {tab === "Files & links" && <>
             <SettingRow label="Search exclusions" description="Always skipped: .git, node_modules, dist, build, coverage." />
             <SettingRow label="Link style" description="How [[ autocomplete writes new links. Shortest uses the bare note name.">
               {(control) => <select {...control} value={settings.linkFormat} onChange={(e) => set("linkFormat", e.target.value as Settings["linkFormat"])}>
@@ -138,14 +139,6 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
             </SettingRow>
             <SettingRow label="Use [[Wikilinks]]" description="On writes [[links]]. Off writes [label](path.md) Markdown links (file links; #heading/#^block refinements stay [[…]]). Either form always opens.">
               {(control) => <input {...control} type="checkbox" checked={settings.useWikilinks} onChange={(e) => set("useWikilinks", e.target.checked)} />}
-            </SettingRow>
-            <SettingRow label="Template folder" description="Ordinary folder of .md templates, relative to the workspace root. Insert Template renders {{title}}, {{date}}, {{time}} only.">
-              {(control) => <input {...control} type="text" value={settings.templateFolder} placeholder="Templates" onChange={(e) => set("templateFolder", e.target.value)} />}
-            </SettingRow>
-            <SettingRow label="New tasks go to" description="Daily appends to today's Daily Note (never created silently); Inbox appends to Inbox.md.">
-              {(control) => <select {...control} value={settings.taskCaptureTarget} onChange={(e) => set("taskCaptureTarget", e.target.value as Settings["taskCaptureTarget"])}>
-                <option value="daily">Today's Daily Note</option><option value="inbox">Inbox.md</option>
-              </select>}
             </SettingRow>
             <SettingRow label="Update links on rename" description="Rewrite [[links]] when a note or folder moves. Off asks first and renames only.">
               {(control) => <input {...control} type="checkbox" checked={settings.autoUpdateLinks} onChange={(e) => set("autoUpdateLinks", e.target.checked)} />}
@@ -164,23 +157,49 @@ export function SettingsDialog({ settings, onChange, version, platform, hotkeys,
               </select>}
             </SettingRow>
           </>}
-          {tab === "Automation" && <AutomationTab mcp={mcp} />}
-          {tab === "Shortcuts" && <ShortcutTable platform={platform} hotkeys={hotkeys} />}
+          {tab === "Daily notes & templates" && <>
+            <SettingRow label="Template folder" description="Ordinary folder of .md templates, relative to the workspace root. Insert Template renders {{title}}, {{date}}, {{time}} only.">
+              {(control) => <input {...control} type="text" value={settings.templateFolder} placeholder="Templates" onChange={(e) => set("templateFolder", e.target.value)} />}
+            </SettingRow>
+            <SettingRow label="New tasks go to" description="Daily appends to today's Daily Note (never created silently); Inbox appends to Inbox.md.">
+              {(control) => <select {...control} value={settings.taskCaptureTarget} onChange={(e) => set("taskCaptureTarget", e.target.value as Settings["taskCaptureTarget"])}>
+                <option value="daily">Today's Daily Note</option><option value="inbox">Inbox.md</option>
+              </select>}
+            </SettingRow>
+          </>}
+          {tab === "Agents (MCP)" && <AutomationTab mcp={mcp} />}
+          {tab === "Hotkeys" && <ShortcutTable platform={platform} hotkeys={hotkeys} />}
+          {tab === "Updates" && <>
+            <SettingRow label="Version" description={`takenotes ${version}`} />
+            <SettingRow label="Software update" description={updatesEnabled ? "Stable releases only. Installer is checksum-verified." : "Available on Windows in this version."}>
+              <Button disabled={!updatesEnabled} onClick={onCheckUpdates}>Check for updates</Button>
+            </SettingRow>
+          </>}
           {tab === "About" && <>
             <div className="about-brand">
               <img src={lockupDarkUrl} className="only-dark" alt="takenotes" draggable={false} />
               <img src={lockupLightUrl} className="only-light" alt="takenotes" draggable={false} />
             </div>
             <SettingRow label="takenotes" description={`Version ${version}. Filesystem-native Markdown notebook.`} />
-            <SettingRow label="Software update" description={updatesEnabled ? "Stable releases only. Installer is checksum-verified." : "Available on Windows in this version."}>
-              <Button disabled={!updatesEnabled} onClick={onCheckUpdates}>Check for updates</Button>
-            </SettingRow>
             <SettingRow label="Source" description="Local-first. Your files stay where they are." />
           </>}
         </div>
       </div>
-    </Dialog>
   );
+  if (asPage) {
+    return (
+      <div className="page-scroll">
+        <div className="page settings" aria-label="Settings">
+          <header className="page-h">
+            <div><h1>Settings</h1><p className="sub">Everything is stored on this device.</p></div>
+            <div className="page-a"><Button onClick={onClose}>Done</Button></div>
+          </header>
+          {layout}
+        </div>
+      </div>
+    );
+  }
+  return <Dialog title="Settings" size="wide" onClose={onClose} closeOnBackdrop>{layout}</Dialog>;
 }
 
 /** Automation approvals (Step 8, ADR-0012): per-client × per-workspace

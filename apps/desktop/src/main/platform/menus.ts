@@ -67,6 +67,7 @@ export function buildMenuTemplate(
   const viewSubmenu: MenuItemConstructorOptions[] = [
     cmd("palette.open", mnemonic("&Command Palette…")),
     cmd("view.toggleSidebar", mnemonic("Toggle &Sidebar")),
+    cmd("view.toggleRightPanel", mnemonic("Toggle Side &Panel")),
     cmd("view.toggleFocus", mnemonic("Toggle &Focus Mode")),
     { type: "separator" },
     // Step 9 (slice 6b): zoom rides the shared command channel into the

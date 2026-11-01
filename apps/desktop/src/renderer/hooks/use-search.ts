@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
-import type { SearchMatch, WorkspaceInfo } from "@takenotes/contracts/ipc";
+import { useEffect, useRef, useState } from "react";
+import type { WorkspaceInfo } from "@takenotes/contracts/ipc";
 import { isWslKind } from "@takenotes/platform/filesystem";
 import { buildWorkspaceIndex, indexStatusMessage, workspaceIndex } from "../index/workspace-index";
-import { parseSearchQuery } from "@takenotes/core/search/query";
-import { searchContent, searchFilenames } from "@takenotes/core/search/search";
+import { searchNotes, type NoteHits } from "@takenotes/core/search/hits";
 import { getBridge } from "../bridge";
 import { useDebouncedValue } from "../components/search";
 import { useIndexMeta } from "../stores/index-meta";
@@ -13,8 +12,13 @@ import type { PaneLayout } from "../panes";
 export type SearchApi = {
   query: string;
   setQuery: (q: string) => void;
-  filenameHits: SearchMatch[];
-  contentHits: SearchMatch[];
+  /** Matching notes with every matching line. */
+  notes: NoteHits[];
+  matchCase: boolean;
+  setMatchCase: (v: boolean) => void;
+  /** Lines of context shown around each hit (0-3). */
+  context: number;
+  setContext: (n: number) => void;
   searching: boolean;
   searchError: string | null;
   /** Rebuild the parse-once index (async; editor stays snappy). Takes the
@@ -37,8 +41,10 @@ export function useSearch(
   const bumpIndex = useIndexMeta((s) => s.bump);
   const setNotice = useIndexMeta((s) => s.setNotice);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filenameHits, setFilenameHits] = useState<SearchMatch[]>([]);
-  const [contentHits, setContentHits] = useState<SearchMatch[]>([]);
+  const [notes, setNotes] = useState<NoteHits[]>([]);
+  const [matchCase, setMatchCase] = useState(false);
+  const [context, setContext] = useState(1);
+  const runId = useRef(0);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -66,37 +72,35 @@ export function useSearch(
    * old workspace's hits until the next keystroke. */
   const resetSearch = () => {
     setSearchQuery("");
-    setFilenameHits([]);
-    setContentHits([]);
+    runId.current++;
+    setNotes([]);
     setSearching(false);
     setSearchError(null);
     setNotice(null);
   };
 
-  const debouncedQuery = useDebouncedValue(searchQuery, 250);
+  const debouncedQuery = useDebouncedValue(searchQuery, 150);
   useEffect(() => {
+    const id = ++runId.current;
     if (!workspace || !debouncedQuery.trim()) {
-      setFilenameHits([]); setContentHits([]); setSearchError(null); setSearching(false);
+      setNotes([]); setSearchError(null); setSearching(false);
       return;
     }
-    // Queries read the live P1-07 index only — never IPC, never the
-    // filesystem. `layout` in deps re-runs the query after saves, renames,
-    // and deletes, so results follow mutations with no rescan.
-    const parsed = parseSearchQuery(debouncedQuery.trim());
-    if (!parsed.ok) {
-      setFilenameHits([]); setContentHits([]);
-      setSearchError(parsed.error.message);
+    // Reads the live index only (no disk). The search works in slices and
+    // yields between them, so typing stays smooth; a newer query cancels it.
+    setSearching(true);
+    void searchNotes(workspaceIndex.list(workspace.workspaceId), debouncedQuery, {
+      matchCase, context, isCancelled: () => runId.current !== id,
+    }).then((r) => {
+      if (runId.current !== id || r.cancelled) return;
       setSearching(false);
-      return;
-    }
-    setSearchError(null);
-    setSearching(false);
-    setFilenameHits(searchFilenames(workspaceIndex, workspace.workspaceId, parsed.query).slice(0, 20));
-    setContentHits(searchContent(workspaceIndex, workspace.workspaceId, parsed.query).slice(0, 60));
-  }, [debouncedQuery, workspace, layout]);
+      setSearchError(r.error);
+      setNotes(r.error ? [] : r.notes);
+    });
+  }, [debouncedQuery, workspace, layout, matchCase, context]);
 
   return {
     query: searchQuery, setQuery: setSearchQuery,
-    filenameHits, contentHits, searching, searchError, refreshIndex, resetSearch,
+    notes, matchCase, setMatchCase, context, setContext, searching, searchError, refreshIndex, resetSearch,
   };
 }

@@ -32,5 +32,6 @@
       "@takenotes/wsl-helper/*": ["tools/wsl-helper/src/*"]
     }
   },
-  "include": ["apps/**/*", "packages/**/*", "tools/wsl-helper/src/**/*", "tools/mcp-sidecar/src/**/*", "tests/**/*", "tools/scripts/**/*", "vite.config.ts"]
+  "include": ["apps/**/*", "packages/**/*", "tools/wsl-helper/src/**/*", "tools/mcp-sidecar/src/**/*", "tests/**/*", "tools/scripts/**/*", "vite.config.ts"],
+  "exclude": ["apps/mobile/app/**/*", "apps/mobile/components/**/*", "node_modules"]
 }

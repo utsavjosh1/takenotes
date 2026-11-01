@@ -1,0 +1,40 @@
+{
+  "name": "takenotes",
+  "slug": "takenotes-mobile",
+  "version": "0.0.8",
+  "orientation": "default",
+  "icon": "./assets/icon.png",
+  "scheme": "takenotes",
+  "userInterfaceStyle": "automatic",
+  "splash": {
+    "image": "./assets/splash.png",
+    "resizeMode": "contain",
+    "backgroundColor": "#1a1a1a"
+  },
+  "assetBundlePatterns": [
+    "**/*"
+  ],
+  "ios": {
+    "supportsTablet": true,
+    "bundleIdentifier": "com.takenotes.mobile",
+    "infoPlist": {
+      "NSDocumentsFolderUsageDescription": "takenotes stores your Markdown notes on this device."
+    }
+  },
+  "android": {
+    "package": "com.takenotes.mobile",
+    "permissions": [],
+    "adaptiveIcon": {
+      "foregroundImage": "./assets/adaptive-icon.png",
+      "backgroundColor": "#1a1a1a"
+    }
+  },
+  "plugins": [
+    "expo-router",
+    "expo-secure-store",
+    "expo-sharing"
+  ],
+  "experiments": {
+    "typedRoutes": true
+  }
+}

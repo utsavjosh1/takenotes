@@ -221,3 +221,23 @@ describe("bodyLinePreview (pane context lines)", () => {
     expect(bodyLinePreview(e, 1)).toBe(`${"x".repeat(119)}…`);
   });
 });
+
+describe("frontmatter robustness (console-noise regression)", () => {
+  // A note whose frontmatter uses a collection as a mapping key made the
+  // yaml lib warn ("Keys with collection values will be stringified…", via
+  // process.emitWarning in node / console.warn in the browser bundle) on
+  // every index. Key-stringification is yaml's documented fallback (kept) —
+  // the contract under test is silence: no warning, note still indexed.
+  it("collection-as-key frontmatter parses silently", async () => {
+    const { vi } = await import("vitest");
+    const emitWarning = vi.spyOn(process, "emitWarning").mockImplementation((() => {}) as typeof process.emitWarning);
+    try {
+      const e = parse("---\n[a, b]: value\n---\n# Hello\n");
+      expect(e.frontmatter).toEqual({ "[ a, b ]": "value" });
+      expect(e.title).toBe("Hello");
+      expect(emitWarning).not.toHaveBeenCalled();
+    } finally {
+      emitWarning.mockRestore();
+    }
+  });
+});

@@ -5,7 +5,10 @@ import {
   activeDoc,
   applyRename,
   closeDoc,
+  closeOtherTabs,
+  closeUnpinnedTabs,
   createLayout,
+  isPinned,
   markConflict,
   markSaved,
   markSaving,
@@ -76,8 +79,34 @@ describe("single tab layout", () => {
     let l = openDoc(createLayout(), doc("a.md", "A", { dirty: true }));
     l = togglePinned(l, "ws:a.md");
     expect(l.docs["ws:a.md"]).toMatchObject({ pinned: true, dirty: true, revisionHash: "a".repeat(64) });
+    expect(isPinned(l, "ws:a.md")).toBe(true);
     l = togglePinned(l, "ws:a.md");
     expect(l.docs["ws:a.md"]?.pinned).toBe(false);
+  });
+
+  it("close-others keeps active plus all pinned tabs (Obsidian parity)", () => {
+    let l = createLayout();
+    l = openDoc(l, doc("a.md"));
+    l = openDoc(l, doc("b.md"));
+    l = openDoc(l, doc("c.md"));
+    l = togglePinned(l, "ws:a.md");
+    const res = closeOtherTabs(l, "ws:c.md");
+    expect(tabDocs(res.layout).map((d) => d.relativePath).sort()).toEqual(["a.md", "c.md"]);
+    expect(res.layout.activeKey).toBe("ws:c.md");
+  });
+
+  it("close-all keeps pinned tabs and never force-closes a pin", () => {
+    let l = createLayout();
+    l = openDoc(l, doc("a.md"));
+    l = openDoc(l, doc("b.md"));
+    l = togglePinned(l, "ws:a.md");
+    const res = closeUnpinnedTabs(l);
+    expect(res.closedCount).toBe(1);
+    expect(tabDocs(res.layout).map((d) => d.relativePath)).toEqual(["a.md"]);
+    // All pinned → selection empties except pins.
+    const all = closeUnpinnedTabs(res.layout);
+    expect(all.closedCount).toBe(0);
+    expect(tabDocs(all.layout).map((d) => d.relativePath)).toEqual(["a.md"]);
   });
 
   it("numbered activation and drag reorder stay in the single strip", () => {

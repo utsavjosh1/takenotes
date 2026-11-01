@@ -85,6 +85,28 @@ describe("keyboard wiring", () => {
     expect(hook).toContain('?.focus({ preventScroll: true })');
   });
 
+  it("search results rove with Enter-to-open", () => {
+    const source = rendererSource(join("components", "search.tsx"));
+    expect(source).toContain("moveRovingIndex");
+    expect(source).toContain("data-search-idx");
+    expect(source).toContain("tabIndex={hitIdx[hi] === focused ? 0 : -1}");
+  });
+
+  it("tags rows rove across tree and flat modes", () => {
+    const source = rendererSource(join("components", "tags.tsx"));
+    expect(source).toContain("moveRovingIndex");
+    expect(source).toContain("data-tag-idx");
+    expect(source).toContain("tabIndex={i === at ? 0 : -1}");
+  });
+
+  it("properties sections rove with rename-input guard", () => {
+    const source = rendererSource(join("components", "properties-view.tsx"));
+    expect(source).toContain("moveRovingIndex");
+    expect(source).toContain("data-prop-idx");
+    expect(source).toContain("data-allprop-idx");
+    expect(source).toContain('tagName === "INPUT"');
+  });
+
   it("skip link targets a labelled main region", () => {
     const source = rendererSource("App.tsx");
     expect(source).toContain('className="skip-link"');

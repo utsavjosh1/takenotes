@@ -1,5 +1,5 @@
 /** Barrel re-export for the platform module (§4). */
-export type { DesktopPlatform, NodePlatform, WorkspaceKind, CommandScope } from "./types.js";
+export type { DesktopPlatform, NodePlatform, MobilePlatform, WorkspaceKind, CommandScope } from "./types.js";
 export {
   resolveDesktopPlatform,
   currentDesktopPlatform,
@@ -8,8 +8,8 @@ export {
   isLinux,
   primaryModifierName,
 } from "./platform.js";
-export type { PlatformCapabilities } from "./capabilities.js";
-export { getCapabilities } from "./capabilities.js";
+export type { PlatformCapabilities, MobileCapabilities } from "./capabilities.js";
+export { getCapabilities, getMobileCapabilities } from "./capabilities.js";
 export {
   COMMANDS,
   commandById,
@@ -32,6 +32,7 @@ export type { HotkeyOverrides, OverrideCollision, KeyEventLike } from "./hotkey-
 export {
   localWorkspaceKind,
   isWslKind,
+  isMobileKind,
   isLocalKind,
   toCanonicalRel,
   isWindowsReservedName,

@@ -54,7 +54,7 @@ function mcpSocketPath(platform = process.platform, envRuntimeDir = process.env.
   if (platform === "win32") return `\\\\.\\pipe\\${MCP_PIPE_NAME}`;
   const runtime = envRuntimeDir?.trim() ?? "";
   const dir = runtime.startsWith("/") ? runtime : tmp;
-  return (0, import_node_path.join)(dir, `${MCP_PIPE_NAME}-${uid}.sock`);
+  return import_node_path.posix.join(dir, `${MCP_PIPE_NAME}-${uid}.sock`);
 }
 var MCP_APP_NOT_RUNNING = "TAKENOTES_APP_NOT_RUNNING";
 
@@ -220,13 +220,13 @@ var MCP_TOOL_SCHEMAS = {
   }
 };
 
-// tools/mcp-sidecar/src/session.ts
+// packages/core/src/mcp/session.ts
 var MCP_PROTOCOL_VERSION = "2024-11-05";
 var MCP_SERVER_NAME = "takenotes-mcp";
-var MCP_SERVER_VERSION = "0.0.9";
-function createMcpSession(roundTrip) {
-  let initialized = false;
-  let clientId = "unknown-client";
+var MCP_SERVER_VERSION = "0.1.10";
+function createMcpSession(roundTrip, options = {}) {
+  let initialized = options.initialized === true;
+  let clientId = options.clientId ?? "unknown-client";
   const ok = (id, result) => ({
     jsonrpc: "2.0",
     id: id ?? null,
@@ -250,7 +250,7 @@ function createMcpSession(roundTrip) {
     switch (method) {
       case "initialize": {
         const name = typeof params === "object" && params !== null ? params.clientInfo?.name : void 0;
-        if (typeof name === "string" && name.trim()) clientId = name.trim().slice(0, 256);
+        if (options.clientId === void 0 && typeof name === "string" && name.trim()) clientId = name.trim().slice(0, 256);
         initialized = true;
         const result = {
           protocolVersion: MCP_PROTOCOL_VERSION,
@@ -405,20 +405,53 @@ function dial(tool, params, clientId) {
     });
   });
 }
+function flag(name) {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : void 0;
+}
+var serverUrl = flag("--server") ?? process.env.TAKENOTES_SERVER;
+var serverToken = flag("--token") ?? process.env.TAKENOTES_TOKEN;
+async function forward(message) {
+  const id = message?.id;
+  try {
+    const res = await fetch(new URL("/mcp", serverUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${serverToken ?? ""}` },
+      body: JSON.stringify(message),
+      signal: AbortSignal.timeout(3e4)
+    });
+    if (res.status === 202) return null;
+    return await res.json();
+  } catch {
+    if (id === void 0) return null;
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32001, message: `takenotes server unreachable at ${serverUrl}: start it first.` }
+    };
+  }
+}
+if (serverUrl && !serverToken) {
+  process.stderr.write("takenotes-mcp: --server needs a token (TAKENOTES_TOKEN or --token).\n");
+  process.exit(2);
+}
 var session = createMcpSession(dial);
+var inflight = /* @__PURE__ */ new Set();
 var splitter = createLineSplitter(
   (line) => {
-    void (async () => {
+    const task = (async () => {
       let parsed;
       try {
         parsed = JSON.parse(line);
       } catch {
         return;
       }
-      const reply = await session.handle(parsed);
+      const reply = serverUrl ? await forward(parsed) : await session.handle(parsed);
       if (reply) process.stdout.write(`${JSON.stringify(reply)}
 `);
     })();
+    inflight.add(task);
+    void task.finally(() => inflight.delete(task));
   },
   () => {
     process.stdout.write(
@@ -429,5 +462,5 @@ var splitter = createLineSplitter(
 );
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => splitter.push(chunk));
-process.stdin.on("end", () => process.exit(0));
+process.stdin.on("end", () => void Promise.allSettled([...inflight]).then(() => process.exit(0)));
 process.stdin.resume();

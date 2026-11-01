@@ -24,6 +24,11 @@ export function isWslKind(kind: WorkspaceKind): boolean {
   return kind === "windows-wsl";
 }
 
+/** Mobile workspace kind — on-device sandbox (`mobile-local`). */
+export function isMobileKind(kind: WorkspaceKind): boolean {
+  return kind === "mobile-local";
+}
+
 export function isLocalKind(kind: WorkspaceKind): boolean {
   return kind !== "windows-wsl";
 }
@@ -46,7 +51,8 @@ export function isWindowsReservedName(baseName: string): boolean {
   return WINDOWS_RESERVED.has(stem);
 }
 
-/** True when reserved-name rules apply to this workspace kind. */
+/** True when reserved-name rules apply to this workspace kind. Mobile
+ *  uses POSIX semantics — Windows rules must not leak into it. */
 export function appliesWindowsReservedRules(kind: WorkspaceKind): boolean {
   return kind === "windows-local" || kind === "windows-wsl";
 }

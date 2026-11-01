@@ -24,6 +24,8 @@ import { FileOwnerAuth, MIN_PASSWORD_CHARS } from "./auth-store.js";
 import { createTakenotesServer } from "./app.js";
 import { createWslRuntimeApp } from "./runtime-app.js";
 import { PersistentServerWorkspaceRegistry } from "./workspace-registry.js";
+import { AgentTokenStore, type AgentScope } from "./agent-tokens.js";
+import { createActivitySink } from "./mcp-http.js";
 
 const SEED_README = `# Notes\n\nSelf-hosted takenotes workspace. Open, edit, and save this file —\nsaves carry the same revision semantics as the desktop app.\n`;
 
@@ -108,6 +110,8 @@ export async function boot(): Promise<void> {
     auth,
     authStore: auth,
     version: appVersion(),
+    agentTokens: AgentTokenStore.forAppDir(appDir),
+    onMcpActivity: createActivitySink(appDir),
   });
 
   const server = serve({ fetch: app.fetch, port, hostname });
@@ -136,6 +140,96 @@ export async function boot(): Promise<void> {
   };
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
+}
+
+/**
+ * `server.cjs token create|list|revoke` — manage MCP agent tokens (ADR-0017).
+ * Edits `$TAKENOTES_DATA/app/agent-tokens.json`; a running server picks changes up live.
+ */
+/** CLI stdout (the token itself must go to stdout, not the diagnostics stream). */
+const out = (text: string): void => void process.stdout.write(`${text}\n`);
+
+export async function runTokenCli(args: string[]): Promise<number> {
+  const dataDir = env("TAKENOTES_DATA", "/data") ?? "/data";
+  const appDir = path.join(dataDir, "app");
+  const store = AgentTokenStore.forAppDir(appDir);
+  const registry = new PersistentServerWorkspaceRegistry(path.join(appDir, "workspaces.json"));
+  const flag = (name: string): string | null => {
+    const i = args.indexOf(name);
+    return i < 0 ? null : (args[i + 1] ?? null);
+  };
+  const [cmd, ...rest] = args;
+
+  if (cmd === "list") {
+    const tokens = await store.list();
+    if (tokens.length === 0) out("No agent tokens.");
+    for (const t of tokens) {
+      out(
+        `${t.id}  ${t.label}  ${t.scope}  workspaces=${t.workspaceIds.join(",")}${t.revokedAt ? "  REVOKED" : ""}`,
+      );
+    }
+    return 0;
+  }
+  if (cmd === "revoke") {
+    const id = rest[0];
+    if (!id) {
+      console.error("Usage: token revoke <id>");
+      return 2;
+    }
+    const done = await store.revoke(id);
+    out(done ? "Revoked." : "No matching live token (use a unique id prefix of 6+ characters).");
+    return done ? 0 : 1;
+  }
+  if (cmd === "create") {
+    const label = flag("--label");
+    if (!label) {
+      console.error("Usage: token create --label <name> [--workspace <id>|--all] [--read-only]");
+      return 2;
+    }
+    const known = registry.list();
+    const requested = flag("--workspace");
+    const ids = args.includes("--all")
+      ? known.map((w) => w.workspaceId)
+      : requested
+        ? [requested]
+        : known.length === 1
+          ? [known[0]!.workspaceId]
+          : [];
+    if (ids.length === 0) {
+      console.error(`Specify --workspace <id> or --all. Known workspaces:\n${known.map((w) => `  ${w.workspaceId}  ${w.displayName}`).join("\n")}`);
+      return 2;
+    }
+    const unknown = ids.filter((id) => !registry.get(id));
+    if (unknown.length > 0) {
+      console.error(`Unknown workspace id: ${unknown.join(", ")}`);
+      return 2;
+    }
+    const scope: AgentScope = args.includes("--read-only") ? "read" : "write";
+    const { token, record } = await store.create({ label, workspaceIds: ids, scope });
+    const port = env("TAKENOTES_PORT", "3000");
+    out(`Token ${record.id} (${record.scope}) created for: ${ids.join(", ")}`);
+    out("Shown once — store it now:\n");
+    out(token);
+    out(`\nHTTP client config (Claude Code / Cursor / Codex):`);
+    out(
+      JSON.stringify(
+        {
+          mcpServers: {
+            takenote: {
+              command: "node",
+              args: ["takenotes-mcp.cjs", "--server", `http://127.0.0.1:${port}`],
+              env: { TAKENOTES_TOKEN: token },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    return 0;
+  }
+  console.error("Usage: token create|list|revoke");
+  return 2;
 }
 
 function argValue(name: string): string | null {
@@ -191,7 +285,13 @@ export async function bootWslRuntime(): Promise<void> {
 
 const isDirectRun = process.argv[1]?.endsWith("server.cjs") || process.argv[1]?.endsWith("runtime.cjs") || process.argv[1]?.endsWith("main.ts");
 if (isDirectRun) {
-  const run = process.argv.includes("--wsl-runtime-bootstrap") ? bootWslRuntime : boot;
+  const tokenIdx = process.argv.indexOf("token");
+  const run =
+    tokenIdx === 2
+      ? async () => process.exit(await runTokenCli(process.argv.slice(3)))
+      : process.argv.includes("--wsl-runtime-bootstrap")
+        ? bootWslRuntime
+        : boot;
   run().catch((err) => {
     console.error(`[takenotes-server] fatal: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);

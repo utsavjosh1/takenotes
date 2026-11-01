@@ -1,4 +1,5 @@
 import {
+  startCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
@@ -145,6 +146,63 @@ export function wikilinkCompletionSource(deps: LinkCompleteDeps) {
     return {
       from: line.from + hashAt + 1,
       options: deps.listHeadings(target).map(headingOption),
+    };
+  };
+}
+
+/** Prototype "/" block menu: typing `/` at the start of a line offers
+ * headings, lists, quote, code, table and divider. Choosing one replaces
+ * the typed `/query` with the Markdown block, so the file stays plain
+ * Markdown and nothing is hidden from the source. */
+type SlashBlock = { label: string; detail: string; insert: string; back?: number; link?: boolean; action?: "image" | "template" | "date" };
+export const SLASH_BLOCKS: SlashBlock[] = [
+  { label: "Big heading", detail: "A title for a section", insert: "# " },
+  { label: "Heading", detail: "A medium section title", insert: "## " },
+  { label: "Small heading", detail: "A subtitle", insert: "### " },
+  { label: "To-do list", detail: "Things to tick off", insert: "- [ ] " },
+  { label: "Bulleted list", detail: "A simple list", insert: "- " },
+  { label: "Numbered list", detail: "A list in order", insert: "1. " },
+  { label: "Quote", detail: "Set a passage apart", insert: "> " },
+  { label: "Highlighted note", detail: "Make something stand out", insert: "> [!note] Note\n> " },
+  { label: "Code", detail: "Text that keeps its spacing", insert: "```\n\n```", back: 4 },
+  { label: "Table", detail: "Rows and columns", insert: "| Column A | Column B |\n| --- | --- |\n| | |" },
+  { label: "Divider", detail: "A line between sections", insert: "---\n" },
+  { label: "Link to a note", detail: "Connect to another note", insert: "[[", link: true },
+  { label: "Image…", detail: "Add a picture from your computer", insert: "", action: "image" },
+  { label: "From a template…", detail: "Start from a saved layout", insert: "", action: "template" },
+  { label: "Today’s date", detail: "Type today’s date", insert: "", action: "date" },
+];
+
+function localIsoDate(d = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+export function slashCompletionSource() {
+  return (context: CompletionContext): CompletionResult | null => {
+    const line = context.state.doc.lineAt(context.pos);
+    const before = line.text.slice(0, context.pos - line.from);
+    const m = /^(\s*)\/([\w ]{0,18})$/.exec(before);
+    if (!m) return null;
+    const slashAt = line.from + m[1]!.length;
+    return {
+      from: slashAt + 1,
+      validFor: /^[\w ]*$/,
+      options: SLASH_BLOCKS.map((b): Completion => ({
+        label: b.label,
+        detail: b.detail,
+        type: "keyword",
+        apply: (view, _c, _from, to) => {
+          const insert = b.action === "date" ? localIsoDate() : b.insert;
+          view.dispatch({
+            changes: { from: slashAt, to, insert },
+            selection: { anchor: slashAt + insert.length - (b.back ?? 0) },
+          });
+          if (b.link) startCompletion(view);
+          if (b.action === "image") window.dispatchEvent(new Event("takenotes:pick-image"));
+          if (b.action === "template") window.dispatchEvent(new Event("takenotes:open-template-picker"));
+        },
+      })),
     };
   };
 }

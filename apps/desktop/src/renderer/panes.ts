@@ -116,6 +116,43 @@ export function togglePinned(layout: TabLayout, key: string): TabLayout {
   return patchDoc(layout, key, { pinned: !doc.pinned });
 }
 
+export function isPinned(layout: TabLayout, key: string): boolean {
+  return layout.docs[key]?.pinned === true;
+}
+
+/** Obsidian parity (single-strip reading): closing "others" never drops pins.
+ * Keeps the kept tab AND every pinned tab; drops the rest. */
+export function closeOtherTabs(layout: TabLayout, keepKey: string): CloseResult {
+  const closed: DocState[] = [];
+  const openKeys = layout.openKeys.filter((key) => {
+    if (key === keepKey) return true;
+    if (layout.docs[key]?.pinned) return true;
+    const doc = layout.docs[key];
+    if (doc) closed.push(doc);
+    return false;
+  });
+  const activeKey = openKeys.includes(layout.activeKey ?? "") ? layout.activeKey : keepKey;
+  const recents = [...closed.map((d) => d.relativePath), ...layout.closedTabs].filter(
+    (rel, i, arr) => arr.indexOf(rel) === i,
+  ).slice(0, 20);
+  return { layout: pruneDocs({ ...layout, openKeys, activeKey, closedTabs: recents }), closed: closed[0] ?? null, orphaned: true };
+}
+
+/** "Close all" parity: pinned tabs survive. All-pinned → empty selection
+ * except pins (pins are never force-closed). */
+export function closeUnpinnedTabs(layout: TabLayout): { layout: TabLayout; closedCount: number } {
+  const pinnedKeys = layout.openKeys.filter((key) => layout.docs[key]?.pinned);
+  const closedCount = layout.openKeys.length - pinnedKeys.length;
+  const closedRels = layout.openKeys
+    .filter((key) => !layout.docs[key]?.pinned)
+    .map((key) => layout.docs[key]!.relativePath);
+  const recents = [...closedRels, ...layout.closedTabs].filter(
+    (rel, i, arr) => arr.indexOf(rel) === i,
+  ).slice(0, 20);
+  const activeKey = pinnedKeys.includes(layout.activeKey ?? "") ? layout.activeKey : (pinnedKeys[0] ?? null);
+  return { layout: pruneDocs({ ...layout, openKeys: pinnedKeys, activeKey, closedTabs: recents }), closedCount };
+}
+
 function docKey(workspaceId: string, relativePath: string): string {
   return `${workspaceId}:${relativePath}`;
 }

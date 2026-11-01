@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { normalizeServerAddress, validateWorkspaceName, WELCOME_NOTE } from "@takenotes/core/workspace/onboarding";
 import path from "node:path";
 import { createMainWindow, resolveRendererDir } from "../window.js";
 import { WorkspaceRegistry, isNativeWorkspace, toWorkspaceInfo, type WorkspaceRegistration } from "../workspace/registry.js";
@@ -14,7 +15,7 @@ import { validatePosixRelativePath, validateWindowsRelativePath } from "../works
 import { validateWorkspaceId } from "../workspace/path-security.js";
 import type { WorkspaceKind } from "@takenotes/platform/types";
 import { clearDraft, isDraftStale, loadDraft, MAX_DRAFT_BYTES, saveDraft } from "../workspace/drafts.js";
-import { RecoveryStore, recoveryKeyForWorkspace } from "../workspace/recovery.js";
+import { RecoveryStore, recoveryKeyForWorkspace, type RecoveryReason } from "../workspace/recovery.js";
 import { HelperSupervisor } from "../wsl/helper-supervisor.js";
 import { WslRuntimeSupervisor } from "../wsl/runtime-supervisor.js";
 import { ConnectionStore, connectionStatusForHelperState } from "../wsl/connections.js";
@@ -286,7 +287,7 @@ function rememberLocalWorkspace(reg: WorkspaceRegistration): void {
 }
 
 function publicRecentWorkspaces(): RecentWorkspaceInfo[] {
-  return readRecentWorkspaces().map(({ id, displayName, type }) => ({ id, displayName, type }));
+  return readRecentWorkspaces().map(({ id, displayName, type, root }) => ({ id, displayName, type, path: root }));
 }
 
 /** Resolve a renderer-supplied workspaceId to its stable recovery namespace
@@ -405,6 +406,49 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     rememberLocalWorkspace(reg);
     watcher().start({ workspaceId: reg.id, root: reg.root, kind: reg.type });
     return { ok: true, result: { ...toWorkspaceInfo(reg), connection: "connected" as const } };
+  });
+
+  ipcMain.handle("workspace:create", async (event, name: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    if (typeof name !== "string") return { ok: false, error: { code: "INVALID_REQUEST", message: "Give the workspace a name." } };
+    const problem = validateWorkspaceName(name, readRecentWorkspaces().map((r) => r.displayName));
+    if (problem) return { ok: false, error: { code: "INVALID_REQUEST", message: problem } };
+    const root = path.join(app.getPath("documents"), name.trim());
+    try {
+      if (existsSync(root)) return { ok: false, error: { code: "ALREADY_EXISTS", message: "A folder with this name already exists in Documents.", detail: root } };
+      mkdirSync(root, { recursive: true });
+      writeFileSync(path.join(root, "Welcome.md"), WELCOME_NOTE, { flag: "wx" });
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      return { ok: false, error: { code: code === "EACCES" || code === "EPERM" ? "PERMISSION_DENIED" : "INTERNAL_ERROR", message: "takenotes could not create the folder.", detail: String(err) } };
+    }
+    const reg = workspaces.registerLocal(name.trim(), root, localWorkspaceKind(currentDesktopPlatform()));
+    rememberLocalWorkspace(reg);
+    watcher().start({ workspaceId: reg.id, root: reg.root, kind: reg.type });
+    return { ok: true, result: { ...toWorkspaceInfo(reg), connection: "connected" as const } };
+  });
+
+  ipcMain.handle("workspace:verifyServer", async (event, address: unknown, token: unknown) => {
+    if (!senderIsOurs(event)) throw new Error("Unauthorized sender.");
+    const origin = typeof address === "string" ? normalizeServerAddress(address) : null;
+    if (!origin || typeof token !== "string" || token.length === 0 || token.length > 512) {
+      return { ok: false, error: { code: "INVALID_REQUEST", message: "Enter a full server address, like https://notes.example.com, and your access token." } };
+    }
+    try {
+      const res = await fetch(`${origin}/api/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: token }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.status === 429) return { ok: false, error: { code: "PERMISSION_DENIED", message: "The server is limiting sign-in attempts.", detail: "HTTP 429" } };
+      if (res.status === 401) return { ok: false, error: { code: "PERMISSION_DENIED", message: "That token was not accepted.", detail: "HTTP 401" } };
+      if (!res.ok) return { ok: false, error: { code: "INTERNAL_ERROR", message: "The server answered with an error.", detail: `HTTP ${res.status}` } };
+    } catch (err) {
+      return { ok: false, error: { code: "OFFLINE", message: "takenotes could not reach that server.", detail: String(err) } };
+    }
+    void shell.openExternal(origin);
+    return { ok: true, result: {} };
   });
 
   ipcMain.handle("workspace:listRecent", async (event) => {
@@ -738,7 +782,7 @@ export function registerIpc(broadcast: (kind: string, payload: unknown) => void)
     const prep = handlerRel(reg, a.relativePath, false);
     if ("error" in prep) return { ok: false, error: prep.error };
     const reason =
-      a.reason === "save" || a.reason === "close" || a.reason === "shutdown" || a.reason === "restore-before" ? a.reason : "edit";
+      typeof a.reason === "string" && ["save", "close", "shutdown", "restore-before", "before-overwrite", "before-reload", "before-agent-undo"].includes(a.reason) ? (a.reason as RecoveryReason) : "edit";
     return recovery().captureChanged({ workspaceId: recoveryNamespace(reg), relativePath: prep.rel, content: a.content, reason });
   });
 

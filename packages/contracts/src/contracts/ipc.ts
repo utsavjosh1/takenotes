@@ -25,6 +25,8 @@ export type RecentWorkspaceInfo = {
   id: string;
   displayName: string;
   type: WorkspaceType;
+  /** Folder shown under the name on the welcome screen. */
+  path?: string;
 };
 
 export type DirectoryEntry = {
@@ -103,7 +105,7 @@ export type RecoverySnapshotMeta = {
   createdAt: number;
   contentHash: string;
   byteLength: number;
-  reason: "edit" | "save" | "close" | "shutdown" | "restore-before";
+  reason: "edit" | "save" | "close" | "shutdown" | "restore-before" | "before-overwrite" | "before-reload" | "before-agent-undo";
 };
 
 export type RecoverySnapshotRead = RecoverySnapshotMeta & {

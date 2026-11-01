@@ -104,8 +104,9 @@ export function ImportDialog({ workspaceId, attachmentLocation, attachmentFolder
         </>)}
         {preview.warnings.map((w, i) => <p className="inline-error" key={i}>{w}</p>)}
         {preview.skipped.map((s, i) => <p className="muted" key={i}>Skipped {s.rel}: {s.reason}.</p>)}
+        {preview.notes.length === 0 && <p className="pane-hint">Nothing to import — only Markdown, HTML, and Textbundle notes import; the rest is listed above as skipped.</p>}
         <div className="mcp-client-row">
-          <Button disabled={busy} onClick={confirm}>{busy ? "Importing…" : `Import ${preview.notes.length} note${preview.notes.length === 1 ? "" : "s"}`}</Button>
+          <Button disabled={busy || preview.notes.length === 0} onClick={confirm}>{busy ? "Importing…" : `Import ${preview.notes.length} note${preview.notes.length === 1 ? "" : "s"}`}</Button>
           <Button disabled={busy} onClick={() => { setPreview(null); setPhase("choose"); }}>Back</Button>
         </div>
       </>)}

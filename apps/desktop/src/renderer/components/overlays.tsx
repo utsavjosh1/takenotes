@@ -67,6 +67,7 @@ export function Toasts({ toasts, onDismiss }: { toasts: ToastT[]; onDismiss: (id
         <div key={t.id} className={`toast${t.kind === "error" ? " error" : ""}`} role={t.kind === "error" ? "alert" : "status"}>
           {t.kind === "error" && <Icon name="alert" />}
           <span style={{ flex: 1 }}>{t.text}</span>
+          {t.action && <button className="link" onClick={() => { t.action?.run(); onDismiss(t.id); }}>{t.action.label}</button>}
           <button className="link" onClick={() => onDismiss(t.id)} aria-label="Dismiss">Dismiss</button>
         </div>
       ))}
@@ -97,7 +98,7 @@ export function TabStrip({
   return (
     <div ref={listRef} className="tabstrip" role="tablist" aria-label="Open notes">
       {tabs.map((t) => {
-        const name = t.relativePath.replace(/\\/g, "/").split("/").pop() ?? t.relativePath;
+        const name = (t.relativePath.replace(/\\/g, "/").split("/").pop() ?? t.relativePath).replace(/\.md$/i, "");
         const state = `${name}${t.dirty ? ", unsaved changes" : ""}${t.pinned ? ", pinned" : ""}`;
         return (
           <div
