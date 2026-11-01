@@ -1,0 +1,6 @@
+html, body { margin: 0; background: var(--app); color: var(--text); font: var(--fs-ui)/var(--lh-ui) var(--font); }
+.sb-surface { padding: 24px; display: grid; gap: 20px; inline-size: 640px; max-inline-size: 100%; box-sizing: border-box; }
+.sb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.sb-label { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+.sb-icons { display: grid; grid-template-columns: repeat(auto-fill, 64px); gap: 8px; }
+.sb-icons span { display: grid; justify-items: center; gap: 4px; font-size: 10px; color: var(--muted); }

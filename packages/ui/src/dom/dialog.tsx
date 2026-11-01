@@ -16,12 +16,12 @@ export type DialogProps = DialogPolicy & {
  * focus into browser chrome. No app/global event handlers.
  * Default backdrop policy is safe for destructive decisions. */
 export function Dialog({ title, onClose, children, footer, size = "small", initialFocus,
-  dismissible = true, closeOnBackdrop = false }: DialogProps) {
+  dismissible = true, closeOnBackdrop = false, unsavedInput = false }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const initialFocusRef = useRef(initialFocus);
   const pointerStartedOutside = useRef(false);
   const titleId = useId();
-  const policy = { dismissible, closeOnBackdrop };
+  const policy = { dismissible, closeOnBackdrop, unsavedInput };
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;

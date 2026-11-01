@@ -1,5 +1,6 @@
-/* Desktop layout ownership + temporary aliases. Canonical values are in
- * @takenotes/ui/tokens.css, generated from packages/ui/src/theme.ts. */
+/* Desktop layout ownership + accent presets + temporary aliases. Canonical
+ * values are in @takenotes/ui/tokens.css (generated from packages/ui/src/theme.ts).
+ * Old colour aliases moved to @takenotes/ui/legacy-aliases.css. */
 :root {
   --titlebar-height: 40px;
   --rail-width: 48px;
@@ -55,43 +56,6 @@
   --z-tooltip: 600;
 }
 
-:root, [data-theme] {
-  --surface-app: var(--tn-surface-app);
-  --surface-sidebar: var(--tn-surface-sidebar);
-  --surface-editor: var(--tn-surface-editor);
-  --surface-overlay: var(--tn-surface-overlay);
-  --surface-input: var(--tn-surface-input);
-  --surface-hover: var(--tn-surface-hover);
-  --surface-active: var(--tn-surface-selected);
-  --surface-selected: var(--tn-surface-selected);
-  --border-subtle: var(--tn-border-subtle);
-  --border-strong: var(--tn-border-control);
-  --border-control: var(--tn-border-control);
-  --text-primary: var(--tn-text-primary);
-  --text-secondary: var(--tn-text-secondary);
-  --text-muted: var(--tn-text-muted);
-  --accent: var(--tn-accent);
-  --accent-hover: var(--tn-accent-hover);
-  --accent-soft: color-mix(in srgb, var(--tn-accent) 14%, transparent);
-  --danger: var(--tn-danger-text);
-  --danger-surface: var(--tn-danger-surface);
-  --warning: var(--tn-warning-text);
-  --warning-surface: var(--tn-warning-surface);
-  --success: var(--tn-success-text);
-  --success-surface: var(--tn-success-surface);
-  --selection: var(--tn-selection);
-  --code-bg: var(--tn-code-surface);
-  --highlight-surface: var(--tn-highlight-surface);
-  --action-fill: var(--tn-action-fill);
-  --action-text: var(--tn-action-text);
-  --scrollbar: var(--tn-scrollbar);
-  --shadow-menu: 0 4px 16px rgb(62 52 25 / .12);
-  --shadow-overlay: 0 16px 48px rgb(62 52 25 / .18);
-}
-[data-theme="dark"] {
-  --shadow-menu: 0 4px 16px rgb(0 0 0 / .32);
-  --shadow-overlay: 0 16px 48px rgb(0 0 0 / .45);
-}
 /* Step 9 accents. Source of truth: packages/core/src/appearance/
  * appearance.ts ACCENT_TOKENS (AAA/AA-verified pairs) — a drift test in
  * tests/appearance/ asserts these hexes match. Placed after the theme

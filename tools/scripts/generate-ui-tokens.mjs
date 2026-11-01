@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { colors, space, radius, fontSize, lineHeight, targetSize } from "../../packages/ui/src/theme.ts";
+import { colors, space, radius, fontSize, lineHeight, targetSize, publicColors, publicRadius, layout, controlHeight, type, fonts, motion, easing, zIndex } from "../../packages/ui/src/theme.ts";
 
 const lines = ["/* Generated from src/theme.ts. Run npm run ui:tokens; do not edit by hand. */", "", ":root {"];
 for (const [prefix, values, unit] of [
@@ -11,11 +11,27 @@ for (const [prefix, values, unit] of [
   }
 }
 lines.push("}", "");
-for (const [theme, values] of Object.entries(colors)) {
-  lines.push(theme === "light" ? ':root, [data-theme="light"] {' : '[data-theme="dark"] {', `  color-scheme: ${theme};`);
-  for (const [name, value] of Object.entries(values)) lines.push(`  --tn-${name}: ${value};`);
-  lines.push("}", "");
-}
+const colorLines = (theme) => Object.entries(colors[theme]).map(([name, value]) => `  --tn-${name}: ${value};`);
+lines.push(':root, [data-theme="light"] {', "  color-scheme: light;", ...colorLines("light"), "}", "");
+// "System": follow the OS unless the page pins a theme with data-theme.
+lines.push("@media (prefers-color-scheme: dark) {", '  :root:not([data-theme="light"]) {', "    color-scheme: dark;", ...colorLines("dark").map((l) => `  ${l}`), "  }", "}", "");
+lines.push('[data-theme="dark"] {', "  color-scheme: dark;", ...colorLines("dark"), "}", "");
+
+// Public names. Declared on [data-theme] too so a themed subtree re-resolves.
+lines.push(":root, [data-theme] {");
+for (const [name, key] of Object.entries(publicColors)) lines.push(`  --${name}: var(--tn-${key});`);
+for (const [name, value] of Object.entries(publicRadius)) lines.push(`  --r-${name}: ${value}px;`);
+lines.push("  --r-pill: 99px;");
+for (const [name, value] of Object.entries(layout)) lines.push(`  --${name}: ${value}px;`);
+for (const [name, value] of Object.entries(controlHeight)) lines.push(`  --control-h${name === "default" ? "" : `-${name}`}: ${value}px;`);
+for (const [name, value] of Object.entries(type)) lines.push(`  --${name}: ${name.startsWith("lh") ? value : `${value}px`};`);
+lines.push(`  --font: ${fonts.sans};`, `  --font-mono: ${fonts.mono};`);
+for (const [name, value] of Object.entries(motion)) lines.push(`  --${name}: ${value}ms;`);
+lines.push(`  --ease-out: ${easing};`);
+for (const [name, value] of Object.entries(zIndex)) lines.push(`  --z-${name}: ${value};`);
+lines.push("}", "", "@media (prefers-reduced-motion: reduce) {", "  :root {");
+for (const name of Object.keys(motion)) lines.push(`    --${name}: 0ms;`);
+lines.push("  }", "}", "");
 const css = lines.join("\n");
 const target = new URL("../../packages/ui/src/tokens.css", import.meta.url);
 if (process.argv.includes("--check")) {
