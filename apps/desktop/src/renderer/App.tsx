@@ -38,7 +38,7 @@ import { lineForBlockId, lineForHeadingFragment, previewExcerpt } from "@takenot
 import type { ParsedTakenotesUri } from "@takenotes/core/uri/parse";
 import { renderMarkdown } from "@takenotes/core/markdown/render";
 import { SearchPanel } from "./components/search";
-import { ContextMenu, Toasts, TabStrip } from "./components/overlays";
+import { ContextMenu, TabStrip } from "./components/overlays";
 import { CommandMenu } from "./components/palette";
 import { TemplatePicker } from "./components/template-picker";
 import { ImportDialog } from "./components/import-dialog";
@@ -72,7 +72,6 @@ function mimeExt(mime: string): string {
 }
 import { isWslKind } from "@takenotes/platform/filesystem";
 import { fileName, joinRel, parentDir, type CtxMenu } from "./components/types";
-import { useToastStore } from "./stores/toasts";
 import { useSettingsStore } from "./stores/settings";
 import { useIndexMeta } from "./stores/index-meta";
 import { useNotify } from "./hooks/use-notify";
@@ -131,8 +130,6 @@ export default function App(): JSX.Element {
   const { toast } = notify;
   const settings = useSettingsStore((s) => s.settings);
   const setSettings = useSettingsStore((s) => s.setAll);
-  const toasts = useToastStore((s) => s.toasts);
-  const dismissToast = useToastStore((s) => s.dismiss);
   const indexVersion = useIndexMeta((s) => s.version);
   const indexNotice = useIndexMeta((s) => s.notice);
   const bumpIndex = useIndexMeta((s) => s.bump);
@@ -1343,7 +1340,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== "Escape" || e.defaultPrevented || !workspaceApi.workspace) return;
-      if (document.querySelector("dialog[open], .ctx-menu, .cm-tooltip, .cm-panel, .command-menu, .fmt-bubble")) return;
+      if (document.querySelector("dialog[open], .ui-menu, .ui-palette, .ui-popover, .cm-tooltip, .cm-panel, .fmt-bubble")) return;
       const inPage = !!(e.target as HTMLElement | null)?.closest?.(".cm-editor, .note-title-input");
       if (focusMode || (inPage && docsApi.activeTab)) { e.preventDefault(); setFocusMode((v) => !v); }
     };
@@ -1398,7 +1395,6 @@ export default function App(): JSX.Element {
         {updatesApi.dialog && (
           <UpdateDialog dialog={updatesApi.dialog} version={version} onClose={updatesApi.close} onDownload={() => void updatesApi.download()} />
         )}
-        <Toasts toasts={toasts} onDismiss={dismissToast} />
       </div>
     );
   }
@@ -1593,7 +1589,7 @@ export default function App(): JSX.Element {
                       <div className="panel-title">Opening…</div>
                     ) : healthError ? (
                       <div style={{ padding: 12 }}>
-                        <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Couldn&apos;t list this workspace.</p>
+                        <p style={{ fontSize: 13, color: "var(--text2)" }}>Couldn&apos;t list this workspace.</p>
                         <p className="inline-error">{healthError}</p>
                       </div>
                     ) : (
@@ -1606,7 +1602,7 @@ export default function App(): JSX.Element {
                         onToggle={(d) => void treeApi.toggleDir(d)}
                         onOpen={(en) => {
                           if (en.fileClass === "markdown" || en.fileClass === "text" || isCanvasPath(en.relativePath)) { void docsApi.openFile(en.relativePath).then(() => void treeApi.reveal(en.relativePath)); }
-                          else toast("Only Markdown, text, and canvas files open in this MVP.");
+                          else toast("Only notes, text and canvas files open here.");
                         }}
                         onSelect={(rel) => treeApi.select(rel)}
                         onContext={showFileMenu}
@@ -2077,7 +2073,6 @@ export default function App(): JSX.Element {
           )}
         </Dialog>
       )}
-      <Toasts toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

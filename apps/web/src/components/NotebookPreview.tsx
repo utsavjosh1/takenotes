@@ -1,3 +1,4 @@
+import { IconButton } from "@takenotes/ui/dom";
 import { useMemo, useState } from "react";
 import { Icon } from "./Icon";
 import { useSiteTheme, type Theme } from "../theme";
@@ -41,7 +42,7 @@ export function NotebookPreview() {
   }
 
   return (
-    <div className={`notebook ${dark ? "notebook-dark" : ""}`}>
+    <div className={`notebook ${dark ? "notebook-dark" : ""}`} data-theme={dark ? "dark" : "light"}>
       <div className="notebook-titlebar">
         <div className="notebook-brand"><img src="/takenotes-symbol-violet.svg" alt="" width="23" height="23" />takenotes<span className="titlebar-divider" />My little corner</div>
         <span className="demo-label">Interactive concept</span>
@@ -66,8 +67,8 @@ export function NotebookPreview() {
             <label className="mobile-note-picker"><span className="sr-only">Choose sample note</span><select value={active.id} onChange={(event) => selectNote(event.target.value)}>{notes.map((note) => <option key={note.id} value={note.id}>{note.title}</option>)}</select></label>
             <div className="note-tools">
               <div className="view-toggle" role="group" aria-label="Note view"><button type="button" aria-pressed={editing} onClick={() => setEditing(true)}>Write</button><button type="button" aria-pressed={!editing} onClick={() => setEditing(false)}>Read</button></div>
-              <button className="icon-button" type="button" aria-label={dark ? "Use light preview" : "Use dark preview"} onClick={() => setPreviewTheme(dark ? "light" : "dark")} title="Toggle preview theme"><Icon name={dark ? "sun" : "moon"} size={17} /></button>
-              <button className="icon-button" type="button" aria-label="Reset sample notes" onClick={reset} title="Reset sample notes"><Icon name="reset" size={16} /></button>
+              <IconButton label={dark ? "Use light preview" : "Use dark preview"} onClick={() => setPreviewTheme(dark ? "light" : "dark")}><Icon name={dark ? "sun" : "moon"} size={17} /></IconButton>
+              <IconButton label="Reset sample notes" onClick={reset}><Icon name="reset" size={16} /></IconButton>
             </div>
           </div>
           <div className="note-page">

@@ -11,7 +11,7 @@
  * device, memory in tests). Corrupt stored JSON → defaults, never a crash.
  */
 
-import type { ThemePreference } from "@takenotes/ui/theme";
+import type { ThemePreference } from "@takenotes/ui/native";
 
 export type AppearanceSettings = {
   theme: ThemePreference;

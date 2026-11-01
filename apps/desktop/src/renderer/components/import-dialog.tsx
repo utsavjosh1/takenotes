@@ -64,7 +64,7 @@ export function ImportDialog({ workspaceId, attachmentLocation, attachmentFolder
       {error && <p className="inline-error" role="alert">{error}</p>}
       {phase === "choose" && (<>
         <p className="muted">
-          Markdown, HTML, and Textbundle (`.textbundle`) import. HTML converts to Markdown (formatting kept,
+          Notes, HTML pages and Textbundle (`.textbundle`) files import. HTML pages become notes (formatting kept,
           layout not); images and files referenced by the notes copy into your attachments folder and links
           are rewritten. Remote images stay remote — nothing is fetched. Nothing is overwritten: clashes
           become `name 1.md`.
@@ -104,7 +104,7 @@ export function ImportDialog({ workspaceId, attachmentLocation, attachmentFolder
         </>)}
         {preview.warnings.map((w, i) => <p className="inline-error" key={i}>{w}</p>)}
         {preview.skipped.map((s, i) => <p className="muted" key={i}>Skipped {s.rel}: {s.reason}.</p>)}
-        {preview.notes.length === 0 && <p className="pane-hint">Nothing to import — only Markdown, HTML, and Textbundle notes import; the rest is listed above as skipped.</p>}
+        {preview.notes.length === 0 && <p className="pane-hint">Nothing to import — only notes, HTML pages and Textbundle files import; the rest is listed above as skipped.</p>}
         <div className="mcp-client-row">
           <Button disabled={busy || preview.notes.length === 0} onClick={confirm}>{busy ? "Importing…" : `Import ${preview.notes.length} note${preview.notes.length === 1 ? "" : "s"}`}</Button>
           <Button disabled={busy} onClick={() => { setPreview(null); setPhase("choose"); }}>Back</Button>

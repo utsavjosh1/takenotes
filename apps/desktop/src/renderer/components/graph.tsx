@@ -8,6 +8,7 @@
  * sliders, tag nodes + tags toggle, time-lapse. Nodes are notes;
  * ghosts/attachments appear only under their opt-in toggles.
  */
+import { Checkbox, Input, Skeleton } from "@takenotes/ui/dom";
 import { useMemo, useState, type JSX } from "react";
 import {
   buildGraph,
@@ -24,12 +25,12 @@ import type { Edge } from "@takenotes/core/index/edges";
  * Stored as `var()` strings — they flow into inline `style` (which resolves vars),
  * never into SVG presentation attributes (which do not). */
 const GROUP_COLORS = [
-  "var(--tn-graph-1)",
-  "var(--tn-graph-2)",
-  "var(--tn-graph-3)",
-  "var(--tn-graph-4)",
-  "var(--tn-graph-5)",
-  "var(--tn-graph-6)",
+  "var(--graph-1)",
+  "var(--graph-2)",
+  "var(--graph-3)",
+  "var(--graph-4)",
+  "var(--graph-5)",
+  "var(--graph-6)",
 ];
 
 type T = { x: number; y: number; k: number };
@@ -87,7 +88,7 @@ export function GraphPane({
     return (
       <div className="pane-placeholder">
         <p className="panel-title">Graph</p>
-        <p>No workspace index yet.</p>
+        <Skeleton label="Loading the graph" />
       </div>
     );
   }
@@ -116,19 +117,19 @@ export function GraphPane({
       </div>
 
       <div className="pane-toolbar" role="toolbar" aria-label="Graph filters">
-        <input
+        <Input
           className="rename-input" aria-label="Filter by search" placeholder="Filter: search grammar…"
           value={query} onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
         />
-        <label title="Hide notes with no links"><input type="checkbox" checked={!showOrphans} onChange={(e) => setShowOrphans(!e.target.checked)} /> Hide orphans</label>
-        <label title="Show links to nonexistent notes as ghost nodes"><input type="checkbox" checked={includeUnresolved} onChange={(e) => setIncludeUnresolved(e.target.checked)} /> Unresolved</label>
-        <label title="Show attachment targets as nodes"><input type="checkbox" checked={includeAttachments} onChange={(e) => setIncludeAttachments(e.target.checked)} /> Attachments</label>
+        <span title="Hide notes with no links"><Checkbox label="Hide orphans" checked={!showOrphans} onChange={(e) => setShowOrphans(!e.target.checked)} /></span>
+        <span title="Show links to nonexistent notes as ghost nodes"><Checkbox label="Unresolved" checked={includeUnresolved} onChange={(e) => setIncludeUnresolved(e.target.checked)} /></span>
+        <span title="Show attachment targets as nodes"><Checkbox label="Attachments" checked={includeAttachments} onChange={(e) => setIncludeAttachments(e.target.checked)} /></span>
       </div>
       {!filtered.ok && <p className="inline-error" style={{ padding: "0 12px" }}>{filtered.error}</p>}
 
       <div className="pane-toolbar" role="toolbar" aria-label="Graph groups">
-        <input
+        <Input
           className="rename-input" aria-label="Group query" placeholder="Group: query → color…"
           value={groupQuery} onChange={(e) => setGroupQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -188,7 +189,7 @@ export function GraphPane({
             if (!p) return null;
             const ghost = n.ghost === true || n.attachment === true;
             const r = 6 + Math.min(n.inDegree, 6) * 1.5;
-            const fill = colors.get(n.id) ?? (ghost ? "var(--text-muted)" : "var(--accent)");
+            const fill = colors.get(n.id) ?? (ghost ? "var(--muted)" : "var(--accent)");
             const dim = neighbours && !neighbours.has(n.id);
             return (
               <g
@@ -200,7 +201,7 @@ export function GraphPane({
                 onClick={() => { if (!ghost) onOpen(n.id); }}
               >
                 <title>{ghost ? `${n.label} (missing — not clickable)` : `${n.label}\n${n.id}`}</title>
-                <circle r={r} style={{ fill, stroke: hover === n.id ? "var(--text-primary)" : "transparent", strokeWidth: 2, cursor: ghost ? undefined : "pointer" }} />
+                <circle r={r} style={{ fill, stroke: hover === n.id ? "var(--text)" : "transparent", strokeWidth: 2, cursor: ghost ? undefined : "pointer" }} />
                 <text y={r + 11} textAnchor="middle" className="g-label">{n.label.length > 24 ? `${n.label.slice(0, 23)}…` : n.label}</text>
               </g>
             );

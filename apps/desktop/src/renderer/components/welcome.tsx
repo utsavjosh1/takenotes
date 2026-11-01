@@ -46,7 +46,7 @@ export function WelcomeScreen({ recents, servers, opening, wslEnabled, onOpenFol
     <EmptyState className="welcome-state" headingLevel={1} title="Welcome to takenotes"
       illustration={<><img src={lockupDarkUrl} className="brand-logo only-dark" alt="" draggable={false} /><img src={lockupLightUrl} className="brand-logo only-light" alt="" draggable={false} /></>}
       actions={<div className="welcome-grid">
-        <button className="wcard" onClick={onOpenFolder}><Icon name="folder" /><b>Open a folder</b><small>Use any folder of Markdown files</small></button>
+        <button className="wcard" onClick={onOpenFolder}><Icon name="folder" /><b>Open a folder</b><small>Use any folder of notes</small></button>
         {wslEnabled
           ? <button className="wcard" onClick={onOpenWsl}><Icon name="terminal" /><b>Open WSL folder</b><small>Your Linux home, edited from Windows</small></button>
           : <button className="wcard" disabled aria-disabled="true"><Icon name="terminal" /><b>Open WSL folder</b><small>Available on Windows</small></button>}
@@ -54,7 +54,7 @@ export function WelcomeScreen({ recents, servers, opening, wslEnabled, onOpenFol
         <button className="wcard" onClick={onSignIn}><Icon name="cloud" /><b>Sign in to a server</b><small>Your self-hosted takenotes</small></button>
       </div>}>
       {children}
-      <p className="supporting-copy">Your notes stay plain Markdown files.</p>
+      <p className="supporting-copy">Your notes stay plain text files you own.</p>
       {opening && (
         <div className="ws-skeleton" role="status" aria-label="Opening workspace">
           <span className="sk" /><span className="sk" /><span className="sk short" />
@@ -83,7 +83,7 @@ export function NoNotesState({ onNew }: { onNew: () => void }): JSX.Element {
   return (
     <div className="pane-empty-note">
       <p><b>No notes yet</b></p>
-      <p className="muted">Markdown files you add to this folder show up here.</p>
+      <p className="muted">Notes you add to this folder show up here.</p>
       <Button variant="primary" onClick={onNew}>New note</Button>
     </div>
   );

@@ -138,7 +138,7 @@ export const COMMAND_DEFINITIONS: readonly CommandDefinition[] = [
   { id: "today.open", title: "Today", category: "View", scope: "workspace" },
   { id: "calendar.open", title: "Calendar", category: "View", scope: "workspace" },
   { id: "tags.open", title: "Tags", category: "View", scope: "workspace" },
-  { id: "properties.open", title: "Properties", category: "View", scope: "workspace" },
+  { id: "properties.open", title: "Details", category: "View", scope: "workspace" },
   { id: "collections.open", title: "Collections", category: "View", scope: "workspace" },
   { id: "graph.open", title: "Graph", category: "View", scope: "workspace" },
   { id: "canvas.new", title: "New Canvas", category: "Note", scope: "workspace" },

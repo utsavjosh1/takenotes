@@ -10,6 +10,8 @@ export type TabsProps = {
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
   onContext?: (e: MouseEvent, id: string) => void;
+  /** Drag a tab onto another to move it there. */
+  onReorder?: (fromId: string, toId: string) => void;
   label?: string;
 };
 const GUESS = 140;
@@ -18,7 +20,8 @@ const MORE = 40;
 /** 36px strip, 32px tabs, accent line on the active one. Arrows move and open
  * the tab, Delete or middle-click closes. Tabs that do not fit go into a menu;
  * the active tab always stays in the strip. */
-export function Tabs({ tabs, activeId, onActivate, onClose, onContext, label = "Open notes" }: TabsProps) {
+export function Tabs({ tabs, activeId, onActivate, onClose, onContext, onReorder, label = "Open notes" }: TabsProps) {
+  const dragId = useRef<string | null>(null);
   const strip = useRef<HTMLDivElement>(null);
   const widths = useRef(new Map<string, number>());
   const [available, setAvailable] = useState(Infinity);
@@ -69,6 +72,14 @@ export function Tabs({ tabs, activeId, onActivate, onClose, onContext, label = "
         return <div key={t.id} data-tab-id={t.id} role="tab" aria-selected={on} tabIndex={on || (activeId === null && i === 0) ? 0 : -1}
           aria-label={state ? `${t.label}, ${state}` : t.label} title={t.label}
           className={`ui-tab${on ? " is-on" : ""}`} onClick={() => onActivate(t.id)}
+          draggable={onReorder ? true : undefined}
+          onDragStart={onReorder ? () => { dragId.current = t.id; } : undefined}
+          onDragOver={onReorder ? (e) => e.preventDefault() : undefined}
+          onDrop={onReorder ? (e) => {
+            e.preventDefault();
+            if (dragId.current && dragId.current !== t.id) onReorder(dragId.current, t.id);
+            dragId.current = null;
+          } : undefined}
           onContextMenu={onContext && ((e) => onContext(e, t.id))}
           onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); onClose(t.id); } }}
           onKeyDown={(e) => onKey(e, t)}>

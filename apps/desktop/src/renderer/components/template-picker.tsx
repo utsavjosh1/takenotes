@@ -1,5 +1,5 @@
 import { useMemo, useState, type JSX } from "react";
-import { Dialog } from "@takenotes/ui/dom";
+import { Dialog, Input } from "@takenotes/ui/dom";
 import { listNoteTemplates } from "@takenotes/core/productivity/templates";
 import { displayPath } from "./types";
 
@@ -21,7 +21,7 @@ export function TemplatePicker({ allPaths, templateFolder, onPick, onClose }: {
   }, [templates, query]);
   return (
     <Dialog title="Insert Template" onClose={onClose} closeOnBackdrop>
-      <input
+      <Input
         className="cmd-input"
         autoFocus
         aria-label="Filter templates"

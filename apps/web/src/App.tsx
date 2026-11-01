@@ -1,3 +1,4 @@
+import { IconButton } from "@takenotes/ui/dom";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./components/Icon";
 import { NotebookPreview } from "./components/NotebookPreview";
@@ -23,7 +24,7 @@ function Header({ blogActive }: { blogActive: boolean }) {
     <div className="header-inner container">
       <Brand />
       <nav className="desktop-nav" aria-label="Main navigation">{navigation.map((item) => <a key={item.href} href={item.href} aria-current={item.href === "#/blog" && blogActive ? "page" : undefined}>{item.label}</a>)}</nav>
-      <div className="header-actions"><ThemeToggle /><a className="github-link" href={site.repository} aria-label="takenotes on GitHub"><Icon name="github" size={19} /></a><a className="button button-small button-dark" href="#download">Get takenotes <Icon name="arrowUp" size={15} /></a><button ref={toggle} className="icon-button menu-toggle" type="button" aria-expanded={menuOpen} aria-controls="mobile-navigation" aria-label={menuOpen ? "Close navigation" : "Open navigation"} onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? "close" : "menu"} /></button></div>
+      <div className="header-actions"><ThemeToggle /><a className="github-link" href={site.repository} aria-label="takenotes on GitHub"><Icon name="github" size={19} /></a><a className="tn-button tn-button--primary" href="#download">Get takenotes <Icon name="arrowUp" size={15} /></a><IconButton ref={toggle} className="menu-toggle" aria-expanded={menuOpen} aria-controls="mobile-navigation" label={menuOpen ? "Close navigation" : "Open navigation"} onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? "close" : "menu"} /></IconButton></div>
     </div>
     <nav id="mobile-navigation" className="mobile-nav" aria-label="Mobile navigation" hidden={!menuOpen}>{navigation.map((item) => <a key={item.href} href={item.href} aria-current={item.href === "#/blog" && blogActive ? "page" : undefined} onClick={() => { setMenuOpen(false); toggle.current?.focus(); }}>{item.label}<Icon name="arrowUp" size={16} /></a>)}<a href={site.repository}>Explore the source <Icon name="github" size={16} /></a></nav>
   </header>;
@@ -36,7 +37,7 @@ function Hero() {
     <a href="#roadmap" className="release-badge"><span className="status-dot" /><span>A little notebook. A fresh start.</span><span className="badge-version">v{site.version}</span><Icon name="chevron" size={13} /></a>
     <h1 id="hero-title">Less noise.<br />More room to <em>think.</em></h1>
     <p className="hero-description">A quiet home for your notes, ideas, and everything in between.<br className="desktop-break" /> Plain Markdown. Local files. Completely yours.</p>
-    <div className="hero-actions"><a className="button button-dark" href="#download"><Icon name="windows" size={17} /> Explore early builds <Icon name="arrow" size={17} /></a><a className="button button-text" href="#preview">Take a look inside <Icon name="down" size={16} /></a></div>
+    <div className="hero-actions"><a className="tn-button tn-button--primary tn-button--lg" href="#download"><Icon name="windows" size={17} /> Explore early builds <Icon name="arrow" size={17} /></a><a className="tn-button tn-button--ghost tn-button--lg" href="#preview">Take a look inside <Icon name="down" size={16} /></a></div>
     <p className="hero-footnote">Open source &nbsp;·&nbsp; Windows-first &nbsp;·&nbsp; Made for your own files</p>
     <div id="preview" className="preview-stage">
       <div className="preview-topline"><span><span className="status-dot" /> A small glimpse of a calmer workspace</span><span>Try a note. Make it your own. <Icon name="down" size={14} /></span></div>
@@ -78,7 +79,7 @@ function FAQ() {
 }
 
 function Download() {
-  return <section id="download" className="download-section container" aria-labelledby="download-title"><div className="download-card"><div className="download-doodle" aria-hidden="true">✳</div><span className="eyebrow">YOUR NEXT IDEA DESERVES A HOME</span><h2 id="download-title">A little less noise.<br />A little more <em>you.</em></h2><p>Come help shape a notebook that feels like your own.</p><div className="download-actions"><a className="button button-dark" href={site.releases}><Icon name="windows" size={18} /> Explore Windows builds <Icon name="arrowUp" size={16} /></a><a className="button button-outline" href={site.repository}><Icon name="github" size={18} /> Explore the source</a></div><p className="download-platform">Target: Windows 11 x64 · WSL2 · Ubuntu 22.04 / 24.04</p><div className="prerelease-notice"><span className="notice-dot" /><p><strong>A work in progress, not a finished promise.</strong> Pre-release builds are unsigned. Windows + WSL validation is ongoing. Please back up your notes and explore with a test workspace.</p></div></div></section>;
+  return <section id="download" className="download-section container" aria-labelledby="download-title"><div className="download-card"><div className="download-doodle" aria-hidden="true">✳</div><span className="eyebrow">YOUR NEXT IDEA DESERVES A HOME</span><h2 id="download-title">A little less noise.<br />A little more <em>you.</em></h2><p>Come help shape a notebook that feels like your own.</p><div className="download-actions"><a className="tn-button tn-button--primary tn-button--lg" href={site.releases}><Icon name="windows" size={18} /> Explore Windows builds <Icon name="arrowUp" size={16} /></a><a className="tn-button tn-button--lg" href={site.repository}><Icon name="github" size={18} /> Explore the source</a></div><p className="download-platform">Target: Windows 11 x64 · WSL2 · Ubuntu 22.04 / 24.04</p><div className="prerelease-notice"><span className="notice-dot" /><p><strong>A work in progress, not a finished promise.</strong> Pre-release builds are unsigned. Windows + WSL validation is ongoing. Please back up your notes and explore with a test workspace.</p></div></div></section>;
 }
 
 function Home() {

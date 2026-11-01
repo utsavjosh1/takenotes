@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
+import { useMemo, useState, type JSX, type ReactNode } from "react";
+import { CommandPalette, type PaletteItem } from "@takenotes/ui/dom";
+import type { PaletteGroup } from "@takenotes/ui";
 import {
   COMMAND_GROUPS,
   commandDisabledReason,
@@ -77,15 +79,11 @@ export function CommandMenu({
   // Ctrl+Shift+P opens the palette (commands by default); Ctrl+P opens Quick Open.
   const palette = initialQuery.startsWith(">");
   const [query, setQuery] = useState(initialQuery.replace(/^>\s*/, ""));
-  const [index, setIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const openerRef = useRef<Element | null>(document.activeElement);
   const parsed = paletteKindOf(query);
   // In the palette plain text means a command; a first symbol (# @ ?) switches mode.
   const kind: PaletteKind = palette && parsed.kind === "files" ? "commands" : parsed.kind;
   const text = palette && parsed.kind === "files" ? query.trim() : parsed.text;
   const isPalette = palette || kind !== "files";
-  const listId = "cmd-listbox";
 
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
@@ -131,90 +129,51 @@ export function CommandMenu({
     return out;
   }, [kind, text, files, recents, commands, recentCommands, tags, onOpenFile, onCreateFile, onAddTask, onSearch, onOpenTag]);
 
-  useEffect(() => setIndex(0), [query]);
-  useEffect(() => {
-    inputRef.current?.focus();
-    const opener = openerRef.current;
-    return () => { if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true }); };
-  }, []);
-  useEffect(() => {
-    document.getElementById(`cmd-opt-${index}`)?.scrollIntoView({ block: "nearest" });
-  }, [index]);
-
   const close = onClose;
-  const commit = (o: { ctrl: boolean; shift: boolean }): void => {
-    if (kind === "files" && o.shift) { if (text) { onCreateFile(text); close(); } return; }
-    const r = rows[Math.min(index, rows.length - 1)];
-    if (!r || r.disabled) return;
-    r.run(o);
-    close();
-  };
-
   const label = isPalette ? "Command palette" : "Quick open";
   const placeholder = kind === "commands" ? "Type a command…" : kind === "tags" ? "Find a tag…" : kind === "schedule" ? "call Ron tomorrow 3pm" : kind === "search" ? "Search all notes…" : isPalette ? "Type a command, or # @ ?" : "Find a note…";
+
+  const emptyText = kind === "files" ? "No recent notes yet. Type to find a note." : kind === "commands" ? "No matching commands." : kind === "tags" ? "No tags yet." : kind === "search" ? "Type what to look for." : "Type a task, for example: call Ron tomorrow 3pm.";
+  const groups: PaletteGroup<PaletteItem>[] = [];
+  for (const r of rows) {
+    const item: PaletteItem = {
+      id: r.id, label: r.label,
+      ...(r.sub ? { description: r.sub } : {}), ...(r.tag ? { tag: r.tag } : {}), ...(r.kbd ? { hint: r.kbd } : {}),
+      ...(r.disabled ? { disabledReason: r.disabled } : {}),
+    };
+    if (r.group || groups.length === 0) groups.push({ ...(r.group ? { heading: r.group } : kind === "files" && text === "" ? { heading: "Recent" } : {}), items: [item] });
+    else groups[groups.length - 1]!.items.push(item);
+  }
+
   return (
-    <div className="scrim" onMouseDown={close}>
-      <div className="command-menu" role="dialog" aria-modal="true" aria-label={label} onMouseDown={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } }}>
-        <input
-          ref={inputRef}
-          className="cmd-input"
-          placeholder={placeholder}
-          value={query}
-          aria-label={label}
-          role="combobox"
-          aria-expanded={rows.length > 0}
-          aria-controls={listId}
-          aria-activedescendant={rows.length > 0 ? `cmd-opt-${Math.min(index, rows.length - 1)}` : undefined}
-          aria-autocomplete="list"
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") { e.preventDefault(); setIndex((i) => Math.min(i + 1, Math.max(0, rows.length - 1))); }
-            else if (e.key === "ArrowUp") { e.preventDefault(); setIndex((i) => Math.max(i - 1, 0)); }
-            else if (e.key === "Home") { e.preventDefault(); setIndex(0); }
-            else if (e.key === "End") { e.preventDefault(); setIndex(Math.max(0, rows.length - 1)); }
-            else if (e.key === "Enter") { e.preventDefault(); commit({ shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey }); }
-          }}
-        />
-        {isPalette && (
-          <div className="cmd-modes" role="group" aria-label="Palette mode">
-            {PILLS.map((p) => (
-              <button key={p.kind} type="button" tabIndex={-1} className={`pm${kind === p.kind ? " on" : ""}`}
-                onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(kind === p.kind && !(palette && p.kind === "commands") ? "" : p.kind === "commands" ? (palette ? "" : ">") : p.key); inputRef.current?.focus(); }}>
-                <kbd>{p.key}</kbd>{p.label}{p.kind === "schedule" && <span className="concept">Concept</span>}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="cmd-list" role="listbox" id={listId} aria-label={kind === "files" ? "Matching notes" : "Results"}>
-          {kind === "files" && text === "" && rows.length > 0 && <div className="cmd-section" role="presentation">Recent</div>}
-          {rows.length === 0 && (
-            <div className="cmd-section" role="presentation">
-              {kind === "files" ? "No recent notes yet. Type to find a note." : kind === "commands" ? "No matching commands." : kind === "tags" ? "No tags yet." : kind === "search" ? "Type what to look for." : "Type a task, like “call Ron tomorrow 3pm”."}
-            </div>
-          )}
-          {rows.map((r, i) => (
-            <div key={r.id} role="presentation">
-              {r.group && <div className="cmd-section" role="presentation">{r.group}</div>}
-              <div id={`cmd-opt-${i}`} role="option" aria-selected={i === index} aria-disabled={r.disabled ? true : undefined}
-                className={`cmd-item${i === index ? " selected" : ""}${r.disabled ? " disabled" : ""}${r.id === "__create" ? " create" : ""}`}
-                onMouseEnter={() => setIndex(i)}
-                onClick={(e) => { if (r.disabled) return; r.run({ ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }); close(); }}>
-                <span className="main-label">{r.label}</span>
-                {r.disabled ? <span className="sub-label">{r.disabled}</span> : r.sub && <span className="sub-label">{r.sub}</span>}
-                {r.tag && <span className={`concept${r.tag === "concept" ? "" : " plain"}`}>{r.tag}</span>}
-                {r.kbd && <kbd>{r.kbd}</kbd>}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="cmd-foot" aria-hidden="true">
-          <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
-          <span><kbd>Enter</kbd> {kind === "commands" ? "run" : kind === "schedule" ? "add" : "open"}</span>
-          {kind === "files" && <><span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> new tab</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> create</span></>}
-          <span><kbd>Esc</kbd> close</span>
-        </div>
-      </div>
-    </div>
+    <CommandPalette
+      label={label}
+      placeholder={placeholder}
+      query={query}
+      onQueryChange={setQuery}
+      groups={groups}
+      emptyText={emptyText}
+      onClose={close}
+      onSelect={(item, how) => {
+        if (kind === "files" && how.shift) { if (text) { onCreateFile(text); close(); } return; }
+        const r = rows.find((x) => x.id === item.id);
+        if (!r || r.disabled) return;
+        r.run(how);
+        close();
+      }}
+      {...(isPalette ? {
+        modes: PILLS.map((p) => ({ id: p.kind, label: p.kind === "schedule" ? "Schedule (concept)" : p.label, key: p.key, active: kind === p.kind })),
+        onModeSelect: (id: string) => {
+          const p = PILLS.find((x) => x.kind === id)!;
+          setQuery(kind === p.kind && !(palette && p.kind === "commands") ? "" : p.kind === "commands" ? (palette ? "" : ">") : p.key);
+        },
+      } : {})}
+      hints={[
+        { keys: ["↑", "↓"], text: "move" },
+        { keys: ["Enter"], text: kind === "commands" ? "run" : kind === "schedule" ? "add" : "open" },
+        ...(kind === "files" ? [{ keys: ["Ctrl", "Enter"], text: "new tab" }, { keys: ["Shift", "Enter"], text: "create" }] : []),
+        { keys: ["Esc"], text: "close" },
+      ]}
+    />
   );
 }

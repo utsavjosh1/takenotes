@@ -89,9 +89,9 @@ describe("appearanceVars", () => {
 
   it("passes font size, line height, and measure through", () => {
     const vars = appearanceVars({ editorFont: "system", fontSize: 18, lineHeight: 1.7, readableWidth: 900 });
-    expect(vars["--editor-font-size"]).toBe("18px");
-    expect(vars["--editor-line-height"]).toBe("1.7");
-    expect(vars["--editor-max-width"]).toBe("900px");
+    expect(vars["--fs"]).toBe("18px");
+    expect(vars["--lh"]).toBe("1.7");
+    expect(vars["--measure"]).toBe("900px");
   });
 
   it("never points at a remote font", () => {

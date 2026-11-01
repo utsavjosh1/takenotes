@@ -133,7 +133,7 @@ export function FileTree({
       ))}
       {entries.length > rootLimit && <ShowMore depth={0} hidden={entries.length - rootLimit} onClick={() => ctx.onMore("")} />}
       {entries.length === 0 && (
-        <EmptyState title="No notes yet" description="Markdown files you add here show up automatically." />
+        <EmptyState title="No notes yet" description="Notes you add here show up automatically." />
       )}
     </div>
   );

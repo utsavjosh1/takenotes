@@ -1,0 +1,61 @@
+/* Marketing-only layer. Everything else on the site uses the product tokens
+ * from @takenotes/ui. Raw colours are allowed in this file only: illustration
+ * art, the mock-window chrome and the display type. Keep it small. */
+:root, [data-theme] {
+  --brand-font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --brand-font-hand: "Caveat", cursive;
+  --brand-white: #ffffff;
+  --brand-black: #000000;
+  --brand-ink: #191817;
+  --brand-paper: #f6efdc;
+  --brand-amber: #ffdf8e;
+  --brand-solid: var(--editor);
+  --brand-hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --brand-art-paper: #ffffff;
+  --brand-art-backing: #f1e7cd;
+  --brand-art-rule: #eee5cf;
+  --brand-art-label: #eee4c9;
+  --brand-workflow-fill: #efe6cf;
+  --brand-workflow-line: #ddd0b2;
+  --brand-quote-fill: #fff6da;
+  --brand-neutral-fill: #eee5cc;
+  --brand-neutral-ink: #6d6350;
+  --brand-mint-line: #bfdcae;
+  --brand-42613b: #42613b;
+  --brand-493f30: #493f30;
+  --brand-494033: #494033;
+  --brand-4a4335: #4a4335;
+  --brand-4caf5d: #4caf5d;
+  --brand-5a503f: #5a503f;
+  --brand-6d5df0: #6d5df0;
+  --brand-9c9174: #9c9174;
+  --brand-9fe08b: #9fe08b;
+  --brand-a39b83: #a39b83;
+  --brand-a89a78: #a89a78;
+  --brand-b3a888: #b3a888;
+  --brand-b7ad8f: #b7ad8f;
+  --brand-b8a87f: #b8a87f;
+  --brand-bfdcae: #bfdcae;
+  --brand-c8bda0: #c8bda0;
+  --brand-c9bfa4: #c9bfa4;
+  --brand-d2c4a2: #d2c4a2;
+  --brand-e9ddba: #e9ddba;
+  --brand-eeeeee: #eeeeee;
+  --brand-f0e6c8: #f0e6c8;
+  --brand-fbf4e4: #fbf4e4;
+  --brand-ffb02e: #ffb02e;
+}
+[data-theme="dark"] {
+  --brand-solid: var(--overlay);
+  --brand-hover: color-mix(in srgb, var(--text) 8%, transparent);
+  --brand-art-paper: #29231c;
+  --brand-art-backing: #383021;
+  --brand-art-rule: #493f30;
+  --brand-art-label: #493f30;
+  --brand-workflow-fill: #211e17;
+  --brand-workflow-line: #494033;
+  --brand-quote-fill: #352a14;
+  --brand-neutral-fill: #342e23;
+  --brand-neutral-ink: #d2c4a2;
+  --brand-mint-line: #42613b;
+}

@@ -7,8 +7,8 @@
     ".": "./src/index.ts",
     "./native": "./src/native/index.ts",
     "./dom": "./src/dom/index.ts",
+    "./generated": "./src/generated.ts",
     "./tokens.css": "./src/tokens.css",
-    "./legacy-aliases.css": "./src/legacy-aliases.css",
     "./tailwind.css": "./src/tailwind.css",
     "./dom.css": "./src/dom/styles.css"
   },

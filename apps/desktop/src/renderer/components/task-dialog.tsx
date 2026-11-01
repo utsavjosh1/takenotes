@@ -1,5 +1,5 @@
 import { useState, type JSX } from "react";
-import { Button, Dialog } from "@takenotes/ui/dom";
+import { Button, Dialog, Input } from "@takenotes/ui/dom";
 import { formatTaskLine } from "@takenotes/core/productivity/tasks";
 import type { TaskCaptureTarget } from "@takenotes/core/productivity/tasks";
 
@@ -48,7 +48,7 @@ export function TaskDialog({ target, onSubmit, onClose }: {
             <button key={k} type="button" className={dest === k ? "on" : ""} aria-pressed={dest === k} onClick={() => setDest(k)}>{label}</button>
           ))}
         </div>
-        <input
+        <Input
           className="cmd-input"
           autoFocus
           aria-label="Capture text"
@@ -58,7 +58,7 @@ export function TaskDialog({ target, onSubmit, onClose }: {
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
         />
         {dest === "task" && (
-          <input
+          <Input
             className="cmd-input"
             aria-label="Due date (optional)"
             placeholder="Due YYYY-MM-DD (optional)"

@@ -5,7 +5,7 @@
  */
 import { useMemo, useRef, useState, type JSX } from "react";
 import { moveRovingIndex } from "@takenotes/ui";
-import { EmptyState } from "@takenotes/ui/dom";
+import { EmptyState, Select, Skeleton } from "@takenotes/ui/dom";
 import {
   aggregateTags,
   buildTagTree,
@@ -93,7 +93,7 @@ export function TagsPane({
 
   if (entries === null) {
     return (
-      <EmptyState title="No workspace index yet" description="Tags appear once the workspace index builds." />
+      <Skeleton label="Loading tags" />
     );
   }
   return (
@@ -104,14 +104,14 @@ export function TagsPane({
           <button className={mode === "flat" ? "active" : ""} aria-pressed={mode === "flat"} onClick={() => setMode("flat")}>Flat</button>
         </div>
         <label className="sort-control">Sort
-          <select aria-label="Tags sort" value={sort} onChange={(e) => setSort(e.target.value as TagSort)}>
+          <Select aria-label="Tags sort" value={sort} onChange={(e) => setSort(e.target.value as TagSort)}>
             <option value="name">Name</option>
             <option value="frequency">Frequency</option>
-          </select>
+          </Select>
         </label>
       </div>
       {counts.length === 0 ? (
-        <EmptyState title="No tags yet" description="Add `#tag` inline or a `tags:` property." />
+        <EmptyState title="No tags yet" description="Add #tag in a note, or a tags: line at the top." />
       ) : (
         <div ref={listRef} onKeyDown={onListKeyDown}>
           {mode === "tree" ? (

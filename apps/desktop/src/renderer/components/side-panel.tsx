@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type JSX } from "react";
-import { IconButton } from "@takenotes/ui/dom";
+import { Checkbox, IconButton, Input } from "@takenotes/ui/dom";
 import type { DocumentIndexEntry } from "@takenotes/core/index/document";
 import type { Edge } from "@takenotes/core/index/edges";
 import type { PropertyRegistry } from "@takenotes/core/index/properties";
@@ -175,9 +175,9 @@ function DetailRow({ field, content, disabled, onSave }: { field: DetailField; c
     <div className="sp-prop">
       <label htmlFor={id} className="sp-pk">{field.name}</label>
       {field.kind === "checkbox" ? (
-        <input id={id} type="checkbox" checked={field.value === true} disabled={disabled} onChange={(e) => commit(e.target.checked)} />
+        <Checkbox id={id} checked={field.value === true} disabled={disabled} onChange={(e) => commit(e.target.checked)} />
       ) : (
-        <input id={id} className="sp-pv" disabled={disabled} value={draft}
+        <Input id={id} className="sp-pv" disabled={disabled} value={draft}
           type={field.kind === "date" ? "date" : field.kind === "datetime" ? "datetime-local" : field.kind === "number" ? "number" : "text"}
           aria-invalid={error ? true : undefined}
           onChange={(e) => { setDraft(e.target.value); if (field.kind === "date" || field.kind === "datetime") commit(e.target.value); }}

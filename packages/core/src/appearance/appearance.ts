@@ -97,9 +97,9 @@ export type AppearanceVarsInput = {
 export function appearanceVars(input: AppearanceVarsInput): Record<string, string> {
   return {
     "--font-editor": EDITOR_FONT_STACKS[input.editorFont],
-    "--editor-font-size": `${input.fontSize}px`,
-    "--editor-line-height": String(input.lineHeight),
-    "--editor-max-width": `${input.readableWidth}px`,
+    "--fs": `${input.fontSize}px`,
+    "--lh": String(input.lineHeight),
+    "--measure": `${input.readableWidth}px`,
   };
 }
 

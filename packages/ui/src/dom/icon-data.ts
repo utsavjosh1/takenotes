@@ -1,4 +1,6 @@
-/* Ported from design/prototype/assets/ui.js (ICONS, ART). Static, trusted SVG markup. */
+/* Ported from design/prototype/assets/ui.js (ICONS, ART), plus the few glyphs the
+ * desktop app needs that the prototype lacks (command, sliders, folderPlus), drawn
+ * to the same rules. Static, trusted SVG markup. */
 export const ICONS = {
   file: "<path d=\"M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z\"/><path d=\"M14 3v5h5\"/>",
   folder: "<path d=\"M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/>",
@@ -57,6 +59,9 @@ export const ICONS = {
   canvas: "<rect x=\"3\" y=\"3\" width=\"8\" height=\"6\" rx=\"1\"/><rect x=\"13\" y=\"12\" width=\"8\" height=\"8\" rx=\"1\"/><path d=\"M11 6h4a2 2 0 0 1 2 2v4\"/>",
   table: "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 10h18M3 15h18M9 4v16\"/>",
   arrowUp: "<path d=\"m6 15 6-6 6 6\"/>",
+  command: "<path d=\"M9 6v12a3 3 0 1 1-3-3h12a3 3 0 1 1-3 3V6a3 3 0 1 1 3 3H6a3 3 0 1 1 3-3z\"/>",
+  sliders: "<path d=\"M4 7h10M18 7h2M4 17h2M10 17h10\"/><circle cx=\"16\" cy=\"7\" r=\"2\"/><circle cx=\"8\" cy=\"17\" r=\"2\"/>",
+  folderPlus: "<path d=\"M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><path d=\"M12 11v4M10 13h4\"/>",
 } as const satisfies Record<string, string>;
 
 /** Empty-state line illustrations on a 140x96 viewBox. */
