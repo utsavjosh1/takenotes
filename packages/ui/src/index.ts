@@ -4,8 +4,6 @@ export type { Theme, ThemePreference, ColorToken } from "./theme";
 export { actionState, canonicalVariant, canDismissDialog, fieldState, moveRovingIndex } from "./behavior";
 export type { ActionState, ButtonVariant, ButtonSize, NoticeTone, Announcement, DialogPolicy, DismissReason, FieldState, RovingOrientation } from "./behavior";
 
-export { cn } from "./cn";
-
 export type UiDensity = "comfortable" | "compact";
 export const TAKENOTES_UI_PACKAGE = "@takenotes/ui";
 export {

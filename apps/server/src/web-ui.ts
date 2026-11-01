@@ -12,28 +12,9 @@
  * This page defines only its own layout.
  */
 import { ART, ICONS, domCss, tokensCss } from "@takenotes/ui/generated";
-import type { ErrorCode } from "@takenotes/contracts/errors";
+import { ERROR_WORDS } from "@takenotes/contracts/errors";
 
-/** Plain words for every error code. The code itself goes in "Details". */
-export const ERROR_WORDS: Record<ErrorCode, { title: string; cause: string }> = {
-  NOT_FOUND: { title: "Could not find that", cause: "It may have been moved or deleted." },
-  ALREADY_EXISTS: { title: "That already exists", cause: "Choose a different name." },
-  PERMISSION_DENIED: { title: "Not allowed", cause: "This account or folder does not allow that." },
-  OUTSIDE_ROOT: { title: "That path is not allowed", cause: "It points outside the workspace folder." },
-  INVALID_PATH: { title: "That path does not work", cause: "Check the note path for typos." },
-  INVALID_REQUEST: { title: "The request was not valid", cause: "Check what you entered and try again." },
-  CONFLICT: { title: "This note changed somewhere else", cause: "Your edits are still here. Reload the latest version, then save again." },
-  DIRECTORY_NOT_EMPTY: { title: "That folder is not empty", cause: "Move or delete what is inside it first." },
-  TOO_LARGE: { title: "That note is too large", cause: "Split it into smaller notes." },
-  UNSUPPORTED_ENCODING: { title: "Could not read that file", cause: "It is not saved as plain text." },
-  UNSUPPORTED_ARCHITECTURE: { title: "This computer is not supported", cause: "The server does not run on this type of processor." },
-  DISCONNECTED: { title: "Lost the connection", cause: "The workspace stopped responding." },
-  OFFLINE: { title: "Cannot reach the workspace", cause: "Check that it is running and try again." },
-  VERIFY_FAILED: { title: "Could not verify the download", cause: "The file did not match what was expected." },
-  PROTOCOL_MISMATCH: { title: "Versions do not match", cause: "Update the app and the server to the same version." },
-  CANCELLED: { title: "Cancelled", cause: "Nothing was changed." },
-  INTERNAL_ERROR: { title: "Something went wrong", cause: "Nothing was lost. Try again." },
-};
+export { ERROR_WORDS };
 
 const USED_ICONS = ["info", "warn", "error", "plus", "trash", "refresh"] as const;
 const iconMarkup = Object.fromEntries(USED_ICONS.map((n) => [n, ICONS[n]]));

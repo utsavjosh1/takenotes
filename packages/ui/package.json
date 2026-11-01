@@ -9,7 +9,6 @@
     "./dom": "./src/dom/index.ts",
     "./generated": "./src/generated.ts",
     "./tokens.css": "./src/tokens.css",
-    "./tailwind.css": "./src/tailwind.css",
     "./dom.css": "./src/dom/styles.css"
   },
   "peerDependencies": {
@@ -23,10 +22,5 @@
     "react-dom": {
       "optional": true
     }
-  },
-  "dependencies": {
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^3.7.0"
   }
 }

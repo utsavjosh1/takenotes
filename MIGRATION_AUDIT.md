@@ -270,3 +270,25 @@ The repo is further along than the migration guide assumes. A generated token pa
 2. Does `apps/web` (marketing) adopt the product tokens and radii, or keep a brand layer (illustration colours, large radii)? Recommended: adopt product tokens for UI chrome, allow a documented `--art-*` set for illustrations.
 3. Measure: 720 (guide) or 760 (prototype and repo)? Control height: 30 (guide) or 36 (repo)? Recommended: follow the prototype; keep 44px minimum on touch.
 4. Should the working tree be committed first? Recommended yes, on this branch, before any M1 change.
+
+---
+
+## Re-run after M6 (2026-10-28)
+
+`npm run audit:ui` (also pinned by `tests/ui/audit.test.ts`):
+
+| Measure | Before (M0) | After |
+| --- | --- | --- |
+| Raw hex colours in CSS outside token and brand files | ~170 (web 162, server 4, desktop 3) | **0** |
+| Raw `rgb()`/`hsl()` in CSS | 43 | **0** |
+| Raw hex colours in TS/TSX (renderer, web, mobile, ui) | a handful (canvas colours, theme-color meta) | **0** |
+| One-off px `border-radius` | 30 off-scale (web 12-34px) | **0** |
+| Numeric `z-index` | 5 raw values in web, 2 in desktop | **0** |
+| `!important` | 18 | 0 outside CodeMirror and the two reduced-motion resets (marked, enforced by stylelint) |
+| Local copies of shared components in apps | Button/Dialog/Menu/Toast/Tabs/Palette/Notice/Card/Chip/ErrorDialog x ~10 | **0** (ESLint blocks new ones) |
+| Interface strings with banned words | about 25 (see section 6) | **0** (`tests/ui/jargon.test.ts`) |
+| Old UI libraries / CSS-in-JS / Tailwind | Tailwind 4, clsx, cva, tailwind-merge | **removed** |
+
+What the checks do not cover, and why: marketing copy in `apps/web` still says "Markdown" when it names the file format; the desktop file tree rows, canvas inline editors and the note title input are app-specific controls and still use their own markup (they style with tokens); raw `<button>` rows in lists remain where a row, not a button, is the right element.
+
+Verification is logic-only by decision: no screenshots, no browser-driven accessibility scan. Accessibility is covered by markup/ARIA assertions, keyboard-logic tests and contrast tests on every colour pair.

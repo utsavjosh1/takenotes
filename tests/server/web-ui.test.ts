@@ -27,7 +27,7 @@ describe("server page: shared design", () => {
   });
 
   it("embeds the generated tokens and component styles", () => {
-    expect(style).toContain("--accent: var(--tn-accent)");
+    expect(style).toContain("--accent: #4f41d6");
     expect(style).toContain(".tn-button {");
     expect(style).toContain("prefers-color-scheme: dark");
   });

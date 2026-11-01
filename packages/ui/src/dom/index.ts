@@ -6,8 +6,6 @@ export { Notice, EmptyState } from "./feedback";
 export type { NoticeProps, EmptyStateProps } from "./feedback";
 export { Dialog } from "./dialog";
 export type { DialogProps } from "./dialog";
-export { Marquee, ShimmerButton, BlurFade, SpotlightCard } from "./effects";
-export type { MarqueeProps, ShimmerButtonProps, BlurFadeProps, SpotlightCardProps } from "./effects";
 export { setTheme, setAccent, initTheme, activeTheme, systemTheme, THEME_KEY, ACCENT_KEY } from "./theme-api";
 export type { ThemeRoot } from "./theme-api";
 export { Icon, Art, ICON_NAMES, ART_NAMES } from "./icon";

@@ -2,27 +2,8 @@ import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { Button, Dialog, Notice, TextField } from "@takenotes/ui/dom";
 import {
   lockoutMessage, normalizeServerAddress, parsePairLink, SignInLockout, validateWorkspaceName, WRONG_TOKEN_MESSAGE,
-  type FriendlyError,
 } from "@takenotes/core/workspace/onboarding";
 import { getBridge } from "../bridge";
-
-/** Plain cause, collapsed technical text, one clear action. Used by every open/connect failure. */
-export function ErrorDialog({ error, onAction, onClose }: { error: FriendlyError; onAction: () => void; onClose: () => void }): JSX.Element {
-  const actionRef = useRef<HTMLButtonElement>(null);
-  return (
-    <Dialog title={error.title} onClose={onClose} initialFocus={actionRef}
-      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" ref={actionRef} onClick={onAction}>{error.action}</Button></>}>
-      <div className="dialog-stack" role="alert">
-        <p>{error.cause}</p>
-        <details className="err-details">
-          <summary>Details</summary>
-          <pre>{error.details}</pre>
-          <Button onClick={() => void navigator.clipboard.writeText(error.details)}>Copy details</Button>
-        </details>
-      </div>
-    </Dialog>
-  );
-}
 
 export function CreateWorkspaceDialog({ existing, onCreate, onClose }: {
   existing: string[]; onCreate: (name: string) => Promise<string | null>; onClose: () => void;

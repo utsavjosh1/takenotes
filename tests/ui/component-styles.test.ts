@@ -14,7 +14,7 @@ describe("M2 component styles", () => {
     expect(m2).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(m2).not.toMatch(/rgba?\(/);
     for (const m of m2.matchAll(/border-radius:\s*([^;}]+)/g)) {
-      expect(["var(--r-in) var(--r-in) 0 0", "var(--r-pill)", "var(--r-dlg)", "var(--r-in)", "var(--r-ctl)", "var(--r-max)", "50%", "4px", "5px", "2px"]).toContain(m[1]!.trim());
+      expect(["var(--r-in) var(--r-in) 0 0", "var(--r-check)", "var(--r-pill)", "var(--r-dlg)", "var(--r-in)", "var(--r-ctl)", "var(--r-max)", "50%", "4px", "5px", "2px"]).toContain(m[1]!.trim());
     }
   });
 

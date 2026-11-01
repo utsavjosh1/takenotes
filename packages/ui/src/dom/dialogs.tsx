@@ -53,6 +53,10 @@ export function ErrorDialog({ title, cause, details, action, onClose }: ErrorDia
   return <Dialog title={title} onClose={onClose}
     footer={<Button variant="primary" onClick={action.run}>{action.label}</Button>}>
     <p className="ui-dialog-text" role="alert">{cause}</p>
-    {details && <details className="ui-details"><summary>Details</summary><pre>{details}</pre></details>}
+    {details && <details className="ui-details">
+      <summary>Details</summary>
+      <pre>{details}</pre>
+      <Button size="sm" onClick={() => { void navigator.clipboard?.writeText(details); }}>Copy details</Button>
+    </details>}
   </Dialog>;
 }

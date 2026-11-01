@@ -16,11 +16,12 @@ function rendererSource(...parts: string[]): string {
  * cosmetic gain on the highest-risk surface. */
 describe("editor chrome contracts", () => {
   it("conflict bar asserts with both resolutions", () => {
-    const source = rendererSource("App.tsx");
-    expect(source).toContain('title="This note was changed somewhere else."');
+    const source = rendererSource("components/trust-ui.tsx");
+    expect(source).toContain('title="This note changed somewhere else."');
     expect(source).toContain('announcement="assertive"');
     expect(source).toContain("Use the other one");
     expect(source).toContain("Keep mine");
+    expect(source).toContain("Compare");
   });
 
   it("draft notice is polite with restore and discard", () => {

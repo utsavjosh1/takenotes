@@ -30,13 +30,13 @@ export function TemplatePicker({ allPaths, templateFolder, onPick, onClose }: {
         onChange={(e) => setQuery(e.target.value)}
       />
       <div className="cmd-list" role="listbox" aria-label="Templates">
-        {filtered.length === 0 && <div className="cmd-section">No matching templates.</div>}
+        {filtered.length === 0 && <div className="list-section">No matching templates.</div>}
         {filtered.map((t) => (
           <div
             key={t}
             role="option"
             aria-selected={false}
-            className="cmd-item"
+            className="list-item"
             onClick={() => onPick(t)}
           >
             <span className="main-label">{displayPath(t)}</span>

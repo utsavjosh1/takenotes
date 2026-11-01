@@ -37,6 +37,7 @@ html.theme-revealing::view-transition-old(root),
 html.theme-revealing::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 html.theme-revealing::view-transition-old(root) { z-index: calc(var(--z-base) + 1); }
 html.theme-revealing::view-transition-new(root) { z-index: calc(var(--z-base) + 2); animation: theme-reveal 480ms cubic-bezier(.2, .7, .2, 1) both; }
+/* stylelint-disable-next-line declaration-no-important -- the reveal animation owns the whole page while it runs */
 html.theme-revealing *, html.theme-revealing *::before, html.theme-revealing *::after { transition: none !important; }
 @keyframes theme-reveal {
   from { clip-path: circle(0 at var(--theme-x) var(--theme-y)); }
@@ -104,7 +105,9 @@ html.theme-revealing *, html.theme-revealing *::before, html.theme-revealing *::
   .workflow-decoration { display: none; }
   .workflow-inner > * { min-width: 0; }
 }
+/* stylelint-disable declaration-no-important -- reduced-motion reset must beat every component rule */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
 }
+/* stylelint-enable declaration-no-important */

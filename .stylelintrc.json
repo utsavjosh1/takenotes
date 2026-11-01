@@ -1,0 +1,41 @@
+{
+  "ignoreFiles": [
+    "**/node_modules/**",
+    "dist*/**",
+    "docs/**",
+    "design/**",
+    "new/**",
+    "build/**",
+    "public/**",
+    "smoke-artifacts/**",
+    "packages/ui/src/tokens.css",
+    "apps/web/src/brand.css",
+    "packages/ui/storybook-static/**",
+    "apps/mobile/**",
+    "apps/desktop/src/renderer/styles/tokens.css"
+  ],
+  "rules": {
+    "color-no-hex": true,
+    "color-named": "never",
+    "function-disallowed-list": [
+      "rgb",
+      "rgba",
+      "hsl",
+      "hsla"
+    ],
+    "declaration-no-important": true,
+    "declaration-property-value-disallowed-list": {
+      "/radius/": [
+        "/(^|[\\s(])[1-9]\\d*(\\.\\d+)?px/"
+      ]
+    },
+    "declaration-property-value-allowed-list": {
+      "z-index": [
+        "/^var\\(--z-/",
+        "/^calc\\(var\\(--z-/",
+        "0",
+        "auto"
+      ]
+    }
+  }
+}

@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 import globals from "globals";
 
 export default tseslint.config(
-  { ignores: ["design/**", "new/**", "dist/**", "dist-electron/**", "dist-helper/**", "dist-server/**", "dist-mcp/**", "release/**", "coverage/**", "node_modules/**", "reference/**", "resources/wsl/linux-x64/**"] },
+  { ignores: ["design/**", "new/**", ".agents/**", ".claude/**", "dist/**", "dist-electron/**", "dist-helper/**", "dist-server/**", "dist-mcp/**", "release/**", "coverage/**", "node_modules/**", "reference/**", "resources/wsl/linux-x64/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -25,6 +25,41 @@ export default tseslint.config(
       "no-console": ["warn", { allow: ["warn", "error"] }],
     },
   },
+  // One design system. No third-party UI kits or CSS-in-JS, and the shared
+  // component names can only come from packages/ui, never be redefined in an app.
+  {
+    files: ["apps/**/*.ts", "apps/**/*.tsx", "packages/ui/src/**/*.ts", "packages/ui/src/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@mui/*", "@chakra-ui/*", "antd", "antd/*", "react-bootstrap", "@mantine/*", "@fluentui/*", "@blueprintjs/*", "semantic-ui-react"], message: "Use @takenotes/ui components." },
+            { group: ["styled-components", "@emotion/*", "@stitches/*", "twin.macro"], message: "No CSS-in-JS. Use tokens and CSS files." },
+            { group: ["lucide-react", "react-icons", "react-icons/*", "@heroicons/*", "@phosphor-icons/*", "@fortawesome/*"], message: "Use the shared Icon from @takenotes/ui." },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["apps/**/*.tsx", "apps/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "FunctionDeclaration[id.name=/^(Button|IconButton|Input|Select|Textarea|Switch|Checkbox|Chip|Badge|Pill|Card|Dialog|ConfirmDialog|ErrorDialog|Menu|MenuItem|Popover|Tooltip|Toast|Banner|Notice|Tabs|Skeleton|Progress|Stepper|DataTable|CommandPalette|Rail)$/]",
+          message: "This component lives in @takenotes/ui. Import it instead of defining another.",
+        },
+        {
+          selector: "VariableDeclarator[id.name=/^(Button|IconButton|Input|Select|Textarea|Switch|Checkbox|Chip|Badge|Pill|Card|Dialog|ConfirmDialog|ErrorDialog|Menu|MenuItem|Popover|Tooltip|Toast|Banner|Notice|Tabs|Skeleton|Progress|Stepper|DataTable|CommandPalette|Rail)$/][init.type=/^(ArrowFunctionExpression|FunctionExpression)$/]",
+          message: "This component lives in @takenotes/ui. Import it instead of defining another.",
+        },
+      ],
+    },
+  },
+  // The native (React Native) layer is where mobile's shared components are implemented.
+  { files: ["apps/mobile/components/**/*.tsx"], rules: { "no-restricted-syntax": "off" } },
   // Defense in depth: shipped main/helper code must never gain network imports
   // by accident. Release-time scripts/ are intentionally excluded.
   {

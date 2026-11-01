@@ -50,7 +50,7 @@ const DAY_VISIBLE_TASKS = 5;
 function TaskRow({ task, onOpen, compact }: { task: CalendarTaskItem; onOpen: () => void; compact?: boolean }): JSX.Element {
   return (
     <div
-      className="cmd-item"
+      className="list-item"
       role="option"
       aria-selected={false}
       draggable
@@ -70,7 +70,7 @@ function TaskRow({ task, onOpen, compact }: { task: CalendarTaskItem; onOpen: ()
 function EventChip({ event, onOpen }: { event: CalendarEventItem; onOpen: () => void }): JSX.Element {
   const time = event.start.length > 10 ? event.start.slice(11, 16) : "";
   return (
-    <div className="cmd-item" role="option" aria-selected={false} onClick={onOpen} title={displayPath(event.relativePath)}>
+    <div className="list-item" role="option" aria-selected={false} onClick={onOpen} title={displayPath(event.relativePath)}>
       <span className="main-label">◷ {time ? `${time} ` : ""}{event.title}</span>
       <span className="sub-label">event</span>
     </div>
@@ -98,7 +98,7 @@ function DaySection({ day, isToday, onOpenTask, onOpenNote, onReschedule }: {
       }}
       style={over ? { outline: "1px dashed var(--accent)", outlineOffset: -1 } : undefined}
     >
-      <div className="cmd-section">{weekdayLabel(day.date)} {day.date}{isToday ? " · today" : ""}</div>
+      <div className="list-section">{weekdayLabel(day.date)} {day.date}{isToday ? " · today" : ""}</div>
       {day.events.map((ev) => (
         <EventChip key={`e:${ev.relativePath}`} event={ev} onOpen={() => onOpenNote(ev.relativePath)} />
       ))}
@@ -106,16 +106,16 @@ function DaySection({ day, isToday, onOpenTask, onOpenNote, onReschedule }: {
         <TaskRow key={`t:${t.relativePath}:${t.line}`} task={t} onOpen={() => onOpenTask(t.relativePath, t.line)} />
       ))}
       {!expanded && day.tasks.length > DAY_VISIBLE_TASKS && (
-        <button className="cmd-item" style={{ cursor: "pointer" }} onClick={() => setExpanded(true)}>
+        <button className="list-item" style={{ cursor: "pointer" }} onClick={() => setExpanded(true)}>
           +{day.tasks.length - DAY_VISIBLE_TASKS} more
         </button>
       )}
       {expanded && day.tasks.length > DAY_VISIBLE_TASKS && (
-        <button className="cmd-item" style={{ cursor: "pointer" }} onClick={() => setExpanded(false)}>
+        <button className="list-item" style={{ cursor: "pointer" }} onClick={() => setExpanded(false)}>
           Show less
         </button>
       )}
-      {day.events.length === 0 && day.tasks.length === 0 && <div className="cmd-section">—</div>}
+      {day.events.length === 0 && day.tasks.length === 0 && <div className="list-section">—</div>}
     </div>
   );
 }
@@ -153,14 +153,14 @@ export function CalendarPane({ entries, today, onOpenTask, onOpenNote, onResched
 
   return (
     <div aria-label="Calendar">
-      <div className="cmd-section" style={{ display: "flex", gap: 4, alignItems: "center" }}>
-        <button className={`cmd-item${mode === "day" ? " selected" : ""}`} aria-pressed={mode === "day"} onClick={() => setMode("day")}>Day</button>
-        <button className={`cmd-item${mode === "week" ? " selected" : ""}`} aria-pressed={mode === "week"} onClick={() => setMode("week")}>Week</button>
-        <button className={`cmd-item${mode === "month" ? " selected" : ""}`} aria-pressed={mode === "month"} onClick={() => setMode("month")}>Month</button>
+      <div className="list-section" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        <button className={`list-item${mode === "day" ? " selected" : ""}`} aria-pressed={mode === "day"} onClick={() => setMode("day")}>Day</button>
+        <button className={`list-item${mode === "week" ? " selected" : ""}`} aria-pressed={mode === "week"} onClick={() => setMode("week")}>Week</button>
+        <button className={`list-item${mode === "month" ? " selected" : ""}`} aria-pressed={mode === "month"} onClick={() => setMode("month")}>Month</button>
         <span style={{ flex: 1 }} />
-        <button className="cmd-item" aria-label="Previous" onClick={() => shift(-1)}>‹</button>
-        <button className="cmd-item" onClick={() => { setAnchor(today); }}>Today</button>
-        <button className="cmd-item" aria-label="Next" onClick={() => shift(1)}>›</button>
+        <button className="list-item" aria-label="Previous" onClick={() => shift(-1)}>‹</button>
+        <button className="list-item" onClick={() => { setAnchor(today); }}>Today</button>
+        <button className="list-item" aria-label="Next" onClick={() => shift(1)}>›</button>
       </div>
       {mode === "month" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
@@ -226,7 +226,7 @@ function MonthCell({ day, isToday, onOpenDay, onOpenTask, onOpenNote, onReschedu
       }}
       title={`${day.date} — drop a task to schedule it here`}
     >
-      <button className="cmd-section" style={{ padding: 2, cursor: "pointer", fontWeight: isToday ? 700 : 400 }} onClick={onOpenDay} aria-label={`Open day ${day.date}`}>
+      <button className="list-section" style={{ padding: 2, cursor: "pointer", fontWeight: isToday ? 700 : 400 }} onClick={onOpenDay} aria-label={`Open day ${day.date}`}>
         {day.date.slice(8)}
       </button>
       {shownEvents.map((ev) => (
@@ -236,7 +236,7 @@ function MonthCell({ day, isToday, onOpenDay, onOpenTask, onOpenNote, onReschedu
         <TaskRow key={`t:${t.relativePath}:${t.line}`} task={t} compact onOpen={() => onOpenTask(t.relativePath, t.line)} />
       ))}
       {hidden > 0 && (
-        <button className="cmd-section" style={{ padding: "0 2px", cursor: "pointer" }} onClick={onOpenDay}>
+        <button className="list-section" style={{ padding: "0 2px", cursor: "pointer" }} onClick={onOpenDay}>
           +{hidden} more
         </button>
       )}

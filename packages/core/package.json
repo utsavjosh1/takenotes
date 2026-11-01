@@ -22,6 +22,7 @@
     "./outline/extract": "./src/outline/extract.ts",
     "./index/document": "./src/index/document.ts",
     "./save/decisions": "./src/save/decisions.ts",
+    "./save/rename-impact": "./src/save/rename-impact.ts",
     "./search/hits": "./src/search/hits.ts",
     "./links/side-panel": "./src/links/side-panel.ts",
     "./workspace/onboarding": "./src/workspace/onboarding.ts",

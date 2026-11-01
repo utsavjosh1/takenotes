@@ -27,5 +27,7 @@ jobs:
       - run: npm run version:check
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run lint:css
+      - run: npm run ui:tokens:check
       - run: npm test
       - run: npm run build

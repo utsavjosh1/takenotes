@@ -91,7 +91,7 @@ a.tn-button { text-decoration: none; }
 .ui-visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .ui-switch { position: relative; display: inline-block; inline-size: 40px; block-size: 22px; flex: none; }
-.ui-switch input { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+.ui-switch input { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: calc(var(--z-base) + 1); }
 .ui-switch > span { position: absolute; inset: 0; background: var(--control); border-radius: var(--r-pill); transition: background-color var(--dur-2) var(--ease-out); }
 .ui-switch > span::before { content: ""; position: absolute; inline-size: 16px; block-size: 16px; inset-inline-start: 3px; inset-block-start: 3px; background: var(--editor); border-radius: 50%; transition: transform var(--dur-2) var(--ease-out); }
 .ui-switch input:checked + span { background: var(--accent); }
@@ -101,7 +101,7 @@ a.tn-button { text-decoration: none; }
 .ui-switch input:disabled + span { opacity: .45; }
 
 .ui-check { position: relative; display: inline-block; inline-size: 18px; block-size: 18px; flex: none; }
-.ui-check input { appearance: none; position: absolute; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; border: 1px solid var(--control); border-radius: 5px; background: var(--editor); cursor: pointer; transition: background-color var(--dur-1) var(--ease-out); }
+.ui-check input { appearance: none; position: absolute; inset: 0; inline-size: 100%; block-size: 100%; margin: 0; border: 1px solid var(--control); border-radius: var(--r-check); background: var(--editor); cursor: pointer; transition: background-color var(--dur-1) var(--ease-out); }
 .ui-check input:checked { background: var(--accent); border-color: var(--accent); }
 .ui-check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ui-check input:disabled { opacity: .45; cursor: default; }
@@ -125,14 +125,14 @@ a.tn-button { text-decoration: none; }
 .ui-pill--warn { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
 .ui-pill--bad { background: var(--bad-bg); border-color: transparent; color: var(--bad); }
 .ui-pill-dot { inline-size: 6px; block-size: 6px; border-radius: 50%; background: currentColor; }
-.ui-kbd { font: 12px var(--font-mono); border: 1px solid var(--line); border-block-end-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--muted); background: var(--panel); white-space: nowrap; }
+.ui-kbd { font: 12px var(--font-mono); border: 1px solid var(--line); border-block-end-width: 2px; border-radius: var(--r-ctl); padding: 0 5px; color: var(--muted); background: var(--panel); white-space: nowrap; }
 
 .ui-card { border: 1px solid var(--line); border-radius: var(--r-max); background: var(--panel); padding: 14px; min-inline-size: 0; animation: ui-fade-up var(--dur-3) var(--ease-out); }
 .ui-card--accent { border-color: var(--accent); }
 @keyframes ui-fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 .ui-skeleton { display: grid; gap: 8px; padding: 12px; }
-.ui-skeleton > i { display: block; block-size: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--hover), var(--line), var(--hover)); background-size: 200% 100%; animation: ui-shimmer 1.1s linear infinite; }
+.ui-skeleton > i { display: block; block-size: 12px; border-radius: var(--r-ctl); background: linear-gradient(90deg, var(--hover), var(--line), var(--hover)); background-size: 200% 100%; animation: ui-shimmer 1.1s linear infinite; }
 @keyframes ui-shimmer { to { background-position: -200% 0; } }
 
 .ui-progress { block-size: 6px; border-radius: var(--r-pill); background: var(--hover); overflow: hidden; }
@@ -259,7 +259,7 @@ a.tn-button { text-decoration: none; }
 .ui-rail-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; inline-size: 36px; block-size: 36px; padding: 0; border: 0; border-radius: var(--r-in); background: none; color: var(--muted); cursor: pointer; }
 .ui-rail-btn:hover { background: var(--hover); color: var(--text); }
 .ui-rail-btn.is-on { background: var(--selected); color: var(--text); }
-.ui-rail-btn.is-on::before { content: ""; position: absolute; inset-inline-start: -6px; inset-block: 8px; inline-size: 2px; border-radius: 2px; background: var(--accent); }
+.ui-rail-btn.is-on::before { content: ""; position: absolute; inset-inline-start: -6px; inset-block: 8px; inline-size: 2px; border-radius: var(--r-ctl); background: var(--accent); }
 .ui-rail-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .ui-titlebar, .ui-statusbar { display: flex; align-items: center; gap: 8px; padding: 0 10px; background: var(--side); min-inline-size: 0; box-sizing: border-box; }

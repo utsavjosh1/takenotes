@@ -8,7 +8,7 @@ export type TodayDaily = { relativePath: string; exists: boolean };
 function TaskRow({ task, meta, onOpen }: { task: TodayTaskItem; meta: string; onOpen: (rel: string, line: number) => void }): JSX.Element {
   return (
     <button
-      className="cmd-item"
+      className="list-item"
       style={{ width: "100%", textAlign: "left", cursor: "pointer" }}
       onClick={() => onOpen(task.relativePath, task.line)}
       title={`${displayPath(task.relativePath)}:${task.line} — opens the source note`}
@@ -29,7 +29,7 @@ function DayHeader({ today }: { today: string }): JSX.Element {
   return (
     <div style={{ padding: "16px 12px 4px" }}>
       <h2 style={{ margin: 0, fontSize: 26, fontWeight: 750, letterSpacing: "-0.02em", lineHeight: 1.2 }}>{weekday}</h2>
-      <div className="cmd-section" style={{ padding: "2px 0 0" }}>{rest} · {today}</div>
+      <div className="list-section" style={{ padding: "2px 0 0" }}>{rest} · {today}</div>
     </div>
   );
 }
@@ -69,11 +69,11 @@ export function TodayPane({ groups, today, daily, recents, onOpen, onNewNote, on
       ) : (
         <>
           {noTasks && (
-            <div className="cmd-section">Nothing due or scheduled. Enjoy the clear day.</div>
+            <div className="list-section">Nothing due or scheduled. Enjoy the clear day.</div>
           )}
           {groups.scheduledToday.length > 0 && (
             <>
-              <div className="cmd-section">Scheduled today ({groups.scheduledToday.length})</div>
+              <div className="list-section">Scheduled today ({groups.scheduledToday.length})</div>
               {groups.scheduledToday.map((t) => (
                 <TaskRow key={`s:${t.relativePath}:${t.line}`} task={t} meta={`${t.scheduled}${t.due ? ` · due ${t.due}` : ""} · ${displayPath(t.relativePath)}`} onOpen={onOpen} />
               ))}
@@ -81,7 +81,7 @@ export function TodayPane({ groups, today, daily, recents, onOpen, onNewNote, on
           )}
           {groups.overdue.length > 0 && (
             <>
-              <div className="cmd-section">Overdue ({groups.overdue.length})</div>
+              <div className="list-section">Overdue ({groups.overdue.length})</div>
               {groups.overdue.map((t) => (
                 <TaskRow key={`o:${t.relativePath}:${t.line}`} task={t} meta={`due ${t.due} · ${displayPath(t.relativePath)}`} onOpen={onOpen} />
               ))}
@@ -89,16 +89,16 @@ export function TodayPane({ groups, today, daily, recents, onOpen, onNewNote, on
           )}
           {groups.dueToday.length > 0 && (
             <>
-              <div className="cmd-section">Due today ({groups.dueToday.length})</div>
+              <div className="list-section">Due today ({groups.dueToday.length})</div>
               {groups.dueToday.map((t) => (
                 <TaskRow key={`d:${t.relativePath}:${t.line}`} task={t} meta={displayPath(t.relativePath)} onOpen={onOpen} />
               ))}
             </>
           )}
-          <div className="cmd-section">Today&rsquo;s note</div>
+          <div className="list-section">Today&rsquo;s note</div>
           {daily.exists ? (
             <button
-              className="cmd-item"
+              className="list-item"
               style={{ width: "100%", textAlign: "left", cursor: "pointer" }}
               onClick={() => onOpenDaily()}
               title={`${displayPath(daily.relativePath)} — opens the Daily Note (Today stays here)`}
@@ -108,17 +108,17 @@ export function TodayPane({ groups, today, daily, recents, onOpen, onNewNote, on
             </button>
           ) : (
             <div style={{ padding: "4px 12px" }}>
-              <div className="cmd-section">Today&rsquo;s note hasn&rsquo;t been started.</div>
+              <div className="list-section">Today&rsquo;s note hasn&rsquo;t been started.</div>
               <Button variant="primary" onClick={onOpenDaily}>Create today&rsquo;s note</Button>
             </div>
           )}
           {recents.length > 0 && (
             <>
-              <div className="cmd-section">Recent ({recents.length})</div>
+              <div className="list-section">Recent ({recents.length})</div>
               {recents.map((r) => (
                 <button
                   key={r}
-                  className="cmd-item"
+                  className="list-item"
                   style={{ width: "100%", textAlign: "left", cursor: "pointer" }}
                   onClick={() => onOpen(r)}
                   title={`${displayPath(r)} — opens the note`}

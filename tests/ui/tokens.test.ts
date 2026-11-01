@@ -24,7 +24,7 @@ describe("public tokens", () => {
   });
 
   it("emits each public name, the system dark block and the reduced-motion rule", () => {
-    for (const name of Object.keys(publicColors)) expect(css).toContain(`--${name}: var(--tn-`);
+    for (const name of Object.keys(publicColors)) expect(css.match(new RegExp(`--${name}: `, "g"))?.length).toBeGreaterThanOrEqual(2);
     expect(css).toContain('@media (prefers-color-scheme: dark)');
     expect(css).toContain(':root:not([data-theme="light"])');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
@@ -58,7 +58,6 @@ describe("accent maths", () => {
     expect(root.props.has("--accent")).toBe(false);
     expect(setAccent("#1f4fd8", root)).toBe(true);
     expect(root.props.get("--accent")).toBe("#1f4fd8");
-    expect(root.props.get("--tn-accent")).toBe("#1f4fd8");
   });
 
   it("system removes the theme pin", () => {

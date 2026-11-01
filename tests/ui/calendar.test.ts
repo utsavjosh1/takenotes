@@ -30,9 +30,9 @@ describe("calendar density", () => {
 
   it("overflow affordances are buttons, not mouse-only divs", () => {
     const source = rendererSource("components", "calendar-pane.tsx");
-    expect(source).not.toContain('<div className="cmd-section" style={{ padding: 2');
-    expect(source).not.toContain('<div className="cmd-section" style={{ padding: "0 2px"');
-    expect(source).toContain('<button className="cmd-section"');
-    expect(source).toContain('<button className="cmd-item" style={{ cursor: "pointer" }}');
+    expect(source).not.toContain('<div className="list-section" style={{ padding: 2');
+    expect(source).not.toContain('<div className="list-section" style={{ padding: "0 2px"');
+    expect(source).toContain('<button className="list-section"');
+    expect(source).toContain('<button className="list-item" style={{ cursor: "pointer" }}');
   });
 });
