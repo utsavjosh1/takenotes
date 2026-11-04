@@ -14,7 +14,7 @@
     "@takenotes/platform": "0.0.8",
     "@takenotes/ui": "0.0.8",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@types/react": "19.3.0",
